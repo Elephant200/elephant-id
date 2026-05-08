@@ -26,7 +26,7 @@ def get_seek_code(elephant_image: np.ndarray) -> str:
         nms=True,
         nms_iou_threshold=0.2,
     )
-    return predictions
+    
     no_background_image = remove_background(elephant_image)
     view = get_view(no_background_image)
 
