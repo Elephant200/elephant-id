@@ -1,0 +1,12 @@
+---
+description: Safety rule for dataset folder (no destructive actions)
+alwaysApply: true
+---
+
+# Dataset safety
+
+- `dataset/` is user data; do not delete, move, or overwrite anything inside, unless explicitly instructed.
+- **Never delete existing saved sightings or other user data under `dataset/` without explicit user approval.** Routine agent commands must not use `rm`, `rmtree`, or similar bulk deletes on `dataset/` for cleanup or verification.
+- Prefer only creating new files or folders as needed.
+- For testing-related destructive steps, always ask first.
+- "Undo" must only remove artifacts created in the current session; never touch unrelated files or files that were there before.
