@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Sighting Reviewer</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="topbar-inner">
+        <span class="h1">Sighting Reviewer</span>
+        <span class="sub" id="subtitle"></span>
+        <div class="toolbar-slot">
+          <nav class="toolbar" aria-label="Toolbar">
+            <div class="tb-elephant-slot">
+              <button
+                type="button"
+                class="tb-btn tb-btn-muted tb-btn-concealed"
+                id="elephantToggleBtn"
+                aria-hidden="true"
+                disabled
+              >
+                Only this elephant
+              </button>
+            </div>
+            <button type="button" class="tb-btn tb-btn-muted" id="shuffleToggleBtn" aria-pressed="true">
+              Shuffle: on
+            </button>
+            <button type="button" class="tb-btn" id="openFilterModal">Filters</button>
+            <div class="seg" role="group" aria-label="Browse">
+              <button type="button" class="seg-btn seg-on" data-browse="queue" id="browseQueue">All</button>
+              <button type="button" class="seg-btn" data-browse="sightings" id="browseSightings">Starred</button>
+            </div>
+          </nav>
+        </div>
+        <div class="stats" id="stats">
+          <span class="stats-line1" id="statsLine1"></span>
+          <span class="stats-line2" id="statsLine2"></span>
+        </div>
+      </div>
+    </header>
+
+    <main class="main">
+      <section class="help" id="helpQueue">
+        <div class="help-row">
+          <kbd>Tab</kbd> browse · <kbd>Caps lock</kbd> this elephant only · <kbd>←</kbd><kbd>→</kbd> sighting ·
+          <kbd>↑</kbd><kbd>↓</kbd> page · double-click image toggles priority copy · <kbd>⌘Z</kbd> undo · ★ priority copy
+        </div>
+        <div class="help-row">
+          Page size:
+          <button class="chip chip-on" data-pagesize="18">18</button>
+          <button class="chip" data-pagesize="24">24</button>
+          <button class="chip" data-pagesize="30">30</button>
+        </div>
+      </section>
+
+      <section class="help help-saved" id="helpSaved" hidden>
+        <div class="help-row">
+          <kbd>←</kbd><kbd>→</kbd> sighting · <kbd>↑</kbd><kbd>↓</kbd> page · double-click image toggles priority · <kbd>Delete</kbd>
+          / <kbd>⌫</kbd> remove from disk · <kbd>⌘Z</kbd> undo
+        </div>
+        <div class="help-row">
+          Page size:
+          <button class="chip chip-on" data-pagesize="18">18</button>
+          <button class="chip" data-pagesize="24">24</button>
+          <button class="chip" data-pagesize="30">30</button>
+        </div>
+      </section>
+
+      <section class="grid-wrap">
+        <div class="grid" id="grid"></div>
+      </section>
+
+      <p class="browse-empty" id="browseEmpty" hidden>Nothing starred here yet.</p>
+    </main>
+
+    <section class="done" id="done" hidden>
+      <div class="done-card">
+        <div class="done-h">All done</div>
+        <div class="done-sub" id="doneSub"></div>
+        <div class="done-actions">
+          <button class="btn" id="restartBtn">Reload queue</button>
+        </div>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <div class="footer-left" id="footerLeft"></div>
+      <div class="footer-right" id="footerRight"></div>
+    </footer>
+
+    <div class="toasts" id="toasts" aria-live="polite" aria-atomic="true"></div>
+
+    <div class="modal" id="filterModal" hidden aria-modal="true" role="dialog" aria-labelledby="filterModalTitle">
+      <div class="modal-backdrop" tabindex="-1"></div>
+      <div class="modal-sheet">
+        <div class="modal-head">
+          <h2 class="modal-title" id="filterModalTitle">Filters</h2>
+        </div>
+        <div class="modal-body">
+          <div class="filter-section">
+            <div class="filter-section-label">SEEK summary</div>
+            <div class="filter-chks">
+              <label class="chk-ui" title="Keeps sightings whose SEEK explicitly has 0 in either T slot, or 1 in any X or S slot. Other characters there count as wildcards (normal). Codes without those explicit flags are excluded."><input type="checkbox" id="f-non-normal" /><span>Non‑normal only</span></label>
+            </div>
+          </div>
+          <div class="filter-section">
+            <div class="filter-section-label">Sex</div>
+            <div class="filter-chks">
+              <label class="chk-ui"><input type="checkbox" id="f-sex-B" /><span>Bull</span></label>
+              <label class="chk-ui"><input type="checkbox" id="f-sex-C" /><span>Cow</span></label>
+            </div>
+          </div>
+          <div class="filter-section">
+            <div class="filter-section-label">Tusks</div>
+            <div class="filter-chks">
+              <label class="chk-ui"><input type="checkbox" id="f-tusk-both" /><span>Both</span></label>
+              <label class="chk-ui"><input type="checkbox" id="f-tusk-left" /><span>Left only</span></label>
+              <label class="chk-ui"><input type="checkbox" id="f-tusk-right" /><span>Right only</span></label>
+              <label class="chk-ui"><input type="checkbox" id="f-tusk-none" /><span>No tusks</span></label>
+            </div>
+          </div>
+          <div class="filter-section">
+            <div class="filter-section-label">Extreme features</div>
+            <div class="filter-chks">
+              <label class="chk-ui"><input type="checkbox" id="f-x-left" /><span>Left ear</span></label>
+              <label class="chk-ui"><input type="checkbox" id="f-x-right" /><span>Right ear</span></label>
+            </div>
+          </div>
+          <div class="filter-section">
+            <div class="filter-section-label">Special features</div>
+            <div class="filter-chks">
+              <label class="chk-ui"><input type="checkbox" id="f-sp-left" /><span>Left ear</span></label>
+              <label class="chk-ui"><input type="checkbox" id="f-sp-right" /><span>Right ear</span></label>
+              <label class="chk-ui"><input type="checkbox" id="f-sp-body" /><span>Body</span></label>
+            </div>
+          </div>
+          <div class="filter-section">
+            <div class="filter-section-label">Sighting year</div>
+            <div class="year-range">
+              <label class="year-field">
+                <span class="year-field-label">From</span>
+                <input type="number" id="f-year-min" inputmode="numeric" placeholder="" />
+              </label>
+              <label class="year-field">
+                <span class="year-field-label">To</span>
+                <input type="number" id="f-year-max" inputmode="numeric" placeholder="" />
+              </label>
+            </div>
+            <p class="filter-footnote" id="yearExtentHint"></p>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" id="filterCancelBtn">Cancel</button>
+          <button type="button" class="btn btn-primary" id="filterApplyBtn">Apply</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>
