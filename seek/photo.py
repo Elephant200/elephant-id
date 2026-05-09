@@ -4,7 +4,7 @@ from datetime import datetime
 import numpy as np
 
 from preprocess.background import remove_background
-from vision.model import infer
+from vision.sam3 import segment_image
 
 class Photo:
     """
@@ -25,36 +25,38 @@ class Photo:
         self.image: np.ndarray = cv2.imread(image_path)
         self.elephant: str = elephant
         self.date: datetime = date
-        self.filename: str = os.path.basename(image_path)
+        self.identifier: str = os.path.basename(image_path) # Unique identifier for the photo
 
-        self._no_bg: np.ndarray | None = None # Image with background removed 
         self._raw_data: dict | None = None
 
-    def _get_no_bg(self) -> np.ndarray:
-        """
-        Get the image with background removed.
-        """
-        if self._no_bg is not None:
-            return self._no_bg
-        # Check cache; located in .cache/ElephantsAlive/<elephant>/<date>_
-
-        return self._no_bg
+    def get_data(self) -> dict:
+        if self._raw_data is not None: # Lazy loading
+            return self._raw_data
+        
+        
+        self._raw_data = segment_image(
+            image=self.image,
+            queries=["trunk", "tusk", "ear", "tail"],
+            confidence_threshold=0.5,
+            nms=True,
+            nms_iou_threshold=0.2,
+        )
 
 
 
     def __str__(self) -> str:
-        return f"Photo(filename={self.filename}, elephant={self.elephant}, date={self.date})"
+        return f"Photo(identifier={self.identifier}, elephant={self.elephant}, date={self.date})"
     
     def __repr__(self) -> str:
-        return f"Photo(filename={self.filename}, elephant={self.elephant}, date={self.date})"
+        return f"Photo(identifier={self.identifier}, elephant={self.elephant}, date={self.date})"
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Photo):
             return False
-        return self.filename == other.filename and self.elephant == other.elephant and self.date == other.date
+        return self.identifier == other.identifier and self.elephant == other.elephant and self.date == other.date
     
     def __hash__(self) -> int:
-        return hash(self.filename)
+        return hash(self.identifier)
 
 if __name__ == "__main__":
     photo = Photo(

@@ -6,10 +6,6 @@ import numpy as np
 
 from preprocess.background import remove_background
 from vision.sam3 import segment_image
-from seek.gender import get_gender_code
-from seek.age import get_age_code
-from seek.tusks import get_tusk_code
-from seek.ears import get_ears_code, get_ear_contour
 from seek.view import get_view
 
 
@@ -29,17 +25,6 @@ def get_seek_code(elephant_image: np.ndarray) -> str:
     
     no_background_image = remove_background(elephant_image)
     view = get_view(no_background_image)
-
-    gender_code = get_gender_code(no_background_image)
-    age_code = get_age_code(no_background_image)
-    tusk_code = get_tusk_code(elephant_image, view)
-    (
-        left_ear_code,
-        right_ear_code,
-        extreme_features_code,
-        special_features_ear_code,
-    ) = get_ears_code(elephant_image)
-    return f"{gender_code}{age_code}T{tusk_code}E{left_ear_code}-{right_ear_code}X{extreme_features_code}S{special_features_ear_code}_"
 
 if __name__ == "__main__":
     import cv2
