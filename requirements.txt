@@ -9,3 +9,6 @@ inference
 inference-sdk
 roboflow
 ultralytics
+
+flask
+pillow
