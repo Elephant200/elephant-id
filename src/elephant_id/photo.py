@@ -3,7 +3,6 @@ import os
 from datetime import datetime
 import numpy as np
 
-from preprocess.background import remove_background
 from vision.sam3 import segment_image
 
 class Photo:
