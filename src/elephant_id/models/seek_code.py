@@ -1,26 +1,4 @@
-"""Parsing and formatting of SEEK ear codes for elephant identification.
-
-A SEEK code is a fixed-width string that encodes coarse, human-observable
-features of an elephant. The grammar accepted by this module is::
-
-    G AA T<r><l> E<rt1><rh1><rt2><rh2>-<lt1><lh1><lt2><lh2> X<r><l> S<r><l><b>
-
-where each component is:
-
-* ``G``        — gender: ``B`` (bull), ``C`` (cow), or ``_`` (unknown).
-* ``AA``       — birth-year (last two digits), or ``__`` if unknown.
-* ``T<r><l>``  — right/left tusk presence: ``0``, ``1``, or ``_``.
-* ``E…``       — four right-ear sectors: largest tear, largest hole,
-                 second-largest tear, second-largest hole. Each is one of
-                 ``0/7/8/9`` (right-ear sector ids) or ``_``.
-* ``-…``       — four left-ear sectors with the same meaning, using the
-                 left-ear sector ids ``0/3/4/5`` or ``_``.
-* ``X<r><l>``  — right/left "extreme feature" flags.
-* ``S<r><l><b>`` — special features on right ear / left ear / body.
-
-In every position, ``_`` denotes "unknown" (age uses ``__`` since the
-field is two characters wide).
-"""
+"""Parsing and formatting of SEEK ear codes for elephant identification."""
 
 from dataclasses import dataclass
 from typing import Literal
@@ -59,13 +37,30 @@ _SEEK_RE = re.compile(
 class SeekCode:
     """Structured representation of a SEEK code.
 
+    A SEEK code is a fixed-width string that encodes coarse, human-observable
+    features of an elephant. The grammar accepted by :meth:`from_str` is::
+
+        G AA T<r><l> E<rt1><rh1><rt2><rh2>-<lt1><lh1><lt2><lh2> X<r><l> S<r><l><b>
+
+    where each component is:
+
+    * ``G``        — gender: ``B`` (bull), ``C`` (cow), or ``_`` (unknown).
+    * ``AA``       — birth-year (last two digits), or ``__`` if unknown.
+    * ``T<r><l>``  — right/left tusk presence: ``0``, ``1``, or ``_``.
+    * ``E…``       — four right-ear sectors: largest tear, largest hole,
+                     second-largest tear, second-largest hole. Each is one of
+                     ``0/7/8/9`` (right-ear sector ids) or ``_``.
+    * ``-…``       — four left-ear sectors with the same meaning, using the
+                     left-ear sector ids ``0/3/4/5`` or ``_``.
+    * ``X<r><l>``  — right/left "extreme feature" flags.
+    * ``S<r><l><b>`` — special features on right ear / left ear / body.
+
     Instances are immutable, hashable, and use ``__slots__``, so they can
     be held in large quantities and used as dict keys / set members.
     Use :meth:`from_str` to parse a code and ``str(code)`` to format one;
     round-tripping is exact.
 
-    All fields are ``None`` when unknown. See the module docstring for the
-    full grammar.
+    All fields are ``None`` when unknown.
     """
 
     g: Gender | None  # Gender of the elephant. Bull or cow.
@@ -122,9 +117,8 @@ class SeekCode:
         """Parse a SEEK code string into a :class:`SeekCode`.
 
         Args:
-            code: The SEEK code, exactly matching the grammar described in
-                the module docstring. ``_`` denotes unknown values; age
-                uses the two-character sentinel ``__``.
+            code: The SEEK code, exactly matching the grammar in
+                :class:`SeekCode`.
 
         Returns:
             A new :class:`SeekCode` populated from ``code``.
