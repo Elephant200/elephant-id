@@ -8,7 +8,6 @@ Supports two sources of detections:
 
 import json
 import os
-import sys
 
 from PIL import Image
 
@@ -48,51 +47,51 @@ def crop_elephants_from_coco(batch_directories: list[str], output_directory: str
             cropped.save(os.path.join(output_directory, f"{stem}.jpg"))
 
 
-def crop_elephants_from_roboflow(
-    image_directory: str,
-    output_directory: str,
-    *,
-    largest_only: bool = True,
-) -> None:
-    """
-    Run the Roboflow elephant-body-segmentation model on every image in
-    image_directory and save cropped elephants to output_directory.
+# def crop_elephants_from_roboflow(
+#     image_directory: str,
+#     output_directory: str,
+#     *,
+#     largest_only: bool = True,
+# ) -> None:
+#     """
+#     Run the Roboflow elephant-body-segmentation model on every image in
+#     image_directory and save cropped elephants to output_directory.
 
-    Args:
-        image_directory: Directory containing source images.
-        output_directory: Where to write cropped results.
-        largest_only: If True, keep only the largest detection per image.
-                      If False, keep all detections ranked by area.
-    """
-    from vision.model import infer
+#     Args:
+#         image_directory: Directory containing source images.
+#         output_directory: Where to write cropped results.
+#         largest_only: If True, keep only the largest detection per image.
+#                       If False, keep all detections ranked by area.
+#     """
+#     from vision.model import infer
 
-    os.makedirs(output_directory, exist_ok=True)
+#     os.makedirs(output_directory, exist_ok=True)
 
-    extensions = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".webp"}
-    image_paths = sorted(
-        p for p in os.listdir(image_directory)
-        if os.path.splitext(p)[1].lower() in extensions
-    )
+#     extensions = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".webp"}
+#     image_paths = sorted(
+#         p for p in os.listdir(image_directory)
+#         if os.path.splitext(p)[1].lower() in extensions
+#     )
 
-    for filename in image_paths:
-        img_path = os.path.join(image_directory, filename)
-        preds = infer(img_path, MODEL_ID)
-        if not preds:
-            continue
+#     for filename in image_paths:
+#         img_path = os.path.join(image_directory, filename)
+#         preds = infer(img_path, MODEL_ID)
+#         if not preds:
+#             continue
 
-        img = Image.open(img_path)
-        stem = os.path.splitext(filename)[0]
+#         img = Image.open(img_path)
+#         stem = os.path.splitext(filename)[0]
 
-        preds.sort(key=lambda p: p["width"] * p["height"], reverse=True)
-        to_crop = preds[:1] if largest_only else preds
+#         preds.sort(key=lambda p: p["width"] * p["height"], reverse=True)
+#         to_crop = preds[:1] if largest_only else preds
 
-        for rank, pred in enumerate(to_crop):
-            cx, cy, w, h = pred["x"], pred["y"], pred["width"], pred["height"]
-            left = cx - w / 2
-            top = cy - h / 2
-            cropped = img.crop((left, top, left + w, top + h))
-            suffix = "" if largest_only and len(to_crop) == 1 else f"_{rank}"
-            cropped.save(os.path.join(output_directory, f"{stem}{suffix}.jpg"))
+#         for rank, pred in enumerate(to_crop):
+#             cx, cy, w, h = pred["x"], pred["y"], pred["width"], pred["height"]
+#             left = cx - w / 2
+#             top = cy - h / 2
+#             cropped = img.crop((left, top, left + w, top + h))
+#             suffix = "" if largest_only and len(to_crop) == 1 else f"_{rank}"
+#             cropped.save(os.path.join(output_directory, f"{stem}{suffix}.jpg"))
 
 
 if __name__ == "__main__":
