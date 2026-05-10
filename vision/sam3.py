@@ -3,7 +3,6 @@ Module wrapping the SAM3 Roboflow workflow.
 """
 
 import os
-from typing import Literal
 
 import numpy as np
 from inference_sdk import InferenceHTTPClient
