@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from .photo import Photo
-from datetime import datetime
+from datetime import date
 
 @dataclass(frozen=True, slots=True)
 class Sighting:
@@ -8,7 +8,7 @@ class Sighting:
     A sighting of an elephant
     """
     elephant_name: str
-    sighting_date: datetime
+    sighting_date: date
     sighting_id: str
     photos: tuple[Photo, ...]
     
@@ -19,16 +19,16 @@ class Sighting:
             raise ValueError(f"Sighting date is empty: {self.sighting_date}")
         if not self.sighting_id:
             raise ValueError(f"Sighting id is empty: {self.sighting_id}")
-        if not self.sighting_id == f"{self.elephant_name}_{self.sighting_date.strftime('%Y-%m-%d')}":
+        if self.sighting_id != f"{self.elephant_name}_{self.sighting_date.isoformat()}":
             raise ValueError(f"Sighting id does not match elephant name and sighting date: {self.sighting_id} != {self.elephant_name}_{self.sighting_date.strftime('%Y-%m-%d')}")
         if not self.photos:
             raise ValueError(f"At least one photo is required: {self.photos}")
         
-        _filenames = set()
+        filenames = set()
         for photo in self.photos:
-            if photo.filename in _filenames:
+            if photo.filename in filenames:
                 raise ValueError(f"Photo {photo.filename} is duplicated")
-            _filenames.add(photo.filename)
+            filenames.add(photo.filename)
             if photo.sighting_id != self.sighting_id:
                 raise ValueError(f"Photo {photo.filename} has sighting_id {photo.sighting_id}, expected {self.sighting_id}")
             if photo.elephant_name != self.elephant_name:
