@@ -1,66 +1,31 @@
-import cv2
-import os
-from datetime import datetime
-import numpy as np
+from dataclasses import dataclass
+from pathlib import Path
 
-from vision.sam3 import segment_image
-
+@dataclass(frozen=True, slots=True)
 class Photo:
     """
-    One photo of an elephant
+    Metadata for one photo of an elephant
     """
-    def __init__(self, image_path: str, elephant: str, date: datetime):
-        """
-        Initialize a Photo object.
+    filename: str           # Unique identifier; consists of name, sighting date, and sequential number separated by underscores.
+    image_path: Path        # Relative to dataset root
+    elephant_name: str      # Unique elephant name
+    sighting_id: str        # Unique sighting identifier; consists of elephant name and sighting date separated by underscore.
 
-        Args:
-            image_path: Path to the image file.
-            elephant: The name of the elephant in the image.
-            date: The date the image was taken.
-        """
-        if not os.path.exists(image_path):
-            raise FileNotFoundError(f"Image at {image_path} does not exist")
-        
-        self.image: np.ndarray = cv2.imread(image_path)
-        self.elephant: str = elephant
-        self.date: datetime = date
-        self.identifier: str = os.path.basename(image_path) # Unique identifier for the photo
-
-        self._raw_data: dict | None = None
-
-    def get_data(self) -> dict:
-        if self._raw_data is not None: # Lazy loading
-            return self._raw_data
-        
-        
-        self._raw_data = segment_image(
-            image=self.image,
-            queries=["trunk", "tusk", "ear", "tail"],
-            confidence_threshold=0.5,
-            nms=True,
-            nms_iou_threshold=0.2,
-        )
-
-
+    def __post_init__(self) -> None:
+        if not self.filename:
+            raise ValueError(f"Filename is empty: {self.filename}")
+        if not self.elephant_name:
+            raise ValueError(f"Elephant name is empty: {self.elephant_name}")
+        if not self.sighting_id:
+            raise ValueError(f"Sighting id is empty: {self.sighting_id}")
+        if self.image_path.is_absolute():
+            raise ValueError(f"Image path must be relative: {self.image_path}")
+        if self.filename != self.image_path.name:
+            raise ValueError(f"Filename does not match image path: {self.filename} != {self.image_path.name}")
+        if not self.filename.startswith(self.sighting_id + "_"):
+            raise ValueError(f"Filename does not start with sighting id: {self.filename} does not start with {self.sighting_id}_")
+        if not self.sighting_id.startswith(self.elephant_name + "_"):
+            raise ValueError(f"Sighting id does not start with elephant name: {self.sighting_id} does not start with {self.elephant_name}_")
 
     def __str__(self) -> str:
-        return f"Photo(identifier={self.identifier}, elephant={self.elephant}, date={self.date})"
-    
-    def __repr__(self) -> str:
-        return f"Photo(identifier={self.identifier}, elephant={self.elephant}, date={self.date})"
-
-    def __eq__(self, other: object) -> bool:
-        if not isinstance(other, Photo):
-            return False
-        return self.identifier == other.identifier and self.elephant == other.elephant and self.date == other.date
-    
-    def __hash__(self) -> int:
-        return hash(self.identifier)
-
-if __name__ == "__main__":
-    photo = Photo(
-        image_path="dataset/sample/",
-        elephant="Ariel II",
-        date=datetime(2011, 2, 1),
-    )
-    print(photo)
+        return f"{self.filename}"

@@ -1,5 +1,7 @@
-from elephant_id.models.seek_code import SeekCode
-from elephant_id.models.photo import Photo
-from elephant_id.models.sighting import Sighting
+"""Data models for the SEEK elephant ID system."""
+
+from .seek_code import SeekCode
+from .photo import Photo
+from .sighting import Sighting
 
 __all__ = ["SeekCode", "Photo", "Sighting"]
