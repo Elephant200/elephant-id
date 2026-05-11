@@ -126,7 +126,7 @@ class Sam3Service:
         """
         key = (
             f"{photo.filename}__"
-            f"queries-{"-".join(normalize_queries(queries))}__"
+            f"queries-{'-'.join(normalize_queries(queries))}__"
             f"conf-{self.runner.confidence_threshold:.2f}__"
             f"nms-{self.runner.nms}__"
             f"iou-{self.runner.nms_iou_threshold:.2f}"
