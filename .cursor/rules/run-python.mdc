@@ -5,23 +5,13 @@ alwaysApply: true
 
 # Running Python
 
-This project uses [uv](https://docs.astral.sh/uv/) for dependency and environment management. Source code lives under `src/` (package: `elephant_id`).
-
-Always `cd` into the project root and run via `uv` so the correct environment and dependencies are used. Do not manually activate `.venv` or call `python` directly.
+Use `uv` from the project root; do not activate `.venv` or call `python` directly. Source lives under `src/` (`elephant_id`).
 
 ```bash
 cd /path/to/elephant-id
 uv run python path/to/script.py
-# or run a module from the src/ package:
 uv run python -m elephant_id.module
-# tests:
 uv run pytest
-```
-
-To sync dependencies (including dev and optional groups as needed):
-
-```bash
 uv sync
-# with extras:
-uv sync --extra visualization --extra roboflow
+uv sync --extra visualization --extra local
 ```

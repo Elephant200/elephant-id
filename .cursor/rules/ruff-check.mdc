@@ -1,0 +1,6 @@
+---
+description: Run Ruff after code changes
+alwaysApply: true
+---
+
+After changing code, run `uvx ruff check .` from the project root and fix any reported issues.
