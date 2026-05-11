@@ -6,23 +6,23 @@ import pytest
 from elephant_id.models import Photo, Sighting
 
 
-def _photo(name="Nellie", d="2024-05-10", seq=1, subdir="sightings") -> Photo:
+def _photo(name="Devin", d="2015-11-05", seq=1, subdir="sightings") -> Photo:
     sid = f"{name}_{d}"
-    fn = f"{sid}_{seq}.jpg"
+    identifier = f"{sid}_{seq:02d}"
     return Photo(
-        filename=fn,
-        image_path=Path(f"{subdir}/{fn}"),
+        identifier=identifier,
+        image_path=Path(f"{subdir}/{identifier}.jpg"),
         elephant_name=name,
         sighting_id=sid,
     )
 
 
 def _sighting(photos=None, **overrides) -> Sighting:
-    d = date(2024, 5, 10)
+    d = date(2015, 11, 5)
     base = dict(
-        elephant_name="Nellie",
+        elephant_name="Devin",
         sighting_date=d,
-        sighting_id="Nellie_2024-05-10",
+        sighting_id="Devin_2015-11-05",
         photos=photos if photos is not None else (_photo(),),
     )
     return Sighting(**(base | overrides))
@@ -31,9 +31,9 @@ def _sighting(photos=None, **overrides) -> Sighting:
 def test_sighting_one_photo_and_len():
     s = _sighting()
     assert len(s) == 1
-    assert s.elephant_name == "Nellie"
-    assert s.sighting_date == date(2024, 5, 10)
-    assert s.sighting_id == "Nellie_2024-05-10"
+    assert s.elephant_name == "Devin"
+    assert s.sighting_date == date(2015, 11, 5)
+    assert s.sighting_id == "Devin_2015-11-05"
 
 
 def test_sighting_multiple_photos():
@@ -43,7 +43,7 @@ def test_sighting_multiple_photos():
 
 def test_sighting_id_must_match_name_and_date():
     with pytest.raises(ValueError, match="does not match"):
-        _sighting(sighting_id="Wrong_2024-05-10")
+        _sighting(sighting_id="Wrong_2015-11-05")
 
 
 @pytest.mark.parametrize(
@@ -63,13 +63,13 @@ def test_requires_at_least_one_photo():
         _sighting(photos=())
 
 
-def test_duplicate_photo_filenames_raise():
+def test_duplicate_photo_identifiers_raise():
     p = _photo()
     with pytest.raises(ValueError, match="duplicated"):
         _sighting(photos=(p, p))
 
 
 def test_photo_sighting_id_must_match_sighting():
-    other = _photo(name="Other", d="2024-06-01", subdir="other")
+    other = _photo(name="Aaron", d="2008-11-24", subdir="Aaron/2008-11-24")
     with pytest.raises(ValueError, match="sighting_id"):
         _sighting(photos=(other,))

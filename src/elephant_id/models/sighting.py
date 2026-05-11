@@ -24,15 +24,15 @@ class Sighting:
         if not self.photos:
             raise ValueError(f"At least one photo is required: {self.photos}")
         
-        filenames = set()
+        identifiers = set()
         for photo in self.photos:
-            if photo.filename in filenames:
-                raise ValueError(f"Photo {photo.filename} is duplicated")
-            filenames.add(photo.filename)
+            if photo.identifier in identifiers:
+                raise ValueError(f"Photo {photo.identifier} is duplicated")
+            identifiers.add(photo.identifier)
             if photo.sighting_id != self.sighting_id:
-                raise ValueError(f"Photo {photo.filename} has sighting_id {photo.sighting_id}, expected {self.sighting_id}")
+                raise ValueError(f"Photo {photo.identifier} has sighting_id {photo.sighting_id}, expected {self.sighting_id}")
             if photo.elephant_name != self.elephant_name:
-                raise ValueError(f"Photo {photo.filename} has elephant name {photo.elephant_name}, expected {self.elephant_name}")
+                raise ValueError(f"Photo {photo.identifier} has elephant name {photo.elephant_name}, expected {self.elephant_name}")
         
     def __len__(self) -> int:
         return len(self.photos)

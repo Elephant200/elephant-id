@@ -125,7 +125,7 @@ class Sam3Service:
             Dictionary containing the SAM3 output
         """
         key = (
-            f"{photo.filename}__"
+            f"{photo.identifier}__"
             f"queries-{'-'.join(normalize_queries(queries))}__"
             f"conf-{self.runner.confidence_threshold:.2f}__"
             f"nms-{self.runner.nms}__"
