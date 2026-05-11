@@ -16,18 +16,22 @@ from elephant_id.constants import (
     ROBOFLOW_API_URL,
     ROBOFLOW_SAM3_WORKFLOW_ID,
     ROBOFLOW_WORKSPACE,
+    SAM3_QUERY_PRESETS,
 )
 from elephant_id.dataset import Dataset
 from elephant_id.models import Photo
 
 
-def normalize_queries(queries: str | list[str] | tuple[str, ...]) -> tuple[str, ...]:
+def _resolve_preset(preset: str) -> tuple[str, ...]:
     """
-    Normalize the queries to a tuple of strings
+    Resolve a preset name to its tuple of query strings.
     """
-    if isinstance(queries, str):
-        return tuple(q.strip() for q in queries.split(",") if q.strip())
-    return tuple(q.strip() for q in queries if q.strip())
+    if preset not in SAM3_QUERY_PRESETS:
+        valid = ", ".join(sorted(SAM3_QUERY_PRESETS.keys()))
+        raise ValueError(
+            f"Unknown SAM3 query preset: {preset!r}. Valid presets: {valid}"
+        )
+    return SAM3_QUERY_PRESETS[preset]
 
 
 class Sam3Runner:
@@ -56,25 +60,24 @@ class Sam3Runner:
         self.nms: bool = nms
         self.nms_iou_threshold: float = nms_iou_threshold
 
-    def run(
-        self, image: Image.Image, queries: str | list[str] | tuple[str, ...]
-    ) -> dict:
+    def run(self, image: Image.Image, query_preset: str) -> dict:
         """
         Run the SAM3 workflow for the given PIL image
 
         Args:
             image: PIL image to run SAM3 on
-            queries: Queries to send to SAM3
+            query_preset: Name of a SAM3 query preset (see SAM3_QUERY_PRESETS)
 
         Returns:
             Dictionary containing the SAM3 output
         """
+        queries = _resolve_preset(query_preset)
         response = self.client.run_workflow(
             workspace_name=self.workspace_name,
             workflow_id=self.workflow_id,
             images={"image": image},
             parameters={
-                "queries": ", ".join(normalize_queries(queries)),
+                "queries": ", ".join(queries),
                 "confidence_threshold": self.confidence_threshold,
                 "nms": self.nms,
                 "nms_iou_threshold": self.nms_iou_threshold,
@@ -86,7 +89,7 @@ class Sam3Runner:
 
         # Normalize output
         return {
-            "queries": list(normalize_queries(queries)),
+            "queries": list(queries),
             "confidence_threshold": self.confidence_threshold,
             "nms": self.nms,
             "nms_iou_threshold": self.nms_iou_threshold,
@@ -122,20 +125,22 @@ class Sam3Service:
         self.dataset: Dataset = dataset
         self.cache_manager = CacheManager("sam3", cache_root=cache_root)
 
-    def run(self, photo: Photo, queries: str | list[str] | tuple[str, ...]) -> dict:
+    def run(self, photo: Photo, query_preset: str) -> dict:
         """
         Run the SAM3 workflow for the given Photo object
 
         Args:
             photo: Photo object to run SAM3 for
-            queries: Queries to send to SAM3
+            query_preset: Name of a SAM3 query preset (see SAM3_QUERY_PRESETS)
 
         Returns:
             Dictionary containing the SAM3 output
         """
+        _resolve_preset(query_preset)
+
         key = (
             f"{photo.identifier}__"
-            f"queries-{'-'.join(normalize_queries(queries))}__"
+            f"queries-{query_preset}__"
             f"conf-{self.runner.confidence_threshold:.2f}__"
             f"nms-{self.runner.nms}__"
             f"iou-{self.runner.nms_iou_threshold:.2f}"
@@ -144,6 +149,6 @@ class Sam3Service:
         return self.cache_manager.get_or_compute(
             key=key,
             compute_fn=lambda: self.runner.run(
-                image=self.dataset.read_image(photo), queries=queries
+                image=self.dataset.read_image(photo), query_preset=query_preset
             ),
         )

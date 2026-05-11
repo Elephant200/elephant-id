@@ -26,7 +26,7 @@ if __name__ == "__main__":
     print(sample_photo)
     original_image = dataset.read_image(sample_photo)
     print("Running SAM3...")
-    predictions = sam3.run(sample_photo, "elephant")
+    predictions = sam3.run(sample_photo, "body")
     print("Predictions:")
     print(predictions)
     visualized_image = visualize_predictions(original_image, predictions["predictions"])
