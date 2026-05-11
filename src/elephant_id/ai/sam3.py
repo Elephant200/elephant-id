@@ -94,7 +94,7 @@ class Sam3Service:
         self,
         api_key: str,
         dataset: Dataset,
-        cache_root: Path | str = ".cache",
+        cache_root: Path = Path(".cache"),
         workspace_name: str = "seek-identification",
         workflow_id: str = "sam3",
         confidence_threshold: float = 0.6,

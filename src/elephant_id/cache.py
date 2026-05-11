@@ -13,17 +13,17 @@ class CacheManager:
     def __init__(
         self, 
         namespace: str,
-        cache_root: Path | str = ".cache",
+        cache_root: Path = Path(".cache"),
     ) -> None:
         """
         Initialize the cache manager for the given namespace.
 
         Args:
             namespace: The namespace to cache the results in, eg. name of the model.
-            cache_root: The root cache directory. Defaults to ".cache".
+            cache_root: The root cache directory. Defaults to Path(".cache").
         """
         self.namespace: str = namespace
-        self.cache_dir: Path = Path(cache_root).resolve() / namespace
+        self.cache_dir: Path = cache_root.resolve() / namespace
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
     def path_for(self, key: str) -> Path:
