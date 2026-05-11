@@ -20,12 +20,6 @@ if __name__ == "__main__":
     sam3 = Sam3Service(
         api_key=os.getenv("ROBOFLOW_API_KEY"),
         dataset=dataset,
-        cache_root=Path(".cache"),
-        workspace_name="seek-identification",
-        workflow_id="sam3",
-        confidence_threshold=0.6,
-        nms=True,
-        nms_iou_threshold=0.2,
     )
     print(sighting)
     sample_photo = sighting.photos[0]
@@ -37,4 +31,3 @@ if __name__ == "__main__":
     print(predictions)
     visualized_image = visualize_predictions(original_image, predictions["predictions"])
     visualized_image.show()
-    visualized_image.save("visualized_image.jpg")

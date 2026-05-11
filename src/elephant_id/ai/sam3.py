@@ -8,6 +8,15 @@ from inference_sdk import InferenceHTTPClient
 from PIL import Image
 
 from elephant_id.cache import CacheManager
+from elephant_id.constants import (
+    DEFAULT_CACHE_ROOT,
+    DEFAULT_SAM3_CONFIDENCE_THRESHOLD,
+    DEFAULT_SAM3_NMS,
+    DEFAULT_SAM3_NMS_IOU_THRESHOLD,
+    ROBOFLOW_API_URL,
+    ROBOFLOW_SAM3_WORKFLOW_ID,
+    ROBOFLOW_WORKSPACE,
+)
 from elephant_id.dataset import Dataset
 from elephant_id.models import Photo
 
@@ -29,15 +38,15 @@ class Sam3Runner:
     def __init__(
         self,
         api_key: str,
-        workspace_name: str = "seek-identification",
-        workflow_id: str = "sam3",
-        confidence_threshold: float = 0.6,
-        nms: bool = True,
-        nms_iou_threshold: float = 0.2,
+        workspace_name: str = ROBOFLOW_WORKSPACE,
+        workflow_id: str = ROBOFLOW_SAM3_WORKFLOW_ID,
+        confidence_threshold: float = DEFAULT_SAM3_CONFIDENCE_THRESHOLD,
+        nms: bool = DEFAULT_SAM3_NMS,
+        nms_iou_threshold: float = DEFAULT_SAM3_NMS_IOU_THRESHOLD,
     ) -> None:
         self.api_key: str = api_key
         self.client = InferenceHTTPClient(
-            api_url="https://serverless.roboflow.com",
+            api_url=ROBOFLOW_API_URL,
             api_key=self.api_key,
         )
 
@@ -94,12 +103,12 @@ class Sam3Service:
         self,
         api_key: str,
         dataset: Dataset,
-        cache_root: Path = Path(".cache"),
-        workspace_name: str = "seek-identification",
-        workflow_id: str = "sam3",
-        confidence_threshold: float = 0.6,
-        nms: bool = True,
-        nms_iou_threshold: float = 0.2,
+        cache_root: Path = Path(DEFAULT_CACHE_ROOT),
+        workspace_name: str = ROBOFLOW_WORKSPACE,
+        workflow_id: str = ROBOFLOW_SAM3_WORKFLOW_ID,
+        confidence_threshold: float = DEFAULT_SAM3_CONFIDENCE_THRESHOLD,
+        nms: bool = DEFAULT_SAM3_NMS,
+        nms_iou_threshold: float = DEFAULT_SAM3_NMS_IOU_THRESHOLD,
     ) -> None:
         self.runner = Sam3Runner(
             api_key=api_key,

@@ -6,6 +6,9 @@ import json
 from pathlib import Path
 from typing import Callable
 
+from elephant_id.constants import DEFAULT_CACHE_ROOT
+
+
 class CacheManager:
     """
     Class for caching results of AI models as json
@@ -13,14 +16,14 @@ class CacheManager:
     def __init__(
         self, 
         namespace: str,
-        cache_root: Path = Path(".cache"),
+        cache_root: Path = Path(DEFAULT_CACHE_ROOT),
     ) -> None:
         """
         Initialize the cache manager for the given namespace.
 
         Args:
             namespace: The namespace to cache the results in, eg. name of the model.
-            cache_root: The root cache directory. Defaults to Path(".cache").
+            cache_root: The root cache directory. Defaults to DEFAULT_CACHE_ROOT.
         """
         self.namespace: str = namespace
         self.cache_dir: Path = cache_root.resolve() / namespace
