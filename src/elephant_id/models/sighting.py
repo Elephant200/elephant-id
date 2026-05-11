@@ -36,3 +36,6 @@ class Sighting:
         
     def __len__(self) -> int:
         return len(self.photos)
+
+    def __str__(self) -> str:
+        return f"Sighting({self.sighting_id}, photos={len(self.photos)})"

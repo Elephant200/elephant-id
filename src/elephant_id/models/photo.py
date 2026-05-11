@@ -28,4 +28,4 @@ class Photo:
             raise ValueError(f"Sighting id does not start with elephant name: {self.sighting_id} does not start with {self.elephant_name}_")
 
     def __str__(self) -> str:
-        return self.identifier
+        return f"Photo({self.identifier})"
