@@ -19,7 +19,7 @@ def test_photo_constructed_and_str():
     p = _valid_photo()
     assert p.identifier == "Devin_2015-11-05_09"
     assert p.image_path == Path("elephants-alive/Devin/2015-11-05/Devin_2015-11-05_09.jpg")
-    assert str(p) == "Devin_2015-11-05_09"
+    assert str(p) == "Photo(Devin_2015-11-05_09)"
 
 
 @pytest.mark.parametrize(
