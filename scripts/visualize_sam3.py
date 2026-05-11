@@ -1,6 +1,7 @@
 from datetime import date
 import os
 from pathlib import Path
+import time
 
 from dotenv import load_dotenv
 
@@ -24,10 +25,11 @@ if __name__ == "__main__":
     print(sighting)
     sample_photo = sighting.photos[0]
     print(sample_photo)
-    original_image = dataset.read_image(sample_photo)
-    print("Running SAM3...")
-    predictions = sam3.run(sample_photo, "body")
-    print("Predictions:")
-    print(predictions)
-    visualized_image = visualize_predictions(original_image, predictions["predictions"])
-    visualized_image.show()
+    start_time = time.perf_counter()
+    for image in sighting.photos:
+        original_image = dataset.read_image(image)
+        predictions = sam3.run(image, "features")
+        visualized_image = visualize_predictions(original_image, predictions["predictions"])
+        visualized_image.show()
+    end_time = time.perf_counter()
+    print(f"Time taken: {end_time - start_time} seconds ({(end_time-start_time) / len(sighting.photos)} seconds per image)")
