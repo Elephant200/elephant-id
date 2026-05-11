@@ -81,7 +81,7 @@ class Sam3Runner:
             "confidence_threshold": self.confidence_threshold,
             "nms": self.nms,
             "nms_iou_threshold": self.nms_iou_threshold,
-            "predictions": response[0]["predictions"],
+            "predictions": response[0]["predictions"]["predictions"],
         }
 
 
