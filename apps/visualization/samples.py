@@ -2,7 +2,7 @@
 
 The reviewer "starring" model has two related stores:
 
-1. ``samples/sightings/<Name__YYYY-MM-DD>/`` mirrors a sighting folder copied
+1. ``samples/sightings/<Name_YYYY-MM-DD>/`` mirrors a sighting folder copied
    from ``coded/``. Files prefixed with ``** `` are *priority* (starred)
    copies — that prefix is the ground truth for star state.
 2. ``samples/starred/`` is a denormalized flat directory of priority files
@@ -81,12 +81,12 @@ def _copy_sighting_to_samples(name: str, date: str) -> Path:
         raise FileNotFoundError(f"Missing sighting folder: {src}")
     safe_name = name.replace("/", "_").replace("\\", "_").strip()
     safe_date = date.replace("/", "_").replace("\\", "_").strip()
-    base_dst = SAMPLES_SIGHTINGS_ROOT / f"{safe_name}__{safe_date}"
+    base_dst = SAMPLES_SIGHTINGS_ROOT / f"{safe_name}_{safe_date}"
     dst = base_dst
     if dst.exists():
         i = 2
         while True:
-            candidate = base_dst.with_name(base_dst.name + f"__dup{i}")
+            candidate = base_dst.with_name(base_dst.name + f"_dup{i}")
             if not candidate.exists():
                 dst = candidate
                 break

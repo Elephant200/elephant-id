@@ -121,7 +121,7 @@ function formatSightingTitle(name, date, seekCode) {
 }
 
 function formatSavedFolderTitle(folder) {
-  const m = folder.match(/^(.+)__(\d{4}-\d{2}-\d{2})(?:__dup\d+)?$/);
+  const m = folder.match(/^(.+)_(\d{4}-\d{2}-\d{2})(?:_dup\d+)?$/);
   if (!m) return folder;
   return `${m[1]} · ${m[2]}`;
 }

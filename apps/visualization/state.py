@@ -44,7 +44,7 @@ class SightingKey:
 
     @property
     def id(self) -> str:
-        return f"{self.name}__{self.date}"
+        return f"{self.name}_{self.date}"
 
 
 def list_saved_sighting_entries(folder_rel: str) -> list[dict]:

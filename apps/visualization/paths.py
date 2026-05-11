@@ -16,7 +16,7 @@ from .config import (
     SAMPLES_SIGHTINGS_ROOT,
 )
 
-SAVED_SIGHTING_DIR_RE = re.compile(r"^(.+)__(\d{4}-\d{2}-\d{2})(?:__dup\d+)?$")
+SAVED_SIGHTING_DIR_RE = re.compile(r"^(.+)_(\d{4}-\d{2}-\d{2})(?:_dup\d+)?$")
 
 
 def is_image(path: Path) -> bool:
@@ -24,7 +24,7 @@ def is_image(path: Path) -> bool:
 
 
 def parse_sighting_folder_name(folder_name: str) -> tuple[str, str] | None:
-    """Return ``(name, date)`` for ``Name__YYYY-MM-DD[__dupN]`` folders."""
+    """Return ``(name, date)`` for ``Name_YYYY-MM-DD[_dupN]`` folders."""
     m = SAVED_SIGHTING_DIR_RE.match(folder_name)
     if not m:
         return None
