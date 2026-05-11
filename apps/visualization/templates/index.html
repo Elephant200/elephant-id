@@ -158,6 +158,29 @@
       </div>
     </div>
 
+    <div class="modal" id="imageModal" hidden aria-modal="true" role="dialog" aria-labelledby="imageModalTitle">
+      <div class="modal-backdrop" tabindex="-1"></div>
+      <div class="modal-sheet image-modal-sheet">
+        <div class="modal-head image-modal-head">
+          <h2 class="modal-title" id="imageModalTitle">Image</h2>
+          <button type="button" class="btn btn-ghost image-modal-close" id="imageModalClose" aria-label="Close">Close</button>
+        </div>
+        <div class="image-modal-body">
+          <img id="modalImage" alt="" />
+        </div>
+        <div class="image-modal-foot">
+          <div class="image-modal-presets">
+            <span class="filter-section-label">SAM3 preset</span>
+            <div class="seg" role="group" aria-label="SAM3 preset" id="sam3PresetSeg"></div>
+          </div>
+          <div class="image-modal-status" id="sam3Status"></div>
+          <div class="image-modal-actions">
+            <button type="button" class="btn btn-primary" id="sam3RunBtn">Run SAM3 (Enter)</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <script src="/static/app.js"></script>
   </body>
 </html>

@@ -7,17 +7,33 @@ field names here form the API contract with it.
 
 from __future__ import annotations
 
+import io
+import logging
+from pathlib import Path
+
 from flask import Blueprint, abort, jsonify, render_template, request, send_file
 
-from .config import PAGE_SIZE_DEFAULT, THUMB_MAX_SIZE
+from elephant_id.constants import SAM3_QUERY_PRESETS
+from elephant_id.dataset import Dataset
+from elephant_id.visualize import visualize_predictions
+
+from .config import CODED_ROOT, PAGE_SIZE_DEFAULT, THUMB_MAX_SIZE
 from .filters import FilterConfig
-from .paths import safe_saved_sighting_dir, safe_saved_sighting_file
-from .samples import first_priority_or_any_image
+from .paths import (
+    safe_coded_rel_image,
+    safe_saved_sighting_dir,
+    safe_saved_sighting_file,
+)
+from .samples import first_priority_or_any_image, plain_basename
 from .state import ReviewerState, list_saved_sighting_entries
 from .thumbs import absolute_thumb, coded_thumb
 
+logger = logging.getLogger(__name__)
 
-def create_blueprint(state: ReviewerState) -> Blueprint:
+DEFAULT_SAM3_PRESET = "features"
+
+
+def create_blueprint(state: ReviewerState, *, dataset: Dataset, sam3=None) -> Blueprint:
     bp = Blueprint("reviewer", __name__)
 
     def _json_body() -> dict:
@@ -149,5 +165,101 @@ def create_blueprint(state: ReviewerState) -> Blueprint:
             return send_file(coded_thumb(rel, size))
         except (FileNotFoundError, ValueError):
             abort(404)
+
+    # -------- full-resolution image + SAM3 ----------------------------
+
+    def _resolve_image_request() -> tuple[Path, str]:
+        """Resolve an image source from query/body to ``(abs_path, identifier)``.
+
+        ``identifier`` is the Photo identifier (filename stem with the priority
+        prefix stripped for samples files).
+        """
+        rel = (request.args.get("p") or "").strip()
+        samples_rel = (request.args.get("samplesRel") or "").strip()
+        if not rel and not samples_rel and request.method != "GET":
+            data = request.get_json(force=True, silent=True) or {}
+            rel = (data.get("imagePath") or "").strip()
+            samples_rel = (data.get("samplesRel") or "").strip()
+
+        if samples_rel:
+            path = safe_saved_sighting_file(samples_rel)
+            identifier = Path(plain_basename(path.name)).stem
+            return path, identifier
+        if rel:
+            rel_norm = safe_coded_rel_image(rel)
+            path = (CODED_ROOT / rel_norm).resolve()
+            if not path.is_file():
+                raise ValueError("Missing image")
+            identifier = Path(rel_norm).stem
+            return path, identifier
+        raise ValueError("Missing image reference")
+
+    @bp.get("/image")
+    def api_image():
+        try:
+            path, _identifier = _resolve_image_request()
+        except ValueError:
+            abort(404)
+        return send_file(path)
+
+    @bp.get("/api/sam3/presets")
+    def api_sam3_presets():
+        return jsonify(
+            {
+                "presets": list(SAM3_QUERY_PRESETS.keys()),
+                "default": DEFAULT_SAM3_PRESET,
+            }
+        )
+
+    @bp.post("/api/sam3")
+    def api_sam3():
+        if sam3 is None:
+            return (
+                jsonify(
+                    {
+                        "error": (
+                            "SAM3 unavailable. Install the `local` extra "
+                            "(`uv sync --extra local`) and set ROBOFLOW_API_KEY."
+                        )
+                    }
+                ),
+                503,
+            )
+
+        data = request.get_json(force=True, silent=True) or {}
+        preset = (data.get("preset") or DEFAULT_SAM3_PRESET).strip()
+        if preset not in SAM3_QUERY_PRESETS:
+            return jsonify({"error": f"Unknown preset: {preset}"}), 400
+
+        try:
+            _path, identifier = _resolve_image_request()
+        except ValueError as e:
+            return jsonify({"error": str(e)}), 400
+
+        try:
+            photo = dataset.get_photo(identifier)
+        except KeyError:
+            return (
+                jsonify({"error": f"No photo with identifier: {identifier}"}),
+                404,
+            )
+
+        try:
+            result = sam3.run(photo, preset)
+        except Exception as e:
+            logger.exception("SAM3 run failed for %s", identifier)
+            return jsonify({"error": f"SAM3 failed: {e}"}), 500
+
+        try:
+            image = dataset.read_image(photo)
+            overlay = visualize_predictions(image, result.get("predictions", []))
+        except Exception as e:
+            logger.exception("Failed to render SAM3 overlay for %s", identifier)
+            return jsonify({"error": f"Overlay failed: {e}"}), 500
+
+        buf = io.BytesIO()
+        overlay.save(buf, format="JPEG", quality=88)
+        buf.seek(0)
+        return send_file(buf, mimetype="image/jpeg")
 
     return bp

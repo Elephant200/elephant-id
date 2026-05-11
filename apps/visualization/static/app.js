@@ -30,6 +30,13 @@ const els = {
   browseEmpty: document.getElementById("browseEmpty"),
   yearExtentHint: document.getElementById("yearExtentHint"),
   shuffleToggleBtn: document.getElementById("shuffleToggleBtn"),
+  imageModal: document.getElementById("imageModal"),
+  modalImage: document.getElementById("modalImage"),
+  modalTitle: document.getElementById("imageModalTitle"),
+  sam3PresetSeg: document.getElementById("sam3PresetSeg"),
+  sam3Status: document.getElementById("sam3Status"),
+  sam3RunBtn: document.getElementById("sam3RunBtn"),
+  imageModalClose: document.getElementById("imageModalClose"),
 };
 
 let busy = false;
@@ -248,6 +255,168 @@ function closeFilterModal(restoreSnapshot) {
   modalFiltersSnapshot = null;
 }
 
+const SAM3_DEFAULT_PRESET = "features";
+let sam3Presets = null; // { presets: string[], default: string }
+let sam3PresetsPromise = null;
+let imageModalCtx = null; // { kind, path, preset, originalUrl, overlayUrl }
+let sam3Running = false;
+let clickTimer = null;
+
+function loadSam3Presets() {
+  if (sam3Presets) return Promise.resolve(sam3Presets);
+  if (sam3PresetsPromise) return sam3PresetsPromise;
+  sam3PresetsPromise = getJson("/api/sam3/presets")
+    .then((data) => {
+      sam3Presets = {
+        presets: Array.isArray(data?.presets) && data.presets.length ? data.presets : [SAM3_DEFAULT_PRESET],
+        default: data?.default || SAM3_DEFAULT_PRESET,
+      };
+      return sam3Presets;
+    })
+    .catch(() => {
+      sam3Presets = { presets: [SAM3_DEFAULT_PRESET, "body"], default: SAM3_DEFAULT_PRESET };
+      return sam3Presets;
+    });
+  return sam3PresetsPromise;
+}
+
+function renderSam3PresetChips() {
+  const host = els.sam3PresetSeg;
+  if (!host || !sam3Presets || !imageModalCtx) return;
+  host.innerHTML = "";
+  for (const p of sam3Presets.presets) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "seg-btn";
+    b.textContent = p;
+    if (p === imageModalCtx.preset) b.classList.add("seg-on");
+    b.addEventListener("click", () => {
+      imageModalCtx.preset = p;
+      host.querySelectorAll(".seg-btn").forEach((el) => el.classList.toggle("seg-on", el === b));
+    });
+    host.appendChild(b);
+  }
+}
+
+function setSam3Status(text, isError) {
+  const s = els.sam3Status;
+  if (!s) return;
+  s.textContent = text || "";
+  s.classList.toggle("is-error", !!isError);
+}
+
+function buildImageUrl(ctx) {
+  if (ctx.kind === "samples") return `/image?samplesRel=${encodeURIComponent(ctx.path)}`;
+  return `/image?p=${encodeURIComponent(ctx.path)}`;
+}
+
+function revokeImageModalUrls() {
+  if (imageModalCtx?.overlayUrl) {
+    try {
+      URL.revokeObjectURL(imageModalCtx.overlayUrl);
+    } catch {}
+    imageModalCtx.overlayUrl = null;
+  }
+}
+
+async function openImageModal({ kind, path, label }) {
+  if (!els.imageModal) return;
+  await loadSam3Presets();
+  imageModalCtx = {
+    kind,
+    path,
+    preset: sam3Presets?.default || SAM3_DEFAULT_PRESET,
+    originalUrl: buildImageUrl({ kind, path }),
+    overlayUrl: null,
+  };
+  if (els.modalTitle) els.modalTitle.textContent = label || path;
+  if (els.modalImage) {
+    els.modalImage.alt = label || "";
+    els.modalImage.src = imageModalCtx.originalUrl;
+  }
+  renderSam3PresetChips();
+  setSam3Status("");
+  els.imageModal.hidden = false;
+}
+
+function closeImageModal() {
+  if (!els.imageModal) return;
+  revokeImageModalUrls();
+  els.imageModal.hidden = true;
+  imageModalCtx = null;
+  setSam3Status("");
+}
+
+async function runSam3() {
+  if (sam3Running || !imageModalCtx) return;
+  sam3Running = true;
+  setSam3Status(`Running SAM3 (${imageModalCtx.preset})...`);
+  if (els.sam3RunBtn) els.sam3RunBtn.disabled = true;
+  try {
+    const body =
+      imageModalCtx.kind === "samples"
+        ? { samplesRel: imageModalCtx.path, preset: imageModalCtx.preset }
+        : { imagePath: imageModalCtx.path, preset: imageModalCtx.preset };
+    const res = await fetch("/api/sam3", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      let msg = `Request failed (${res.status})`;
+      try {
+        const j = await res.json();
+        if (j?.error) msg = j.error;
+      } catch {}
+      setSam3Status(msg, true);
+      return;
+    }
+    const blob = await res.blob();
+    revokeImageModalUrls();
+    const url = URL.createObjectURL(blob);
+    imageModalCtx.overlayUrl = url;
+    if (els.modalImage) els.modalImage.src = url;
+    setSam3Status(`Overlay: ${imageModalCtx.preset}`);
+  } catch (e) {
+    setSam3Status(String(e?.message || e), true);
+  } finally {
+    sam3Running = false;
+    if (els.sam3RunBtn) els.sam3RunBtn.disabled = false;
+  }
+}
+
+function attachThumbModalOpener(card, openArgs) {
+  card._modalArgs = openArgs;
+  card.addEventListener("click", (e) => {
+    if (e.detail > 1) return; // ignore the click leading a dblclick
+    if (clickTimer) clearTimeout(clickTimer);
+    clickTimer = setTimeout(() => {
+      clickTimer = null;
+      openImageModal(openArgs);
+    }, 220);
+  });
+}
+
+function navigateImageModal(delta) {
+  if (!imageModalCtx || !els.grid) return;
+  const cards = Array.from(els.grid.querySelectorAll(".thumb")).filter(
+    (c) => c._modalArgs && c._modalArgs.kind === imageModalCtx.kind
+  );
+  if (!cards.length) return;
+  const idx = cards.findIndex((c) => c._modalArgs.path === imageModalCtx.path);
+  if (idx === -1) return;
+  const next = idx + delta;
+  if (next < 0 || next >= cards.length) return;
+  openImageModal(cards[next]._modalArgs);
+}
+
+function cancelPendingThumbClick() {
+  if (clickTimer) {
+    clearTimeout(clickTimer);
+    clickTimer = null;
+  }
+}
+
 function tileMinForCount(n) {
   if (n <= 3) return 440;
   if (n <= 6) return 380;
@@ -457,8 +626,10 @@ function renderQueue(state) {
     if (!p) continue;
     const card = document.createElement("div");
     card.className = "thumb";
+    attachThumbModalOpener(card, { kind: "coded", path: p, label: filenameFromPath(p) });
     card.addEventListener("dblclick", (e) => {
       e.preventDefault();
+      cancelPendingThumbClick();
       act(() => postJson("/api/toggle_priority_image", { imagePath: p }));
     });
     const img = document.createElement("img");
@@ -555,8 +726,10 @@ async function renderSavedBrowse(opts = {}) {
     card.appendChild(img);
     card.appendChild(label);
     if (priority) ensureThumbStar(card);
+    attachThumbModalOpener(card, { kind: "samples", path: rel, label: filenameFromPath(rel) });
     card.addEventListener("dblclick", (e) => {
       e.preventDefault();
+      cancelPendingThumbClick();
       act(async () => {
         const v = await postJson("/api/toggle_priority_image", { samplesRel: rel });
         maybeToastFromEvent(v.event);
@@ -681,8 +854,16 @@ function isEditableTarget(t) {
   return tag === "input" || tag === "textarea" || t.isContentEditable;
 }
 
-function isModalOpen() {
+function isFilterModalOpen() {
   return els.filterModal && !els.filterModal.hidden;
+}
+
+function isImageModalOpen() {
+  return els.imageModal && !els.imageModal.hidden;
+}
+
+function isModalOpen() {
+  return isFilterModalOpen() || isImageModalOpen();
 }
 
 function cycleBrowseMode(delta) {
@@ -744,9 +925,33 @@ async function applyCapsLockElephantState(caps) {
 }
 
 document.addEventListener("keydown", (e) => {
+  if (isImageModalOpen()) {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      closeImageModal();
+      return;
+    }
+    if (e.key === "Enter" && !isEditableTarget(e.target)) {
+      e.preventDefault();
+      void runSam3();
+      return;
+    }
+    if (e.key === "ArrowLeft" && !isEditableTarget(e.target)) {
+      e.preventDefault();
+      navigateImageModal(-1);
+      return;
+    }
+    if (e.key === "ArrowRight" && !isEditableTarget(e.target)) {
+      e.preventDefault();
+      navigateImageModal(1);
+      return;
+    }
+    return;
+  }
+
   if (busy) return;
 
-  if (isModalOpen()) {
+  if (isFilterModalOpen()) {
     if (e.key === "Escape") {
       e.preventDefault();
       closeFilterModal(true);
@@ -876,6 +1081,16 @@ document.getElementById("filterCancelBtn")?.addEventListener("click", () => {
 
 els.filterModal?.querySelector(".modal-backdrop")?.addEventListener("click", () => {
   closeFilterModal(true);
+});
+
+els.imageModal?.querySelector(".modal-backdrop")?.addEventListener("click", () => {
+  closeImageModal();
+});
+
+els.imageModalClose?.addEventListener("click", () => closeImageModal());
+
+els.sam3RunBtn?.addEventListener("click", () => {
+  void runSam3();
 });
 
 els.elephantToggleBtn?.addEventListener("click", () => {

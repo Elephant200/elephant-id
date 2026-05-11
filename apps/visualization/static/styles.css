@@ -522,6 +522,77 @@ kbd {
   background: var(--chipOn);
 }
 
+.image-modal-sheet {
+  width: min(92vw, 1400px);
+  max-height: 92vh;
+  height: auto;
+}
+
+.image-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.image-modal-close {
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+.image-modal-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #000;
+  padding: 0;
+  overflow: hidden;
+}
+
+.image-modal-body img {
+  max-width: 100%;
+  max-height: calc(92vh - 150px);
+  object-fit: contain;
+  display: block;
+}
+
+.image-modal-foot {
+  padding: 10px 16px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.image-modal-presets {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.image-modal-presets .filter-section-label {
+  margin-bottom: 0;
+}
+
+.image-modal-status {
+  flex: 1;
+  font-size: 12px;
+  color: var(--muted);
+  min-height: 16px;
+}
+
+.image-modal-status.is-error {
+  color: #ff8a8a;
+}
+
+.image-modal-actions {
+  display: flex;
+  gap: 10px;
+}
+
 .filter-section-label {
   font-size: 11px;
   font-weight: 700;
