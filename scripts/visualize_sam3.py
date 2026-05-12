@@ -18,6 +18,11 @@ if __name__ == "__main__":
         image_cache_size=32,
     )
     sighting = dataset.get_sighting("Devin", date(2015, 11, 5))
+
+    sam3 = Sam3Service(
+        api_key=os.getenv("ROBOFLOW_API_KEY"),
+        dataset=dataset,
+    )
     
     print(sighting)
     sample_photo = sighting.photos[0]
