@@ -137,7 +137,7 @@ def create_blueprint(state: ReviewerState, *, dataset: Dataset, sam3=None) -> Bl
         size = int(request.args.get("s", THUMB_MAX_SIZE))
         try:
             path = safe_saved_sighting_file(rel)
-            return send_file(absolute_thumb(path, "sf", size))
+            return send_file(absolute_thumb(path, size), mimetype="image/jpeg")
         except ValueError:
             abort(404)
 
@@ -155,14 +155,14 @@ def create_blueprint(state: ReviewerState, *, dataset: Dataset, sam3=None) -> Bl
         first = first_priority_or_any_image(folder)
         if first is None:
             abort(404)
-        return send_file(absolute_thumb(first, "sig", size))
+        return send_file(absolute_thumb(first, size), mimetype="image/jpeg")
 
     @bp.get("/thumb")
     def thumb():
         rel = request.args.get("p", "")
         size = int(request.args.get("s", THUMB_MAX_SIZE))
         try:
-            return send_file(coded_thumb(rel, size))
+            return send_file(coded_thumb(rel, size), mimetype="image/jpeg")
         except (FileNotFoundError, ValueError):
             abort(404)
 

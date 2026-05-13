@@ -59,11 +59,11 @@ def create_app() -> Flask:
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
 
+    dataset = Dataset(dataset_root=CODED_ROOT, metadata_path=CSV_PATH)
     state = ReviewerState()
-    state.load()
+    state.load(dataset)
     reconcile_all_starred()
 
-    dataset = Dataset(dataset_root=CODED_ROOT, metadata_path=CSV_PATH)
     sam3 = _build_sam3_service(dataset)
 
     app = Flask(__name__, template_folder="templates", static_folder="static")

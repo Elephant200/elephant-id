@@ -7,7 +7,6 @@ methods are thread-safe and serialize their JSON-shaped view via :meth:`view`,
 
 from __future__ import annotations
 
-import csv
 import logging
 import random
 import shutil
@@ -15,10 +14,11 @@ import threading
 from dataclasses import dataclass
 from pathlib import Path
 
+from elephant_id.dataset import Dataset
+
 from . import filters, samples
 from .actions import Action, PriorityToggle, SavedRemoveSighting
 from .config import (
-    CSV_PATH,
     PAGE_SIZE_DEFAULT,
     PAGE_SIZE_MAX,
     SAMPLES_ROOT,
@@ -91,31 +91,32 @@ class ReviewerState:
 
     # ------------------------------------------------------------------ load
 
-    def load(self) -> None:
-        """Read the CSV index and reset the queue. Raises if the CSV is missing."""
-        if not CSV_PATH.exists():
-            raise FileNotFoundError(f"Missing {CSV_PATH}")
-
+    def load(self, dataset: Dataset) -> None:
+        """Pull sightings from ``dataset`` and reset the queue."""
         sighting_images: dict[SightingKey, list[str]] = {}
+        for sighting in dataset.iter_sightings():
+            key = SightingKey(
+                name=sighting.elephant_name,
+                date=sighting.sighting_date.isoformat(),
+            )
+            sighting_images[key] = [
+                str(photo.image_path).replace("\\", "/").lstrip("/")
+                for photo in sighting.photos
+            ]
+
+        # First non-empty seek_code per elephant, mirroring CSV row order.
         elephant_seek: dict[str, str] = {}
-        with CSV_PATH.open("r", newline="") as f:
-            reader = csv.DictReader(f)
-            required = {"image_path", "name", "date"}
-            missing = required - set(reader.fieldnames or [])
-            if missing:
-                raise ValueError(f"images.csv missing columns: {sorted(missing)}")
-            for row in reader:
-                name = (row.get("name") or "").strip()
-                date = (row.get("date") or "").strip()
-                image_path = (row.get("image_path") or "").strip().lstrip("/\\")
-                if not name or not date or not image_path:
+        df = dataset.metadata
+        if "seek_code" in df.columns:
+            for name, code in zip(df["name"], df["seek_code"]):
+                name = (name or "").strip() if isinstance(name, str) else name
+                if not name or name in elephant_seek:
                     continue
-                if name not in elephant_seek:
-                    seek = (row.get("seek_code") or "").strip()
-                    if seek:
-                        elephant_seek[name] = seek
-                key = SightingKey(name=name, date=date)
-                sighting_images.setdefault(key, []).append(image_path)
+                if not isinstance(code, str):
+                    continue
+                code = code.strip()
+                if code:
+                    elephant_seek[name] = code
 
         keys = list(sighting_images.keys())
         years = sorted(

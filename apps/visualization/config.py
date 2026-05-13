@@ -20,8 +20,6 @@ SAMPLES_SIGHTINGS_ROOT = SAMPLES_ROOT / "sightings"
 # incrementally by ``samples.sync_starred_for_basenames``.
 STARRED_SAMPLES_ROOT = SAMPLES_ROOT / "starred"
 
-THUMB_CACHE_ROOT = REPO_ROOT / "dataset" / ".thumb_cache"
-
 # Priority-starred files in ``samples/sightings/<folder>/`` use this prefix
 # (two asterisks + space).
 PRIORITY_STAR_PREFIX = "** "
