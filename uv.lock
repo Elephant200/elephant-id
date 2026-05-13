@@ -325,6 +325,7 @@ source = { editable = "." }
 dependencies = [
     { name = "numpy" },
     { name = "opencv-python" },
+    { name = "pandas" },
     { name = "pillow" },
     { name = "pycocotools" },
     { name = "tqdm" },
@@ -333,7 +334,7 @@ dependencies = [
 [package.optional-dependencies]
 local = [
     { name = "inference-sdk" },
-    { name = "pandas" },
+    { name = "python-dotenv" },
     { name = "roboflow" },
 ]
 visualization = [
@@ -352,9 +353,10 @@ requires-dist = [
     { name = "inference-sdk", marker = "extra == 'local'", specifier = ">=1.2.7" },
     { name = "numpy", specifier = ">=2.0.0" },
     { name = "opencv-python", specifier = ">=4.8.1.78" },
-    { name = "pandas", marker = "extra == 'local'", specifier = ">=3.0.2" },
+    { name = "pandas", specifier = ">=3.0.3" },
     { name = "pillow", specifier = ">=12.2.0" },
     { name = "pycocotools", specifier = ">=2.0.11" },
+    { name = "python-dotenv", marker = "extra == 'local'", specifier = ">=1.2.2" },
     { name = "roboflow", marker = "extra == 'local'", specifier = ">=1.3.8" },
     { name = "tqdm", specifier = ">=4.67.3" },
 ]
