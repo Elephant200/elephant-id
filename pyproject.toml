@@ -37,6 +37,9 @@ visualization = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
+[tool.ruff]
+exclude = ["legacy"]
+
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
 ignore = ["E501"]
