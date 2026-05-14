@@ -129,46 +129,32 @@ def matches(
     code = elephant_seek.get(key.name, "")
     parsed = seek_codes.parse(code)
 
-    if cfg.sex_active():
-        if not (
-            (cfg.sex_bull and parsed.sex == "B")
-            or (cfg.sex_cow and parsed.sex == "C")
-        ):
-            return False
+    if cfg.sex_active() and not (
+        (cfg.sex_bull and parsed.sex == "B")
+        or (cfg.sex_cow and parsed.sex == "C")
+    ):
+        return False
 
-    if cfg.tusk_active():
-        if not parsed.tusks_known:
-            return False
-        tl, tr = parsed.tusk_left, parsed.tusk_right
-        opts = (
-            (cfg.tusk_both and tl == "1" and tr == "1"),
-            (cfg.tusk_left_only and tl == "1" and tr == "0"),
-            (cfg.tusk_right_only and tl == "0" and tr == "1"),
-            (cfg.tusk_no_tusks and tl == "0" and tr == "0"),
-        )
-        if not any(opts):
-            return False
+    if cfg.tusk_active() and not (
+        (cfg.tusk_both and parsed.tusk_left == "1" and parsed.tusk_right == "1")
+        or (cfg.tusk_left_only and parsed.tusk_left == "1" and parsed.tusk_right == "0")
+        or (cfg.tusk_right_only and parsed.tusk_left == "0" and parsed.tusk_right == "1")
+        or (cfg.tusk_no_tusks and parsed.tusk_left == "0" and parsed.tusk_right == "0")
+    ):
+        return False
 
-    if cfg.extreme_active():
-        if not parsed.has_xs:
-            return False
-        opts = (
-            (cfg.extreme_left and parsed.extreme_left == 1),
-            (cfg.extreme_right and parsed.extreme_right == 1),
-        )
-        if not any(opts):
-            return False
+    if cfg.extreme_active() and not (
+        (cfg.extreme_left and parsed.extreme_left == 1)
+        or (cfg.extreme_right and parsed.extreme_right == 1)
+    ):
+        return False
 
-    if cfg.special_active():
-        if not parsed.has_xs:
-            return False
-        opts = (
-            (cfg.special_left_ear and parsed.special_left == 1),
-            (cfg.special_right_ear and parsed.special_mid == 1),
-            (cfg.special_body and parsed.special_right == 1),
-        )
-        if not any(opts):
-            return False
+    if cfg.special_active() and not (
+        (cfg.special_left_ear and parsed.special_left == 1)
+        or (cfg.special_right_ear and parsed.special_mid == 1)
+        or (cfg.special_body and parsed.special_right == 1)
+    ):
+        return False
 
     if cfg.non_normal_only and not seek_codes.explicit_non_normal(code):
         return False

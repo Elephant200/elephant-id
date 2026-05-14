@@ -52,10 +52,10 @@ def _center_to_corners(
     image_height: int,
 ) -> tuple[int, int, int, int]:
     """Convert center-format bbox to clipped corner coordinates."""
-    x1 = int(round(x - width / 2))
-    y1 = int(round(y - height / 2))
-    x2 = int(round(x + width / 2))
-    y2 = int(round(y + height / 2))
+    x1 = round(x - width / 2)
+    y1 = round(y - height / 2)
+    x2 = round(x + width / 2)
+    y2 = round(y + height / 2)
 
     x1 = max(0, min(image_width - 1, x1))
     y1 = max(0, min(image_height - 1, y1))
