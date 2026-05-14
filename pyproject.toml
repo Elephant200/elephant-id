@@ -41,8 +41,8 @@ testpaths = ["tests"]
 exclude = ["legacy"]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B"]
-ignore = ["E501"]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+ignore = ["E501", "SIM103"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["elephant_id"]
