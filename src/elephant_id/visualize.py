@@ -23,9 +23,9 @@ SAM3 prediction schema (per detection), as returned by ``Sam3Runner.run`` /
 
 from typing import Any
 
-import PIL.Image as Image
 import cv2
 import numpy as np
+import PIL.Image as Image
 from pycocotools import mask as coco_mask
 
 

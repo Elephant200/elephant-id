@@ -1,6 +1,8 @@
 from dataclasses import dataclass
-from .photo import Photo
 from datetime import date
+
+from .photo import Photo
+
 
 @dataclass(frozen=True, slots=True)
 class Sighting:

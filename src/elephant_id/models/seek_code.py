@@ -1,8 +1,8 @@
 """Parsing and formatting of SEEK ear codes for elephant identification."""
 
+import re
 from dataclasses import dataclass
 from typing import Literal
-import re
 
 Gender = Literal["B", "C"]
 RightEarSector = Literal[0, 7, 8, 9]
