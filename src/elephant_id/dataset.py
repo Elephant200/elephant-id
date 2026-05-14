@@ -1,7 +1,8 @@
 from collections import OrderedDict
+from collections.abc import Iterator
 from datetime import date
 from pathlib import Path
-from typing import Iterator, Literal
+from typing import Literal
 
 import pandas as pd
 from PIL import Image, ImageOps

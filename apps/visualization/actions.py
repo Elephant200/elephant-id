@@ -8,7 +8,7 @@ initiated mutation. Action objects are immutable; the dispatcher in
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Union
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from .state import SightingKey
@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 class PriorityToggle:
     """A priority star was toggled on a single image within a sighting folder."""
 
-    key: "SightingKey"
+    key: SightingKey
     queue_index: int
     folder_rel: str
     created_folder: bool
@@ -41,4 +41,4 @@ class SavedRemoveSighting:
     affected_priority_basenames: tuple[str, ...]
 
 
-Action = Union[PriorityToggle, SavedRemoveSighting]
+Action = PriorityToggle | SavedRemoveSighting

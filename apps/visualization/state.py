@@ -108,7 +108,7 @@ class ReviewerState:
         elephant_seek: dict[str, str] = {}
         df = dataset.metadata
         if "seek_code" in df.columns:
-            for name, code in zip(df["name"], df["seek_code"]):
+            for name, code in zip(df["name"], df["seek_code"], strict=True):
                 name = (name or "").strip() if isinstance(name, str) else name
                 if not name or name in elephant_seek:
                     continue

@@ -3,8 +3,8 @@ General-purpose cache manager for AI models.
 """
 
 import json
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 from elephant_id.constants import DEFAULT_CACHE_ROOT
 
@@ -45,7 +45,7 @@ class CacheManager:
         """
         Load the results for the given key
         """
-        with open(self.path_for(key), "r") as f:
+        with open(self.path_for(key)) as f:
             return json.load(f)
     
     def save(self, key: str, value: dict) -> None:
