@@ -19,7 +19,7 @@ from elephant_id.constants import (
     SAM3_QUERY_PRESETS,
 )
 from elephant_id.dataset import Dataset
-from elephant_id.models import Photo
+from elephant_id.domain import Photo
 
 
 def _resolve_preset(preset: str) -> tuple[str, ...]:
