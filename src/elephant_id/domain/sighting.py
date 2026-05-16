@@ -11,7 +11,7 @@ class Sighting:
     """
     elephant_name: str
     sighting_date: date
-    sighting_id: str
+    sighting_id: str # Unique sighting identifier; consists of elephant name and sighting date separated by underscore.
     photos: tuple[Photo, ...]
 
     def __post_init__(self) -> None:
