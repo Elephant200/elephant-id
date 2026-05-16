@@ -15,5 +15,5 @@ class SeekCoder:
         self.age_model = ... # Should this be an argument or should it be initialized here?
 
     def code(self, sighting: Sighting) -> SeekCode:
-        # Compute data for the sighting. Where should this be done? In ai/ or coding/ ?
+        # Compute all localization data for the sighting. Where should this be done? In ai/ or coding/ ?
         pass
