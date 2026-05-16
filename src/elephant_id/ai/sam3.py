@@ -123,7 +123,10 @@ class Sam3Service:
         )
 
         self.dataset: Dataset = dataset
-        self.cache_manager = CacheManager("sam3", cache_root=cache_root)
+        self.cache_managers: dict[str, CacheManager] = {
+            preset: CacheManager(f"sam3/{preset}", cache_root=cache_root)
+            for preset in SAM3_QUERY_PRESETS
+        }
 
     def run(self, photo: Photo, query_preset: str) -> dict:
         """
@@ -140,13 +143,12 @@ class Sam3Service:
 
         key = (
             f"{photo.identifier}__"
-            f"queries-{query_preset}__"
             f"conf-{self.runner.confidence_threshold:.2f}__"
             f"nms-{self.runner.nms}__"
             f"iou-{self.runner.nms_iou_threshold:.2f}"
         )
 
-        return self.cache_manager.get_or_compute(
+        return self.cache_managers[query_preset].get_or_compute(
             key=key,
             compute_fn=lambda: self.runner.run(
                 image=self.dataset.read_image(photo), query_preset=query_preset
