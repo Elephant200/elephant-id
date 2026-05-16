@@ -107,19 +107,14 @@ class Sam3Service:
         api_key: str,
         dataset: Dataset,
         cache_root: Path = Path(DEFAULT_CACHE_ROOT),
-        workspace_name: str = ROBOFLOW_WORKSPACE,
-        workflow_id: str = ROBOFLOW_SAM3_WORKFLOW_ID,
-        confidence_threshold: float = DEFAULT_SAM3_CONFIDENCE_THRESHOLD,
-        nms: bool = DEFAULT_SAM3_NMS,
-        nms_iou_threshold: float = DEFAULT_SAM3_NMS_IOU_THRESHOLD,
     ) -> None:
         self.runner = Sam3Runner(
             api_key=api_key,
-            workspace_name=workspace_name,
-            workflow_id=workflow_id,
-            confidence_threshold=confidence_threshold,
-            nms=nms,
-            nms_iou_threshold=nms_iou_threshold,
+            workspace_name=ROBOFLOW_WORKSPACE,
+            workflow_id=ROBOFLOW_SAM3_WORKFLOW_ID,
+            confidence_threshold=DEFAULT_SAM3_CONFIDENCE_THRESHOLD,
+            nms=DEFAULT_SAM3_NMS,
+            nms_iou_threshold=DEFAULT_SAM3_NMS_IOU_THRESHOLD,
         )
 
         self.dataset: Dataset = dataset
