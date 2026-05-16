@@ -77,7 +77,7 @@ class Sam3Runner:
             workflow_id=self.workflow_id,
             images={"image": image},
             parameters={
-                "queries": ", ".join(queries),
+                "queries": ",".join(queries),
                 "confidence_threshold": self.confidence_threshold,
                 "nms": self.nms,
                 "nms_iou_threshold": self.nms_iou_threshold,
