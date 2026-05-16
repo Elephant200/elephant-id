@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from elephant_id.models import Photo
+from elephant_id.domain import Photo
 
 
 def _valid_photo(**overrides) -> Photo:

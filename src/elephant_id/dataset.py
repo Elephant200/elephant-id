@@ -7,7 +7,7 @@ from typing import Literal
 import pandas as pd
 from PIL import Image, ImageOps
 
-from elephant_id.models import Photo, SeekCode, Sighting
+from elephant_id.domain import Photo, SeekCode, Sighting
 
 
 class Dataset:

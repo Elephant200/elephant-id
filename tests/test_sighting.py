@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from elephant_id.models import Photo, Sighting
+from elephant_id.domain import Photo, Sighting
 
 
 def _photo(name="Devin", d="2015-11-05", seq=1, subdir="sightings") -> Photo:

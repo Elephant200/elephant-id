@@ -1,6 +1,6 @@
 import pytest
 
-from elephant_id.models import SeekCode
+from elephant_id.domain import SeekCode
 
 
 def test_seek_code_from_str_all_zero():

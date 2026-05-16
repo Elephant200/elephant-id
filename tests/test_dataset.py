@@ -6,7 +6,7 @@ import pytest
 from PIL import Image
 
 from elephant_id.dataset import Dataset
-from elephant_id.models import Photo, SeekCode, Sighting
+from elephant_id.domain import Photo, SeekCode, Sighting
 
 # Real subset of dataset/elephants-alive/images.csv: two elephants, three
 # sightings. Order matters for iter_sightings (preserves CSV row order).
