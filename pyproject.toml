@@ -14,7 +14,7 @@ dependencies = [
 ]
 
 [project.scripts]
-elephant-viz = "apps.visualization.__main__:main"
+visualize-data = "apps.visualization.__main__:main"
 
 [build-system]
 requires = ["hatchling"]
