@@ -13,7 +13,7 @@ class Sighting:
     sighting_date: date
     sighting_id: str
     photos: tuple[Photo, ...]
-    
+
     def __post_init__(self) -> None:
         if not self.elephant_name:
             raise ValueError(f"Elephant name is empty: {self.elephant_name}")
@@ -25,7 +25,7 @@ class Sighting:
             raise ValueError(f"Sighting id does not match elephant name and sighting date: {self.sighting_id} != {self.elephant_name}_{self.sighting_date.strftime('%Y-%m-%d')}")
         if not self.photos:
             raise ValueError(f"At least one photo is required: {self.photos}")
-        
+
         identifiers = set()
         for photo in self.photos:
             if photo.identifier in identifiers:
@@ -35,7 +35,7 @@ class Sighting:
                 raise ValueError(f"Photo {photo.identifier} has sighting_id {photo.sighting_id}, expected {self.sighting_id}")
             if photo.elephant_name != self.elephant_name:
                 raise ValueError(f"Photo {photo.identifier} has elephant name {photo.elephant_name}, expected {self.elephant_name}")
-        
+
     def __len__(self) -> int:
         return len(self.photos)
 

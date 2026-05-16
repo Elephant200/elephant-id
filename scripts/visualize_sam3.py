@@ -11,7 +11,7 @@ from elephant_id.visualize import visualize_predictions
 
 if __name__ == "__main__":
     load_dotenv()
-    
+
     dataset = Dataset(
         dataset_root=Path("dataset/elephants-alive/coded"),
         metadata_path=Path("dataset/elephants-alive/images.csv"),
@@ -23,7 +23,7 @@ if __name__ == "__main__":
         api_key=os.getenv("ROBOFLOW_API_KEY"),
         dataset=dataset,
     )
-    
+
     print(sighting)
     sample_photo = sighting.photos[0]
     print(sample_photo)

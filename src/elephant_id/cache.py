@@ -14,7 +14,7 @@ class CacheManager:
     Class for caching results of AI models as json
     """
     def __init__(
-        self, 
+        self,
         namespace: str,
         cache_root: Path = Path(DEFAULT_CACHE_ROOT),
     ) -> None:
@@ -47,20 +47,20 @@ class CacheManager:
         """
         with open(self.path_for(key)) as f:
             return json.load(f)
-    
+
     def save(self, key: str, value: dict) -> None:
         """
         Save the results for the given key
         """
         with open(self.path_for(key), "w") as f:
             json.dump(value, f)
-    
+
     def delete(self, key: str) -> None:
         """
         Delete the results for the given key
         """
         self.path_for(key).unlink()
-    
+
     def get_or_compute(self, key: str, compute_fn: Callable[[], dict]) -> dict:
         """
         Get the results for the given key, computing them if they are not cached.
