@@ -24,10 +24,11 @@ class FeatureComputeService:
 
         # Label each ear as left or right. If invalid, flag for manual review.
 
+        # Convert mask to contour and cut using anchor points
+
         # Run gender model on body with background removed
 
         # Run age model on body with background removed
-
 
         # Return dict should include confidence scores and make clear when results are invalid or uncertain
         return {}
