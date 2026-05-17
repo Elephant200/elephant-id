@@ -9,6 +9,10 @@ from elephant_id.domain import Photo
 
 
 class AnchorRunner:
+    """
+    Runner for the anchor keypoint detection YOLO26 model. Uses ultralytics.
+    """
+
     def __init__(self) -> None:
         # Initialize roboflow client and configure for inference
         ...
@@ -18,6 +22,10 @@ class AnchorRunner:
         ...
 
 class AnchorService:
+    """
+    Service for running the anchor keypoint detection YOLO26 model and caching the results.
+    """
+
     def __init__(
         self,
         dataset: Dataset,

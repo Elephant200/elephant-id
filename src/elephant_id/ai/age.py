@@ -10,6 +10,10 @@ from elephant_id.domain import Photo
 
 
 class AgeRunner:
+    """
+    Runner for the age regression CNN. Uses pytorch.
+    """
+
     def __init__(self) -> None:
         # Initialize pytorch model and configure for inference
         ...
@@ -19,6 +23,10 @@ class AgeRunner:
         ...
 
 class AgeService:
+    """
+    Service for running the age regression CNN and caching the results.
+    """
+
     def __init__(
         self,
         dataset: Dataset,

@@ -36,7 +36,7 @@ def _resolve_preset(preset: str) -> tuple[str, ...]:
 
 class Sam3Runner:
     """
-    Class for running the SAM3 workflow using Roboflow Inference SDK.
+    Runner for the Facebook SAM3 segmentation model. Uses the Roboflow Inference SDK.
     """
 
     def __init__(
@@ -99,7 +99,7 @@ class Sam3Runner:
 
 class Sam3Service:
     """
-    Service for running the SAM3 workflow and caching the results.
+    Service for running the Facebook SAM3 segmentation model and caching the results.
     """
 
     def __init__(

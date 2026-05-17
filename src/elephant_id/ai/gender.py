@@ -10,6 +10,10 @@ from elephant_id.domain import Photo
 
 
 class GenderRunner:
+    """
+    Runner for the gender classification CNN. Uses pytorch.
+    """
+
     def __init__(self) -> None:
         # Initialize pytorch model and configure for inference
         ...
@@ -19,6 +23,10 @@ class GenderRunner:
         ...
 
 class GenderService:
+    """
+    Service for running the gender classification CNN and caching the results.
+    """
+
     def __init__(
         self,
         dataset: Dataset,
