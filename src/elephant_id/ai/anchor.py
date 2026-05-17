@@ -1,11 +1,13 @@
-import numpy as np
 from pathlib import Path
+
+import numpy as np
 from PIL import Image
 
 from elephant_id.cache import CacheManager
 from elephant_id.constants import DEFAULT_CACHE_ROOT
 from elephant_id.dataset import Dataset
 from elephant_id.domain import Photo
+
 
 class AnchorRunner:
     def __init__(self) -> None:
@@ -18,7 +20,7 @@ class AnchorRunner:
 
 class AnchorService:
     def __init__(
-        self, 
+        self,
         dataset: Dataset,
         cache_root: Path = Path(DEFAULT_CACHE_ROOT)
     ) -> None:
