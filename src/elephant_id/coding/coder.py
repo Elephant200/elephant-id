@@ -16,4 +16,5 @@ class SeekCoder:
         all_features = []
         for photo in sighting.photos:
             all_features.append(self.feature_compute_service.compute(photo))
-        # Use features to generate view and SEEK codes
+
+        # Use features to generate SEEK codes
