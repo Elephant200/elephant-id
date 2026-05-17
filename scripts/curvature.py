@@ -11,7 +11,7 @@ from elephant_id.ai.sam3 import Sam3Service
 from elephant_id.dataset import Dataset
 from elephant_id.visualize import decode_rle_mask, visualize_predictions
 
-PHOTO_ID = "Adam_2021-11-18_05"
+PHOTO_ID = "Adam_2011-03-31_03"
 ANCHOR_PRESETS = {
     "Adam_2011-03-31_03": {
         "start": (917, 258),
@@ -36,6 +36,8 @@ MATPLOTLIB_COLORS = (
     (44, 160, 44),
     (214, 39, 40),
     (148, 103, 189),
+    (128, 128, 128),
+    (211, 211, 211),
 )
 
 
@@ -200,7 +202,7 @@ def draw_radius_scale(
     x = image.width - max_radius - 64
     y = image.height - max_radius - 24
 
-    for radius, color in zip(radii, colors, strict=True):
+    for radius, color in zip(radii, colors, strict=False):
         radius_int = round(radius)
         cv2.circle(
             output,
@@ -325,9 +327,21 @@ def oriented_curvature(contour: np.ndarray, radii: np.ndarray) -> np.ndarray:
 
 def plot_integral_curvature(
     curvature: np.ndarray,
+    mean_curvature: np.ndarray,
     radii: np.ndarray,
     marker_step: int,
 ) -> None:
+    """Plot multi-scale curvature and several Gaussian-weighted means on one axes.
+
+    Args:
+        curvature: Per-radius curvature values, shape ``(len(radii), num_points)``.
+        mean_curvature: Mean curvature values, shape ``(num_points)``.
+        radii: Physical radius per scale (for legend only).
+        marker_step: Subsample markers along the contour index.
+
+    Returns:
+        None.
+    """
     plt.figure(figsize=(19.2, 4.8))
     marker_indices = np.arange(0, curvature.shape[1], marker_step)
     for i, radius in enumerate(radii):
@@ -338,17 +352,79 @@ def plot_integral_curvature(
             markevery=marker_indices,
             markersize=3,
             label=f"r={radius:g}",
+            zorder=2,
         )
 
-    plt.axhline(0.5, color="0.65", linewidth=1, alpha=0.75)
+    plt.plot(
+        mean_curvature,
+        color="black",
+        marker="o",
+        markevery=marker_indices,
+        markersize=3,
+        label="Mean",
+    )
+
+    plt.axhline(0.5, color="0.65", linewidth=1, alpha=0.75, zorder=1)
     plt.title("Elephant ear")
     plt.xlabel("Contour point")
     plt.ylabel("Curvature")
-    ymin = min(0.2, float(curvature.min()))
-    ymax = max(0.8, float(curvature.max()))
+    ymin = 0.1
+    ymax = 0.7
     plt.ylim(ymin, ymax)
     plt.xticks(marker_indices, rotation=90)
     plt.grid(axis="x", alpha=0.25)
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_weighted_mean_curvature_configs(
+    curvature: np.ndarray,
+    scales: np.ndarray,
+    weight_configs: list[tuple[float, float]],
+    marker_step: int,
+) -> None:
+    """Plot Gaussian-weighted mean curvature for several ``(mean, std)`` pairs.
+
+    Args:
+        curvature: Per-radius curvature values, shape ``(len(scales), num_points)``.
+        scales: Normalized scale values matching ``curvature`` rows (same as ``SCALES``).
+        weight_configs: ``(weight_mean_scale, weight_std_dev)`` pairs for the Gaussian weights.
+        marker_step: Subsample markers along the contour index.
+
+    Returns:
+        None.
+    """
+    plt.figure(figsize=(19.2, 4.8))
+    marker_indices = np.arange(0, curvature.shape[1], marker_step)
+    ax = plt.gca()
+
+    for idx, (mean_scale, std_dev) in enumerate(weight_configs):
+        if std_dev <= 0:
+            raise ValueError("weight std dev must be positive")
+        weights = np.exp(-0.5 * ((scales - mean_scale) / std_dev) ** 2)
+        mean_curve = np.average(curvature, axis=0, weights=weights)
+        color = np.array(MATPLOTLIB_COLORS[idx % len(MATPLOTLIB_COLORS)]) / 255
+        plt.plot(
+            mean_curve,
+            color=color,
+            marker="o",
+            markevery=marker_indices,
+            markersize=3,
+            label=f"mean={mean_scale:g}, std={std_dev:g}",
+            zorder=2,
+        )
+
+    plt.axhline(0.5, color="0.65", linewidth=1, alpha=0.75, zorder=1)
+    plt.title("Weighted mean curvature (Gaussian scale weights)")
+    plt.xlabel("Contour point")
+    plt.ylabel("Curvature")
+    ymin = 0.1
+    ymax = 0.7
+    plt.ylim(ymin, ymax)
+    plt.yticks(np.arange(ymin, ymax + 0.025, 0.025))
+    plt.xticks(marker_indices, rotation=90)
+    plt.grid(axis="both", alpha=0.25)
     plt.legend()
     plt.tight_layout()
     plt.show()
@@ -400,5 +476,25 @@ if __name__ == "__main__":
     )
     contour_image = draw_radius_scale(contour_image, radii, SCALES, MATPLOTLIB_COLORS)
     contour_image.show()
-    plot_integral_curvature(curvature, radii, marker_step=MARKER_STEP)
+
+    weights = [
+        (0.06, 0.02),
+        (0.06, 0.04),
+        (0.07, 0.04),
+        (0.08, 0.04),
+    ]
+    #weights = np.exp(-0.5 * ((SCALES - we) / WEIGHT_STD_DEV) ** 2)
+    #mean_curvature = np.average(curvature, axis=0, weights=weights)
+    plot_weighted_mean_curvature_configs(
+        curvature,
+        SCALES,
+        weights,
+        marker_step=MARKER_STEP,
+    )
+    # plot_integral_curvature(
+    #     curvature,
+    #     mean_curvature,
+    #     radii,
+    #     marker_step=MARKER_STEP,
+    # )
     print(curvature.shape)
