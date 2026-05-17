@@ -188,7 +188,7 @@ class Dataset:
 
         Args:
             photo: The photo to load.
-            crop: The crop to apply to the image, in xywh coordinates. Defaults to None.
+            crop: The crop to apply to the image, in xyxy (top left, bottom right) coordinates. Defaults to None.
 
         Returns:
             A fresh RGB copy of the image
