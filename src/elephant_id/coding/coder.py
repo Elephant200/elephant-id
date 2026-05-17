@@ -13,6 +13,7 @@ class SeekCoder:
         self.feature_compute_service = FeatureComputeService(dataset)
 
     def code(self, sighting: Sighting) -> SeekCode:
+        all_features = []
         for photo in sighting.photos:
-            features = self.feature_compute_service.compute(photo)
+            all_features.append(self.feature_compute_service.compute(photo))
         # Use features to generate view and SEEK codes
