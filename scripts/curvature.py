@@ -30,6 +30,8 @@ ANCHOR_PRESETS = {
 CURVATURE_POINTS = 1024
 MARKER_STEP = 32
 SCALES = np.array([0.02, 0.04, 0.06, 0.08, 0.10], dtype=np.float32)
+WEIGHT_MEAN_SCALE = 0.06
+WEIGHT_STD_DEV = 0.04
 MATPLOTLIB_COLORS = (
     (31, 119, 180),
     (255, 127, 14),
@@ -331,7 +333,7 @@ def plot_integral_curvature(
     radii: np.ndarray,
     marker_step: int,
 ) -> None:
-    """Plot multi-scale curvature and several Gaussian-weighted means on one axes.
+    """Plot multi-scale curvature and the Gaussian-weighted mean on one axes.
 
     Args:
         curvature: Per-radius curvature values, shape ``(len(radii), num_points)``.
@@ -373,58 +375,6 @@ def plot_integral_curvature(
     plt.ylim(ymin, ymax)
     plt.xticks(marker_indices, rotation=90)
     plt.grid(axis="x", alpha=0.25)
-    plt.legend()
-    plt.tight_layout()
-    plt.show()
-
-
-def plot_weighted_mean_curvature_configs(
-    curvature: np.ndarray,
-    scales: np.ndarray,
-    weight_configs: list[tuple[float, float]],
-    marker_step: int,
-) -> None:
-    """Plot Gaussian-weighted mean curvature for several ``(mean, std)`` pairs.
-
-    Args:
-        curvature: Per-radius curvature values, shape ``(len(scales), num_points)``.
-        scales: Normalized scale values matching ``curvature`` rows (same as ``SCALES``).
-        weight_configs: ``(weight_mean_scale, weight_std_dev)`` pairs for the Gaussian weights.
-        marker_step: Subsample markers along the contour index.
-
-    Returns:
-        None.
-    """
-    plt.figure(figsize=(19.2, 4.8))
-    marker_indices = np.arange(0, curvature.shape[1], marker_step)
-    ax = plt.gca()
-
-    for idx, (mean_scale, std_dev) in enumerate(weight_configs):
-        if std_dev <= 0:
-            raise ValueError("weight std dev must be positive")
-        weights = np.exp(-0.5 * ((scales - mean_scale) / std_dev) ** 2)
-        mean_curve = np.average(curvature, axis=0, weights=weights)
-        color = np.array(MATPLOTLIB_COLORS[idx % len(MATPLOTLIB_COLORS)]) / 255
-        plt.plot(
-            mean_curve,
-            color=color,
-            marker="o",
-            markevery=marker_indices,
-            markersize=3,
-            label=f"mean={mean_scale:g}, std={std_dev:g}",
-            zorder=2,
-        )
-
-    plt.axhline(0.5, color="0.65", linewidth=1, alpha=0.75, zorder=1)
-    plt.title("Weighted mean curvature (Gaussian scale weights)")
-    plt.xlabel("Contour point")
-    plt.ylabel("Curvature")
-    ymin = 0.1
-    ymax = 0.7
-    plt.ylim(ymin, ymax)
-    plt.yticks(np.arange(ymin, ymax + 0.025, 0.025))
-    plt.xticks(marker_indices, rotation=90)
-    plt.grid(axis="both", alpha=0.25)
     plt.legend()
     plt.tight_layout()
     plt.show()
@@ -477,24 +427,12 @@ if __name__ == "__main__":
     contour_image = draw_radius_scale(contour_image, radii, SCALES, MATPLOTLIB_COLORS)
     contour_image.show()
 
-    weights = [
-        (0.06, 0.02),
-        (0.06, 0.04),
-        (0.07, 0.04),
-        (0.08, 0.04),
-    ]
-    #weights = np.exp(-0.5 * ((SCALES - we) / WEIGHT_STD_DEV) ** 2)
-    #mean_curvature = np.average(curvature, axis=0, weights=weights)
-    plot_weighted_mean_curvature_configs(
+    weights = np.exp(-0.5 * ((SCALES - WEIGHT_MEAN_SCALE) / WEIGHT_STD_DEV) ** 2)
+    mean_curvature = np.average(curvature, axis=0, weights=weights)
+    plot_integral_curvature(
         curvature,
-        SCALES,
-        weights,
+        mean_curvature,
+        radii,
         marker_step=MARKER_STEP,
     )
-    # plot_integral_curvature(
-    #     curvature,
-    #     mean_curvature,
-    #     radii,
-    #     marker_step=MARKER_STEP,
-    # )
     print(curvature.shape)
