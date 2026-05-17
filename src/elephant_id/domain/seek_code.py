@@ -40,17 +40,17 @@ class SeekCode:
     A SEEK code is a fixed-width string that encodes coarse, human-observable
     features of an elephant. The grammar accepted by :meth:`from_str` is::
 
-        G AA T<r><l> E<rt1><rh1><rt2><rh2>-<lt1><lh1><lt2><lh2> X<r><l> S<r><l><b>
+        <g> <aa> T<r><l> E<rt1><rh1><rt2><rh2>-<lt1><lh1><lt2><lh2> X<r><l> S<r><l><b>
 
     where each component is:
 
-    * ``G``        — gender: ``B`` (bull), ``C`` (cow), or ``_`` (unknown).
-    * ``AA``       — birth-year (last two digits), or ``__`` if unknown.
+    * ``<g>``        — gender: ``B`` (bull), ``C`` (cow), or ``_`` (unknown).
+    * ``<aa>``       — birth-year (last two digits), or ``__`` if unknown.
     * ``T<r><l>``  — right/left tusk presence: ``0``, ``1``, or ``_``.
-    * ``E…``       — four right-ear sectors: largest tear, largest hole,
+    * ``E<rt1><rh1><rt2><rh2>-<lt1><lh1><lt2><lh2>``       — four right-ear sectors: largest tear, largest hole,
                      second-largest tear, second-largest hole. Each is one of
                      ``0/7/8/9`` (right-ear sector ids) or ``_``.
-    * ``-…``       — four left-ear sectors with the same meaning, using the
+    * ``-<lt1><lh1><lt2><lh2>``       — four left-ear sectors with the same meaning, using the
                      left-ear sector ids ``0/3/4/5`` or ``_``.
     * ``X<r><l>``  — right/left "extreme feature" flags.
     * ``S<r><l><b>`` — special features on right ear / left ear / body.
