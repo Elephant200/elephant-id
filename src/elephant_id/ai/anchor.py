@@ -1,6 +1,5 @@
 from pathlib import Path
 
-import numpy as np
 from PIL import Image
 
 from elephant_id.cache import CacheManager
@@ -31,12 +30,14 @@ class AnchorService:
             cache_root=cache_root,
         )
 
-    def run(self, photo: Photo, body_mask: np.ndarray) -> dict:
+    def run(self, photo: Photo, crop: tuple[int, int, int, int]) -> dict:
         key = f"f{photo.identifier}"
 
-        return self.cache_manager.get_or_compute(
+        coords = self.cache_manager.get_or_compute(
             key=key,
             compute_fn=lambda: self.runner.run(
-                image=self.dataset.read_image(photo, mask=body_mask),
+                image=self.dataset.read_image(photo, crop=crop), # TODO: add crop logic to dataset
             ),
         )
+        # TODO: translate coords to absolute coordinates
+        return coords
