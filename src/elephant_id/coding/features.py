@@ -32,6 +32,7 @@ class FeatureComputeService:
         )
 
     def compute(self, photo: Photo) -> dict:
+        # TODO: compute view here
         sam3_body = self.sam3.run(photo, "body")
         sam3_features = self.sam3.run(photo, "features")
         body_mask = sam3_body["predictions"][0]["rle_mask"] # TODO: add decode logic to anchor model
