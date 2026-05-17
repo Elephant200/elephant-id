@@ -1,3 +1,7 @@
+"""
+Module that computes features for an elephant in a given photo by running the SAM3, Anchor, Gender, and Age models.
+"""
+
 import os
 
 from elephant_id.ai import AgeService, AnchorService, GenderService, Sam3Service
@@ -6,6 +10,11 @@ from elephant_id.domain import Photo
 
 
 class FeatureComputeService:
+    """
+    Service that computes features, such as the ear contours, gender, and age, for an
+    elephant in a given photo by running the SAM3, Anchor, Gender, and Age models.
+    """
+
     def __init__(self, dataset: Dataset) -> None:
         self.dataset = dataset
         self.sam3: Sam3Service = Sam3Service(
