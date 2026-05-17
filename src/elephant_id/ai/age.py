@@ -7,30 +7,30 @@ from elephant_id.constants import DEFAULT_CACHE_ROOT
 from elephant_id.dataset import Dataset
 from elephant_id.domain import Photo
 
-class AnchorRunner:
+class AgeRunner:
     def __init__(self) -> None:
-        # Initialize roboflow client and configure for inference
+        # Initialize pytorch model and configure for inference
         ...
 
     def run(self, image: Image.Image) -> dict:
         # Run model on image
         ...
 
-class AnchorService:
+class AgeService:
     def __init__(
         self, 
         dataset: Dataset,
         cache_root: Path = Path(DEFAULT_CACHE_ROOT)
     ) -> None:
-        self.runner = AnchorRunner()
+        self.runner = AgeRunner()
         self.dataset = dataset
         self.cache_manager = CacheManager(
-            namespace="anchor",
+            namespace="age",
             cache_root=cache_root,
         )
 
     def run(self, photo: Photo, body_mask: np.ndarray) -> dict:
-        key = f"f{photo.identifier}"
+        key = f"{photo.identifier}"
 
         return self.cache_manager.get_or_compute(
             key=key,
