@@ -5,10 +5,10 @@ SAM3 prediction schema (per detection), as returned by ``Sam3Runner.run`` /
 ``Sam3Service.run`` inside ``response["predictions"]`` (a flat list).
 
     {
-        "x": float,            # bbox center x in pixels
-        "y": float,            # bbox center y in pixels
-        "width": float,        # bbox width in pixels
-        "height": float,       # bbox height in pixels
+        "x1": float,           # bbox left edge in pixels
+        "y1": float,           # bbox top edge in pixels
+        "x2": float,           # bbox right edge in pixels
+        "y2": float,           # bbox bottom edge in pixels
         "confidence": float,
         "class_id": int,
         "class": str,          # may have leading whitespace (e.g. " ear")
@@ -43,31 +43,26 @@ def decode_rle_mask(rle_mask: dict[str, Any]) -> np.ndarray:
     return decoded.astype(bool)
 
 
-def _center_to_corners(
-    x: float,
-    y: float,
-    width: float,
-    height: float,
+def _standardize_xyxy(
+    x1: float,
+    y1: float,
+    x2: float,
+    y2: float,
     image_width: int,
     image_height: int,
 ) -> tuple[int, int, int, int]:
-    """Convert center-format bbox to clipped corner coordinates."""
-    x1 = round(x - width / 2)
-    y1 = round(y - height / 2)
-    x2 = round(x + width / 2)
-    y2 = round(y + height / 2)
+    """Clip corner-format bbox to image bounds."""
+    ix1 = max(0, min(image_width - 1, round(x1)))
+    iy1 = max(0, min(image_height - 1, round(y1)))
+    ix2 = max(0, min(image_width - 1, round(x2)))
+    iy2 = max(0, min(image_height - 1, round(y2)))
 
-    x1 = max(0, min(image_width - 1, x1))
-    y1 = max(0, min(image_height - 1, y1))
-    x2 = max(0, min(image_width - 1, x2))
-    y2 = max(0, min(image_height - 1, y2))
+    if ix2 <= ix1:
+        ix2 = min(image_width - 1, ix1 + 1)
+    if iy2 <= iy1:
+        iy2 = min(image_height - 1, iy1 + 1)
+    return ix1, iy1, ix2, iy2
 
-    # Keep a minimum 1px bbox for OpenCV drawing.
-    if x2 <= x1:
-        x2 = min(image_width - 1, x1 + 1)
-    if y2 <= y1:
-        y2 = min(image_height - 1, y1 + 1)
-    return x1, y1, x2, y2
 
 def apply_alpha_mask(
     image: Image.Image,
@@ -160,11 +155,11 @@ def visualize_predictions(
                 + mask_alpha * np.array(color, dtype=np.float32)
             ).astype(np.uint8)
 
-        x1, y1, x2, y2 = _center_to_corners(
-            prediction["x"],
-            prediction["y"],
-            prediction["width"],
-            prediction["height"],
+        x1, y1, x2, y2 = _standardize_xyxy(
+            prediction["x1"],
+            prediction["y1"],
+            prediction["x2"],
+            prediction["y2"],
             image_width,
             image_height,
         )
