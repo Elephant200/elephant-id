@@ -86,11 +86,21 @@ class AnchorService:
         """
         key = f"{photo.identifier}_({crop_xyxy[0]},{crop_xyxy[1]})" # QUESTION: Each image will be run twice, once per ear. Is this sufficiently unique?
 
-        coords = self.cache_manager.get_or_compute(
+        results = self.cache_manager.get_or_compute(
             key=key,
             compute_fn=lambda: self.runner.run(
                 image=self.dataset.read_image(photo, crop=crop_xyxy)
             ),
         )
-        # TODO: translate coords to absolute coordinates
-        return coords
+
+        # Translate coordinates to absolute coordinates
+        results["predictions"]["x1"] += crop_xyxy[0] # left x
+        results["predictions"]["y1"] += crop_xyxy[1] # top y
+        results["predictions"]["x2"] += crop_xyxy[0] # right x
+        results["predictions"]["y2"] += crop_xyxy[1] # bottom y
+        results["keypoints"][0][0] += crop_xyxy[0] # first x
+        results["keypoints"][0][1] += crop_xyxy[1] # first y
+        results["keypoints"][1][0] += crop_xyxy[0] # second x
+        results["keypoints"][1][1] += crop_xyxy[1] # second y
+
+        return results
