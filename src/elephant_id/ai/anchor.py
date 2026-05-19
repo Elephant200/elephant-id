@@ -46,8 +46,8 @@ class AnchorRunner:
         normalized["x2"] = predictions["box"]["x2"]
         normalized["y2"] = predictions["box"]["y2"]
         normalized["keypoints"] = [
-            (predictions["keypoints"]["x"][0], predictions["keypoints"]["y"][0]),
-            (predictions["keypoints"]["x"][1], predictions["keypoints"]["y"][1]),
+            [predictions["keypoints"]["x"][0], predictions["keypoints"]["y"][0]],
+            [predictions["keypoints"]["x"][1], predictions["keypoints"]["y"][1]],
         ]
 
         # Can add metadata here if needed
@@ -84,7 +84,10 @@ class AnchorService:
         Returns:
             A dictionary containing the anchor keypoint detection results.
         """
-        key = f"{photo.identifier}_({crop_xyxy[0]},{crop_xyxy[1]})" # QUESTION: Each image will be run twice, once per ear. Is this sufficiently unique?
+        key = (
+            f"{photo.identifier}__"
+            f"crop_{int(crop_xyxy[0])}_{int(crop_xyxy[1])}" # QUESTION: Each image will be run twice, once per ear. Is this sufficiently unique?
+        )
 
         results = self.cache_manager.get_or_compute(
             key=key,
@@ -98,9 +101,9 @@ class AnchorService:
         results["predictions"]["y1"] += crop_xyxy[1] # top y
         results["predictions"]["x2"] += crop_xyxy[0] # right x
         results["predictions"]["y2"] += crop_xyxy[1] # bottom y
-        results["keypoints"][0][0] += crop_xyxy[0] # first x
-        results["keypoints"][0][1] += crop_xyxy[1] # first y
-        results["keypoints"][1][0] += crop_xyxy[0] # second x
-        results["keypoints"][1][1] += crop_xyxy[1] # second y
+        results["predictions"]["keypoints"][0][0] += crop_xyxy[0] # first x
+        results["predictions"]["keypoints"][0][1] += crop_xyxy[1] # first y
+        results["predictions"]["keypoints"][1][0] += crop_xyxy[0] # second x
+        results["predictions"]["keypoints"][1][1] += crop_xyxy[1] # second y
 
         return results
