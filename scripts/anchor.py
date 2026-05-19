@@ -31,7 +31,7 @@ if __name__ == "__main__":
         if prediction["class"].strip() == "ear":
             ears.append(prediction)
     for ear in ears:
-        crop_xyxy = (ear["x"] - ear["width"] / 2, ear["y"] - ear["height"] / 2, ear["x"] + ear["width"] / 2, ear["y"] + ear["height"] / 2)
+        crop_xyxy = (ear["x1"], ear["y1"], ear["x2"], ear["y2"])
         print(crop_xyxy)
     anchor_predictions = anchor.run(test_photo, crop_xyxy)
     print(anchor_predictions)
