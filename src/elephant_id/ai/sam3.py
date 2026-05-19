@@ -7,6 +7,7 @@ from pathlib import Path
 from inference_sdk import InferenceHTTPClient
 from PIL import Image
 
+from elephant_id.ai.bbox import prediction_center_to_xyxy
 from elephant_id.cache import CacheManager
 from elephant_id.constants import (
     DEFAULT_CACHE_ROOT,
@@ -87,13 +88,19 @@ class Sam3Runner:
         if not response or not response[0] or not response[0].get("predictions"):
             raise ValueError(f"Unexpected response from SAM3: {response}")
 
-        # Normalize output
+        # Convert center-format bbox to corner coordinates
+        predictions = [
+            prediction_center_to_xyxy(prediction)
+            for prediction in response[0]["predictions"]["predictions"]
+        ]
+
+        # Normalize output to match expected schema
         return {
             "queries": list(queries),
             "confidence_threshold": self.confidence_threshold,
             "nms": self.nms,
             "nms_iou_threshold": self.nms_iou_threshold,
-            "predictions": response[0]["predictions"]["predictions"],
+            "predictions": predictions,
         }
 
 
