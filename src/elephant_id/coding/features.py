@@ -12,7 +12,8 @@ from elephant_id.domain import Photo
 class FeatureComputeService:
     """
     Service that computes features, such as the ear contours, gender, and age, for an
-    elephant in a given photo by running the SAM3, Anchor, Gender, and Age models.
+    elephant in a given photo by running the SAM3, Anchor, Gender, and Age models and
+    combining the results.
     """
 
     def __init__(self, dataset: Dataset) -> None:
@@ -34,21 +35,34 @@ class FeatureComputeService:
     def compute(self, photo: Photo) -> dict:
         # TODO: compute view here
         sam3_body = self.sam3.run(photo, "body")
+        body_rle_mask = sam3_body["predictions"][0]["rle_mask"] # TODO: add decode logic to age / gender models
+
+        # TODO: filter sam3 predictions to only include predictions on the body
+        for pred in sam3_body["predictions"]:
+            # compute overlap between pred and body_rle_mask; if more than 20% of the prediction is on the body, keep it
+            ... # TODO: implement this
+
+
         sam3_features = self.sam3.run(photo, "features")
-        body_mask = sam3_body["predictions"][0]["rle_mask"] # TODO: add decode logic to anchor model
-
-        anchor_predictions = []
+        trunks, ears, tusks, tails = [], [], [], []
         for pred in sam3_features["predictions"]:
-            if pred["class"] == "ear":
-                crop = (pred["x"], pred["y"], pred["width"], pred["height"])
-                anchor_predictions.append(self.anchor_model.run(photo, crop=crop))
+            if pred["class"] == "trunk":
+                trunks.append(pred)
+            elif pred["class"] == "ear":
+                ears.append(pred)
+            elif pred["class"] == "tusk":
+                tusks.append(pred)
+            elif pred["class"] == "tail":
+                tails.append(pred)
             else:
-                continue
-
-
-        # TODO: Filter sam3 predictions to only include predictions on the body
+                raise ValueError(f"Unknown class: {pred['class']}")
 
         # TODO: Filter sam3 predictions to only include actually visible ears
+
+        anchor_predictions = []
+        for ear in ears:
+            crop_xyxy = (ear["x1"], ear["y1"], ear["x2"], ear["y2"])
+            anchor_predictions.append(self.anchor_model.run(photo, crop_xyxy=crop_xyxy))
 
         # TODO: Run anchor model on each ear; remove bad results entirely
 
@@ -57,16 +71,67 @@ class FeatureComputeService:
         # TODO: Convert mask to contour and cut using anchor points
 
         # Run gender model on body with background removed
-        gender = self.gender_model.run(photo, body_mask=body_mask)
+        gender_results = self.gender_model.run(photo, body_rle_mask=body_rle_mask)
+        bull_prob = gender_results["predictions"]["bull"]
+        cow_prob = gender_results["predictions"]["cow"]
+        if bull_prob > 0.6:
+            gender_code = "B"
+            gender_conf = bull_prob
+        elif cow_prob > 0.6:
+            gender_code = "C"
+            gender_conf = cow_prob
+        else:
+            gender_code = "_"
+            gender_conf = 0.5
 
         # Run age model on body with background removed
-        age = self.age_model.run(photo, body_mask=body_mask)
+        age_results = self.age_model.run(photo, body_rle_mask=body_rle_mask)
+        age_confidence = age_results["predictions"]["confidence"]
+        age_code = age_results["predictions"]["age"]
+
         # Return dict should include confidence scores and make clear when results are invalid or uncertain
 
         return {
-            "sam3_body": sam3_body,
-            "sam3_features": sam3_features,
-            "anchor_predictions": anchor_predictions,
-            "gender": gender,
-            "age": age,
+            "left_ear": {
+                "x1": ...,
+                "y1": ...,
+                "x2": ...,
+                "y2": ...,
+                "rle_mask": ...,
+                "contour": ...,
+                "confidence": ...,
+            },
+            "right_ear": {
+                "x1": ...,
+                "y1": ...,
+                "x2": ...,
+                "y2": ...,
+                "rle_mask": ...,
+                "contour": ...,
+                "confidence": ...,
+            },
+            "left_tusk": {
+                "x1": ...,
+                "y1": ...,
+                "x2": ...,
+                "y2": ...,
+                "rle_mask": ...,
+                "confidence": ...,
+            },
+            "right_tusk": {
+                "x1": ...,
+                "y1": ...,
+                "x2": ...,
+                "y2": ...,
+                "rle_mask": ...,
+                "confidence": ...,
+            },
+            "gender": {
+                "confidence": gender_conf,
+                "gender": gender_code,
+            },
+            "age": {
+                "confidence": age_confidence,
+                "age": age_code,
+            },
         }
