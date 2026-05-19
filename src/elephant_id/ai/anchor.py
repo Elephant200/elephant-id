@@ -30,10 +30,29 @@ class AnchorRunner:
             A dictionary containing the anchor keypoint detection results.
         """
         results = self.model.predict(source=image, device="mps", conf=0.25)
+        for result in results:
+            print(result.to_json(decimals=1))
         # Only return first result
-        predictions = json.loads(results[0].to_json(decimals=1))
+        predictions = json.loads(results[0].to_json(decimals=1))[0]
+        print(predictions)
+
+        # Convert keypoints to list of points
+        normalized = {}
+        normalized["confidence"] = predictions["confidence"]
+        normalized["class_id"] = predictions["class"]
+        normalized["class"] = predictions["name"]
+        normalized["x1"] = predictions["box"]["x1"]
+        normalized["y1"] = predictions["box"]["y1"]
+        normalized["x2"] = predictions["box"]["x2"]
+        normalized["y2"] = predictions["box"]["y2"]
+        normalized["keypoints"] = [
+            (predictions["keypoints"]["x"][0], predictions["keypoints"]["y"][0]),
+            (predictions["keypoints"]["x"][1], predictions["keypoints"]["y"][1]),
+        ]
+
+        # Can add metadata here if needed
         return {
-            "predictions": predictions,
+            "predictions": normalized,
         }
 
 class AnchorService:
@@ -65,7 +84,7 @@ class AnchorService:
         Returns:
             A dictionary containing the anchor keypoint detection results.
         """
-        key = f"{photo.identifier}" # Intentionally omit crop; no need to rerun for different crops.
+        key = f"{photo.identifier}_({crop_xyxy[0]},{crop_xyxy[1]})" # QUESTION: Each image will be run twice, once per ear. Is this sufficiently unique?
 
         coords = self.cache_manager.get_or_compute(
             key=key,
