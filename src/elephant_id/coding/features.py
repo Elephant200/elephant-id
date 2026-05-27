@@ -90,8 +90,9 @@ class FeatureComputeService:
         age_code = age_results["predictions"]["age"]
 
         # Return dict should include confidence scores and make clear when results are invalid or uncertain
-
+        # It should also include all raw model outputs for traceability
         return {
+            "view": ...,
             "left_ear": {
                 "x1": ...,
                 "y1": ...,
