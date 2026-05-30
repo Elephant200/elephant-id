@@ -4,15 +4,18 @@ Module that computes features for an elephant in a given photo by running the SA
 
 import os
 
+from pycocotools import mask as coco_mask
+
 from elephant_id.ai import AgeService, AnchorService, GenderService, Sam3Service
+from elephant_id.constants import MIN_FEATURE_BODY_OVERLAP
 from elephant_id.dataset import Dataset
 from elephant_id.domain import Photo
 
 
 class PhotoAnalyzer:
     """
-    Service that computes features, such as the ear contours, gender, and age, for an
-    elephant in a given photo by running the SAM3, Anchor, Gender, and Age models and
+    Service that analyzes a photo to compute features, such as the ear masks, gender, and age,
+    for an elephant in the photo by running the SAM3, Anchor, Gender, and Age models and
     combining the results.
     """
 
@@ -32,20 +35,27 @@ class PhotoAnalyzer:
             dataset=dataset,
         )
 
-    def compute(self, photo: Photo) -> dict:
-        # TODO: compute view here
+    def analyze(self, photo: Photo) -> dict:
         sam3_body = self.sam3.run(photo, "body")
-        body_rle_mask = sam3_body["predictions"][0]["rle_mask"] # TODO: add decode logic to age / gender models
-
-        # TODO: filter sam3 predictions to only include predictions on the body
-        for pred in sam3_body["predictions"]:
-            # compute overlap between pred and body_rle_mask; if more than 20% of the prediction is on the body, keep it
-            ... # TODO: implement this
-
+        body_rle_mask = sam3_body["predictions"][0]["rle_mask"]
 
         sam3_features = self.sam3.run(photo, "features")
-        trunks, ears, tusks, tails = [], [], [], []
+
+        features_on_body = []
         for pred in sam3_features["predictions"]:
+            feature_rle = pred["rle_mask"]
+            feature_area = float(coco_mask.area([feature_rle])[0])
+            if feature_area == 0.0:
+                continue
+            intersection = coco_mask.merge(
+                [feature_rle, body_rle_mask], intersect=True
+            )
+            overlap = float(coco_mask.area([intersection])[0]) / feature_area
+            if overlap > MIN_FEATURE_BODY_OVERLAP:
+                features_on_body.append(pred)
+
+        trunks, ears, tusks, tails = [], [], [], []
+        for pred in features_on_body:
             if pred["class"] == "trunk":
                 trunks.append(pred)
             elif pred["class"] == "ear":
