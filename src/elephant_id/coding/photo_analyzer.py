@@ -35,6 +35,10 @@ class PhotoAnalyzer:
 
     def analyze(self, photo: Photo) -> dict:
         sam3_body = self.sam3.run(photo, "body")
+
+        if len(sam3_body["predictions"]) == 0:
+            return None # No elephant found in photo; reject image.
+
         body_rle_mask = sam3_body["predictions"][0]["rle_mask"]
 
         sam3_features = self.sam3.run(photo, "features")
