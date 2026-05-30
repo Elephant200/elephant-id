@@ -33,7 +33,7 @@ class CacheManager:
         """
         Return the path for the given key
         """
-        return (self.cache_dir / key).with_suffix(".json")
+        return self.cache_dir / f"{key}.json"
 
     def exists(self, key: str) -> bool:
         """
