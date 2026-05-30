@@ -8,6 +8,7 @@ from elephant_id.cache import CacheManager
 from elephant_id.constants import DEFAULT_CACHE_ROOT
 from elephant_id.dataset import Dataset
 from elephant_id.domain import Photo
+from elephant_id.image_utils import apply_crop
 
 
 class AnchorRunner:
@@ -93,7 +94,7 @@ class AnchorService:
         results = self.cache_manager.get_or_compute(
             key=key,
             compute_fn=lambda: self.runner.run(
-                image=self.dataset.read_image(photo, crop=crop_xyxy)
+                image=apply_crop(self.dataset.read_image(photo), crop_xyxy)
             ),
         )
 

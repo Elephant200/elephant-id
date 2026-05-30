@@ -26,42 +26,8 @@ from typing import Any
 import cv2
 import numpy as np
 import PIL.Image as Image
-from pycocotools import mask as coco_mask
 
-
-def decode_rle_mask(rle_mask: dict[str, Any]) -> np.ndarray:
-    """Decode a COCO-style RLE mask into a 2D boolean array."""
-    encoded = {
-        "size": rle_mask["size"],
-        "counts": rle_mask["counts"].encode("utf-8")
-        if isinstance(rle_mask["counts"], str)
-        else rle_mask["counts"],
-    }
-    decoded = coco_mask.decode(encoded)
-    if decoded.ndim == 3:
-        decoded = decoded[:, :, 0]
-    return decoded.astype(bool)
-
-
-def _standardize_xyxy(
-    x1: float,
-    y1: float,
-    x2: float,
-    y2: float,
-    image_width: int,
-    image_height: int,
-) -> tuple[int, int, int, int]:
-    """Clip corner-format bbox to image bounds."""
-    ix1 = max(0, min(image_width - 1, round(x1)))
-    iy1 = max(0, min(image_height - 1, round(y1)))
-    ix2 = max(0, min(image_width - 1, round(x2)))
-    iy2 = max(0, min(image_height - 1, round(y2)))
-
-    if ix2 <= ix1:
-        ix2 = min(image_width - 1, ix1 + 1)
-    if iy2 <= iy1:
-        iy2 = min(image_height - 1, iy1 + 1)
-    return ix1, iy1, ix2, iy2
+from elephant_id.image_utils import clip_xyxy, decode_rle_mask
 
 
 def apply_alpha_mask(
@@ -70,14 +36,11 @@ def apply_alpha_mask(
     color: tuple[int, int, int] = (255, 0, 0),
     alpha: float = 0.35,
 ) -> Image.Image:
-    """
-    Return a copy of image with a semi-transparent color overlay where mask is True.
-    """
+    """Return a copy of image with a semi-transparent overlay where mask is True."""
     if not 0 <= alpha <= 1:
         raise ValueError("alpha must be between 0 and 1")
 
     base = image.convert("RGBA")
-
     if mask.shape != (base.height, base.width):
         raise ValueError(
             f"mask shape {mask.shape} does not match image size "
@@ -85,10 +48,8 @@ def apply_alpha_mask(
         )
 
     overlay = Image.new("RGBA", base.size, (*color, 0))
-
     alpha_channel = np.zeros((base.height, base.width), dtype=np.uint8)
     alpha_channel[mask] = int(255 * alpha)
-
     overlay.putalpha(Image.fromarray(alpha_channel, mode="L"))
 
     return Image.alpha_composite(base, overlay).convert("RGB")
@@ -155,7 +116,7 @@ def visualize_predictions(
                 + mask_alpha * np.array(color, dtype=np.float32)
             ).astype(np.uint8)
 
-        x1, y1, x2, y2 = _standardize_xyxy(
+        x1, y1, x2, y2 = clip_xyxy(
             prediction["x1"],
             prediction["y1"],
             prediction["x2"],

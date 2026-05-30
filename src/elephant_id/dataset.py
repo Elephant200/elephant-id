@@ -182,18 +182,16 @@ class Dataset:
     def read_image(
         self,
         photo: Photo,
-        crop: tuple[int, int, int, int] | None = None,
     ) -> Image.Image:
         """Load a photo's image as RGB, using an LRU cache.
 
         Args:
             photo: The photo to load.
-            crop: The crop to apply to the image, in xyxy (top left, bottom right) coordinates. Defaults to None.
 
         Returns:
             A fresh RGB copy of the image
         """
-        key = f"{photo.identifier}_{crop}" if crop else photo.identifier
+        key = f"{photo.identifier}"
 
         if key in self._image_cache:
             image = self._image_cache.pop(key)
@@ -202,8 +200,6 @@ class Dataset:
 
         with Image.open(self.path_for(photo)) as image:
             image = ImageOps.exif_transpose(image).convert("RGB")
-            if crop:
-                image = image.crop(crop)
             loaded = image.copy()
 
         self._image_cache[key] = loaded

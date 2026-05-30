@@ -7,7 +7,6 @@ from pathlib import Path
 from inference_sdk import InferenceHTTPClient
 from PIL import Image
 
-from elephant_id.ai.bbox import prediction_center_to_xyxy
 from elephant_id.cache import CacheManager
 from elephant_id.constants import (
     DEFAULT_CACHE_ROOT,
@@ -21,6 +20,29 @@ from elephant_id.constants import (
 )
 from elephant_id.dataset import Dataset
 from elephant_id.domain import Photo
+from elephant_id.image_utils import center_to_xyxy
+
+
+def prediction_center_to_xyxy(prediction: dict) -> dict:
+    """
+    Return a copy of a SAM3 prediction with xyxy bbox keys instead of center keys.
+    """
+    x1, y1, x2, y2 = center_to_xyxy(
+        float(prediction["x"]),
+        float(prediction["y"]),
+        float(prediction["width"]),
+        float(prediction["height"]),
+    )
+    converted = {
+        key: value
+        for key, value in prediction.items()
+        if key not in {"x", "y", "width", "height"}
+    }
+    converted["x1"] = x1
+    converted["y1"] = y1
+    converted["x2"] = x2
+    converted["y2"] = y2
+    return converted
 
 
 def _resolve_preset(preset: str) -> tuple[str, ...]:
