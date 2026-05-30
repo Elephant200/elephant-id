@@ -9,7 +9,7 @@ from elephant_id.dataset import Dataset
 from elephant_id.domain import Photo
 
 
-class FeatureComputeService:
+class PhotoAnalyzer:
     """
     Service that computes features, such as the ear contours, gender, and age, for an
     elephant in a given photo by running the SAM3, Anchor, Gender, and Age models and
