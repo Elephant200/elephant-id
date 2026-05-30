@@ -12,7 +12,7 @@ from elephant_id.image_utils import apply_mask, decode_rle_mask
 
 class AgeRunner:
     """
-    Runner for the age regression CNN. Uses pytorch.
+    **Local-only** runner for the age regression CNN. Uses pytorch.
     """
 
     def __init__(self) -> None:

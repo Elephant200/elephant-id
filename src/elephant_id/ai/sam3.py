@@ -59,7 +59,7 @@ def _resolve_preset(preset: str) -> tuple[str, ...]:
 
 class Sam3Runner:
     """
-    Runner for the Facebook SAM3 segmentation model. Uses the Roboflow Inference SDK.
+    **Local-only** runner for the Facebook SAM3 segmentation model. Uses the Roboflow Inference SDK.
     """
 
     def __init__(

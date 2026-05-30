@@ -13,7 +13,7 @@ from elephant_id.image_utils import apply_crop
 
 class AnchorRunner:
     """
-    Runner for the anchor keypoint detection YOLO26 model. Uses ultralytics.
+    **Local-only** runner for the anchor keypoint detection YOLO26 model. Uses ultralytics.
     """
 
     def __init__(self) -> None:
