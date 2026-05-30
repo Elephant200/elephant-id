@@ -1,3 +1,5 @@
+import dataclasses
+
 import pytest
 
 from elephant_id.domain import SeekCode
@@ -53,6 +55,18 @@ def test_round_trip(code_str):
     assert SeekCode.from_str(str(parsed)) == parsed
 
 
+def test_single_digit_age_is_zero_padded_and_round_trips():
+    code = SeekCode.from_str("B05T00E0000-0000X00S000")
+    assert code.a == 5
+    assert str(code) == "B05T00E0000-0000X00S000"
+
+
+def test_seek_code_is_immutable():
+    code = SeekCode.from_str("B00T00E0000-0000X00S000")
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        code.g = "C"
+
+
 def test_equality_and_hash():
     a = SeekCode.from_str("B60T11E90__-43__X00S001")
     b = SeekCode.from_str("B60T11E90__-43__X00S001")
@@ -89,6 +103,8 @@ def test_invalid_codes_raise(bad):
     {"g": "Z"},                        # bad gender
     {"a": 100},                        # age out of range
     {"a": -1},                         # age out of range
+    {"tr": 2},                         # bad boolean flag
+    {"xl": "yes"},                     # bad boolean flag
     {"rt1": 3},                        # left sector on right ear
     {"lt1": 7},                        # right sector on left ear
 ])

@@ -1,7 +1,6 @@
 import numpy as np
 import pytest
 from PIL import Image
-from pycocotools import mask as coco_mask
 
 from elephant_id.image_utils import (
     apply_crop,
@@ -9,23 +8,17 @@ from elephant_id.image_utils import (
     center_to_xyxy,
     clip_xyxy,
     decode_rle_mask,
+    mask_bounds,
 )
 
 
-def _rle_from_mask(mask: np.ndarray) -> dict:
-    encoded = coco_mask.encode(np.asfortranarray(mask.astype(np.uint8)))
-    encoded["counts"] = encoded["counts"].decode("utf-8")
-    return encoded
-
-
-def test_center_to_xyxy_matches_cached_sam3_geometry():
-    # Derived from .cache/sam3/body/Adam_2011-03-31_02.
+def test_center_to_xyxy_converts_center_box_to_corners():
     assert center_to_xyxy(
-        x=1072.5,
-        y=1319.5,
-        width=315.0,
-        height=357.0,
-    ) == (915.0, 1141.0, 1230.0, 1498.0)
+        x=10,
+        y=20,
+        width=6,
+        height=8,
+    ) == (7.0, 16.0, 13.0, 24.0)
 
 
 def test_clip_xyxy_clips_to_image_bounds_and_preserves_area():
@@ -58,7 +51,7 @@ def test_apply_crop_uses_clipped_xyxy_box():
     assert cropped.size == (3, 2)
 
 
-def test_decode_rle_mask_returns_boolean_mask():
+def test_decode_rle_mask_returns_boolean_mask(rle_from_mask):
     mask = np.array(
         [
             [False, True, False],
@@ -66,10 +59,45 @@ def test_decode_rle_mask_returns_boolean_mask():
         ]
     )
 
-    decoded = decode_rle_mask(_rle_from_mask(mask))
+    decoded = decode_rle_mask(rle_from_mask(mask))
 
     assert decoded.dtype == bool
     assert decoded.tolist() == mask.tolist()
+
+
+def test_decode_rle_mask_collapses_single_mask_stack(monkeypatch):
+    stacked = np.array(
+        [
+            [[0], [1], [0]],
+            [[1], [0], [1]],
+        ],
+        dtype=np.uint8,
+    )
+
+    monkeypatch.setattr(
+        "elephant_id.image_utils.coco_mask.decode",
+        lambda _encoded: stacked,
+    )
+
+    decoded = decode_rle_mask({"size": [2, 3], "counts": b"unused"})
+
+    assert decoded.dtype == bool
+    assert decoded.tolist() == [
+        [False, True, False],
+        [True, False, True],
+    ]
+
+
+def test_mask_bounds_wrap_true_pixels():
+    mask = np.array(
+        [
+            [False, False, False, False],
+            [False, True, False, False],
+            [False, True, True, False],
+        ]
+    )
+
+    assert mask_bounds(mask) == (1, 1, 3, 3)
 
 
 def test_apply_mask_replaces_unmasked_pixels():

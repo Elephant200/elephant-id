@@ -1,49 +1,27 @@
 from datetime import date
-from pathlib import Path
 
 import pytest
 
-from elephant_id.domain import Photo, Sighting
+from elephant_id.domain import Sighting
 
 
-def _photo(name="Devin", d="2015-11-05", seq=1, subdir="sightings") -> Photo:
-    sid = f"{name}_{d}"
-    identifier = f"{sid}_{seq:02d}"
-    return Photo(
-        identifier=identifier,
-        image_path=Path(f"{subdir}/{identifier}.jpg"),
-        elephant_name=name,
-        sighting_id=sid,
-    )
-
-
-def _sighting(photos=None, **overrides) -> Sighting:
-    d = date(2015, 11, 5)
-    base = dict(
-        elephant_name="Devin",
-        sighting_date=d,
-        sighting_id="Devin_2015-11-05",
-        photos=photos if photos is not None else (_photo(),),
-    )
-    return Sighting(**(base | overrides))
-
-
-def test_sighting_one_photo_and_len():
-    s = _sighting()
+def test_sighting_one_photo_and_len(make_sighting):
+    s = make_sighting()
     assert len(s) == 1
     assert s.elephant_name == "Devin"
     assert s.sighting_date == date(2015, 11, 5)
     assert s.sighting_id == "Devin_2015-11-05"
+    assert str(s) == "Sighting(Devin_2015-11-05, photos=1)"
 
 
-def test_sighting_multiple_photos():
-    s = _sighting(photos=(_photo(seq=1), _photo(seq=2)))
+def test_sighting_multiple_photos(make_photo, make_sighting):
+    s = make_sighting(photos=(make_photo(sequence=1), make_photo(sequence=2)))
     assert len(s) == 2
 
 
-def test_sighting_id_must_match_name_and_date():
+def test_sighting_id_must_match_name_and_date(make_sighting):
     with pytest.raises(ValueError, match="does not match"):
-        _sighting(sighting_id="Wrong_2015-11-05")
+        make_sighting(sighting_id="Wrong_2015-11-05")
 
 
 @pytest.mark.parametrize(
@@ -53,23 +31,43 @@ def test_sighting_id_must_match_name_and_date():
         ("sighting_id", ""),
     ],
 )
-def test_empty_string_fields_raise(field, value):
+def test_sighting_rejects_empty_identity_fields(make_sighting, field, value):
     with pytest.raises(ValueError):
-        _sighting(**{field: value})
+        make_sighting(**{field: value})
 
 
-def test_requires_at_least_one_photo():
+def test_sighting_rejects_missing_date(make_photo):
+    with pytest.raises(ValueError, match="Sighting date"):
+        Sighting(
+            elephant_name="Devin",
+            sighting_date=None,
+            sighting_id="Devin_2015-11-05",
+            photos=(make_photo(),),
+        )
+
+
+def test_requires_at_least_one_photo(make_sighting):
     with pytest.raises(ValueError, match="At least one photo"):
-        _sighting(photos=())
+        make_sighting(photos=())
 
 
-def test_duplicate_photo_identifiers_raise():
-    p = _photo()
+def test_duplicate_photo_identifiers_raise(make_photo, make_sighting):
+    p = make_photo()
     with pytest.raises(ValueError, match="duplicated"):
-        _sighting(photos=(p, p))
+        make_sighting(photos=(p, p))
 
 
-def test_photo_sighting_id_must_match_sighting():
-    other = _photo(name="Aaron", d="2008-11-24", subdir="Aaron/2008-11-24")
+def test_photo_sighting_id_must_match_sighting(make_photo, make_sighting):
+    other = make_photo(name="Aaron", sighting_date="2008-11-24")
     with pytest.raises(ValueError, match="sighting_id"):
-        _sighting(photos=(other,))
+        make_sighting(photos=(other,))
+
+
+def test_photo_elephant_name_must_match_sighting(make_sighting):
+    class MismatchedPhoto:
+        identifier = "Devin_2015-11-05_99"
+        sighting_id = "Devin_2015-11-05"
+        elephant_name = "Aaron"
+
+    with pytest.raises(ValueError, match="elephant name"):
+        make_sighting(photos=(MismatchedPhoto(),))

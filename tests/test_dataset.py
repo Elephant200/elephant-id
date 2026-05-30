@@ -191,6 +191,18 @@ def test_read_image_lru_eviction(dataset: Dataset):
     assert list(dataset._image_cache) == [photos[1].identifier, photos[2].identifier]
 
 
+def test_read_image_cache_hit_refreshes_recency(dataset: Dataset):
+    dataset.image_cache_size = 2
+    a, b, c = list(dataset.iter_photos())[:3]
+
+    dataset.read_image(a)
+    dataset.read_image(b)
+    dataset.read_image(a)  # cache hit: touch a so b becomes least-recent
+    dataset.read_image(c)  # evicts b, not a
+
+    assert list(dataset._image_cache) == [a.identifier, c.identifier]
+
+
 def test_clear_image_cache(dataset: Dataset):
     dataset.read_image(dataset.get_photo("Aaron_2008-11-24_01"))
     dataset.clear_image_cache()
