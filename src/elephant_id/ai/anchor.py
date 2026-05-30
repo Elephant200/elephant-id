@@ -31,29 +31,29 @@ class AnchorRunner:
             A dictionary containing the anchor keypoint detection results.
         """
         results = self.model.predict(source=image, device="mps", conf=0.25)
-        for result in results:
-            print(result.to_json(decimals=1))
-        # Only return first result
-        predictions = json.loads(results[0].to_json(decimals=1))[0]
-        print(predictions)
 
-        # Convert keypoints to list of points
-        normalized = {}
-        normalized["confidence"] = predictions["confidence"]
-        normalized["class_id"] = predictions["class"]
-        normalized["class"] = predictions["name"]
-        normalized["x1"] = predictions["box"]["x1"]
-        normalized["y1"] = predictions["box"]["y1"]
-        normalized["x2"] = predictions["box"]["x2"]
-        normalized["y2"] = predictions["box"]["y2"]
-        normalized["keypoints"] = [
-            [predictions["keypoints"]["x"][0], predictions["keypoints"]["y"][0]],
-            [predictions["keypoints"]["x"][1], predictions["keypoints"]["y"][1]],
-        ]
+        # Only return first result
+        predictions = json.loads(results[0].to_json(decimals=1))
+
+        normalized_predictions = []
+        for pred in predictions:
+            normalized_pred = {}
+            normalized_pred["confidence"] = pred["confidence"]
+            normalized_pred["class_id"] = pred["class"]
+            normalized_pred["class"] = pred["name"]
+            normalized_pred["x1"] = pred["box"]["x1"]
+            normalized_pred["y1"] = pred["box"]["y1"]
+            normalized_pred["x2"] = pred["box"]["x2"]
+            normalized_pred["y2"] = pred["box"]["y2"]
+            normalized_pred["keypoints"] = [
+                [pred["keypoints"]["x"][0], pred["keypoints"]["y"][0]],
+                [pred["keypoints"]["x"][1], pred["keypoints"]["y"][1]],
+            ]
+            normalized_predictions.append(normalized_pred)
 
         # Can add metadata here if needed
         return {
-            "predictions": normalized,
+            "predictions": normalized_predictions,
         }
 
 class AnchorService:
@@ -99,13 +99,14 @@ class AnchorService:
         )
 
         # Translate coordinates to absolute coordinates
-        results["predictions"]["x1"] += crop_xyxy[0] # left x
-        results["predictions"]["y1"] += crop_xyxy[1] # top y
-        results["predictions"]["x2"] += crop_xyxy[0] # right x
-        results["predictions"]["y2"] += crop_xyxy[1] # bottom y
-        results["predictions"]["keypoints"][0][0] += crop_xyxy[0] # first x
-        results["predictions"]["keypoints"][0][1] += crop_xyxy[1] # first y
-        results["predictions"]["keypoints"][1][0] += crop_xyxy[0] # second x
-        results["predictions"]["keypoints"][1][1] += crop_xyxy[1] # second y
+        for prediction in results["predictions"]:
+            prediction["x1"] += crop_xyxy[0] # left x
+            prediction["y1"] += crop_xyxy[1] # top y
+            prediction["x2"] += crop_xyxy[0] # right x
+            prediction["y2"] += crop_xyxy[1] # bottom y
+            prediction["keypoints"][0][0] += crop_xyxy[0] # first x
+            prediction["keypoints"][0][1] += crop_xyxy[1] # first y
+            prediction["keypoints"][1][0] += crop_xyxy[0] # second x
+            prediction["keypoints"][1][1] += crop_xyxy[1] # second y
 
         return results
