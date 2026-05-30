@@ -14,6 +14,8 @@ The architecture is split into:
 
 ## Tech Stack
 
+Note that this is highly subject to change.
+
 ### Domain and DNS
 - Domain managed through Cloudflare
 - Cloudflare used for DNS only
