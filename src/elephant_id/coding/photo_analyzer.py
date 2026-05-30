@@ -2,7 +2,6 @@
 Module that computes features for an elephant in a given photo by running the SAM3, Anchor, Gender, and Age models.
 """
 
-import os
 
 from pycocotools import mask as coco_mask
 
@@ -22,7 +21,6 @@ class PhotoAnalyzer:
     def __init__(self, dataset: Dataset) -> None:
         self.dataset = dataset
         self.sam3: Sam3Service = Sam3Service(
-            api_key=os.getenv("ROBOFLOW_API_KEY"),
             dataset=dataset,
         )
         self.anchor_model: AnchorService = AnchorService(

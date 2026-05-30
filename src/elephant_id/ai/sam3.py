@@ -2,6 +2,7 @@
 Module wrapping the SAM3 Roboflow workflow.
 """
 
+import os
 from pathlib import Path
 
 from inference_sdk import InferenceHTTPClient
@@ -64,21 +65,17 @@ class Sam3Runner:
 
     def __init__(
         self,
-        api_key: str,
-        workspace_name: str = ROBOFLOW_WORKSPACE,
-        workflow_id: str = ROBOFLOW_SAM3_WORKFLOW_ID,
         confidence_threshold: float = DEFAULT_SAM3_CONFIDENCE_THRESHOLD,
         nms: bool = DEFAULT_SAM3_NMS,
         nms_iou_threshold: float = DEFAULT_SAM3_NMS_IOU_THRESHOLD,
     ) -> None:
-        self.api_key: str = api_key
         self.client = InferenceHTTPClient(
             api_url=ROBOFLOW_API_URL,
-            api_key=self.api_key,
+            api_key=os.getenv("ROBOFLOW_API_KEY"),
         )
 
-        self.workspace_name: str = workspace_name
-        self.workflow_id: str = workflow_id
+        self.workspace_name: str = ROBOFLOW_WORKSPACE
+        self.workflow_id: str = ROBOFLOW_SAM3_WORKFLOW_ID
         self.confidence_threshold: float = confidence_threshold
         self.nms: bool = nms
         self.nms_iou_threshold: float = nms_iou_threshold
@@ -138,9 +135,6 @@ class Sam3Service:
         cache_root: Path = Path(DEFAULT_CACHE_ROOT),
     ) -> None:
         self.runner = Sam3Runner(
-            api_key=api_key,
-            workspace_name=ROBOFLOW_WORKSPACE,
-            workflow_id=ROBOFLOW_SAM3_WORKFLOW_ID,
             confidence_threshold=DEFAULT_SAM3_CONFIDENCE_THRESHOLD,
             nms=DEFAULT_SAM3_NMS,
             nms_iou_threshold=DEFAULT_SAM3_NMS_IOU_THRESHOLD,
@@ -154,7 +148,7 @@ class Sam3Service:
 
     def run(self, photo: Photo, query_preset: str) -> dict:
         """
-        Run the SAM3 workflow for the given Photo object
+        Run the SAM3 model for the given Photo object
 
         Args:
             photo: Photo object to run SAM3 for
