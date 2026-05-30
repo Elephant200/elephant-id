@@ -97,6 +97,11 @@ class SeekCode:
             raise ValueError(f"Invalid gender: {self.g!r}")
         if self.a is not None and not 0 <= self.a <= 99:
             raise ValueError(f"Age out of range (0..99): {self.a}")
+        for name, v in (("tr", self.tr), ("tl", self.tl),
+                        ("xr", self.xr), ("xl", self.xl),
+                        ("sr", self.sr), ("sl", self.sl), ("sb", self.sb)):
+            if v is not None and not isinstance(v, bool):
+                raise ValueError(f"{name}={v!r} is not a boolean flag")
         for name, v in (("rt1", self.rt1), ("rh1", self.rh1),
                         ("rt2", self.rt2), ("rh2", self.rh2)):
             if v is not None and v not in _RIGHT_EAR_SECTORS:
