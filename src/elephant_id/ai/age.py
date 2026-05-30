@@ -1,6 +1,6 @@
 from pathlib import Path
+from typing import Any
 
-import numpy as np
 from PIL import Image
 
 from elephant_id.cache import CacheManager
@@ -40,7 +40,7 @@ class AgeService:
             cache_root=cache_root,
         )
 
-    def run(self, photo: Photo, body_rle_mask: np.ndarray) -> dict:
+    def run(self, photo: Photo, body_rle_mask: dict[str, Any]) -> dict:
         key = f"{photo.identifier}"
 
         body_mask = decode_rle_mask(body_rle_mask)
