@@ -4,9 +4,9 @@ import re
 from dataclasses import dataclass
 from typing import Literal
 
-Gender = Literal["B", "C"]
-RightEarSector = Literal[0, 7, 8, 9]
-LeftEarSector = Literal[0, 3, 4, 5]
+type Gender = Literal["B", "C"]
+type RightEarSector = Literal[0, 7, 8, 9]
+type LeftEarSector = Literal[0, 3, 4, 5]
 
 _RIGHT_EAR_SECTORS: frozenset[int] = frozenset({0, 7, 8, 9})
 _LEFT_EAR_SECTORS: frozenset[int] = frozenset({0, 3, 4, 5})
@@ -42,7 +42,9 @@ class SeekCode:
 
         <g> <aa> T<r><l> E<rt1><rh1><rt2><rh2>-<lt1><lh1><lt2><lh2> X<r><l> S<r><l><b>
 
-    where each component is:
+    The spaces above are only for readability; an actual code is the components
+    concatenated with no separators (the literal markers ``T``/``E``/``X``/``S``
+    and the ``-`` between the ear groups are required). Where each component is:
 
     * ``<g>``        — gender: ``B`` (bull), ``C`` (cow), or ``_`` (unknown).
     * ``<aa>``       — birth-year (last two digits), or ``__`` if unknown.
@@ -95,8 +97,8 @@ class SeekCode:
         """
         if self.g is not None and self.g not in ("B", "C"):
             raise ValueError(f"Invalid gender: {self.g!r}")
-        if self.a is not None and not 0 <= self.a <= 99:
-            raise ValueError(f"Age out of range (0..99): {self.a}")
+        if self.a is not None and (type(self.a) is not int or not 0 <= self.a <= 99):
+            raise ValueError(f"Invalid age (expected int 0..99): {self.a!r}")
         for name, v in (("tr", self.tr), ("tl", self.tl),
                         ("xr", self.xr), ("xl", self.xl),
                         ("sr", self.sr), ("sl", self.sl), ("sb", self.sb)):
@@ -104,14 +106,14 @@ class SeekCode:
                 raise ValueError(f"{name}={v!r} is not a boolean flag")
         for name, v in (("rt1", self.rt1), ("rh1", self.rh1),
                         ("rt2", self.rt2), ("rh2", self.rh2)):
-            if v is not None and v not in _RIGHT_EAR_SECTORS:
+            if v is not None and (type(v) is not int or v not in _RIGHT_EAR_SECTORS):
                 raise ValueError(
                     f"{name}={v!r} is not a right-ear sector "
                     f"(allowed: {sorted(_RIGHT_EAR_SECTORS)})"
                 )
         for name, v in (("lt1", self.lt1), ("lh1", self.lh1),
                         ("lt2", self.lt2), ("lh2", self.lh2)):
-            if v is not None and v not in _LEFT_EAR_SECTORS:
+            if v is not None and (type(v) is not int or v not in _LEFT_EAR_SECTORS):
                 raise ValueError(
                     f"{name}={v!r} is not a left-ear sector "
                     f"(allowed: {sorted(_LEFT_EAR_SECTORS)})"

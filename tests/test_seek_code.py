@@ -103,12 +103,26 @@ def test_invalid_codes_raise(bad):
     {"g": "Z"},                        # bad gender
     {"a": 100},                        # age out of range
     {"a": -1},                         # age out of range
+    {"a": True},                       # bool is not a valid age
     {"tr": 2},                         # bad boolean flag
     {"xl": "yes"},                     # bad boolean flag
     {"rt1": 3},                        # left sector on right ear
     {"lt1": 7},                        # right sector on left ear
+    {"rt1": False},                    # bool is not a valid sector (False == 0)
+    {"rt1": True},                     # bool is not a valid sector
+    {"lt1": False},                    # bool is not a valid sector (False == 0)
+    {"rt1": 7.0},                      # float is not a valid sector
+    {"rt1": "7"},                      # str is not a valid sector
+    {"a": 5.0},                        # float is not a valid age
 ])
 def test_invalid_construction_raises(kwargs):
     base = dict(g="B", a=0, tr=False, tl=False)
     with pytest.raises(ValueError):
         SeekCode(**(base | kwargs))
+
+
+def test_zero_sector_and_age_still_accepted():
+    code = SeekCode(g="B", a=0, tr=False, tl=False, rt1=0, lt1=0)
+    assert code.a == 0
+    assert code.rt1 == 0 and code.lt1 == 0
+    assert str(code) == "B00T00E0___-0___X__S___"
