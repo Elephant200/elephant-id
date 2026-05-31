@@ -31,9 +31,23 @@ def apply_mask(
 ) -> BgrImage:
     """Return image with unmasked pixels replaced by background.
 
-    If crop is True, the masked image is cropped to the mask's True-pixel bounds.
-    ``background`` is interpreted in BGR order.
+    Args:
+        image: A BGR image to apply the mask to.
+        mask: A boolean mask to apply to the image.
+        background: The background color to use for the masked pixels. (Default: black)
+        crop: Whether to crop the image to the mask's True-pixel bounds.
+
+    Returns:
+        A new BGR image with the mask applied.
+
+    Raises:
+        ValueError: If the background is not three values in ``[0, 255]``, the
+            mask shape does not match the image, or cropping an empty mask.
     """
+    if len(background) != 3 or any(not 0 <= c <= 255 for c in background):
+        raise ValueError(
+            f"background must be three values in [0, 255]: {background}"
+        )
     bool_mask = mask.astype(bool)
     if bool_mask.shape != image.shape[:2]:
         raise ValueError(
