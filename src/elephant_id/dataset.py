@@ -191,10 +191,6 @@ class Dataset:
     def read_image(self, photo: Photo) -> BgrImage:
         """Load a photo's image as a BgrImage, using an LRU cache.
 
-        ``cv2.imread`` decodes to BGR and applies EXIF orientation by default.
-        This is the dataset's storage boundary -- swap the ``cv2.imread`` call
-        for a remote fetch + ``cv2.imdecode`` when images move to GCS.
-
         Args:
             photo: The photo to load.
 

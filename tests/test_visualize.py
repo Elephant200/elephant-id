@@ -1,6 +1,5 @@
 import numpy as np
 import pytest
-from PIL import Image
 
 from elephant_id.visualize import (
     apply_alpha_mask,
@@ -8,24 +7,27 @@ from elephant_id.visualize import (
     visualize_predictions,
 )
 
+# Pixel assertions are on the BGR buffer. Where a colour has a human (RGB) name,
+# the stored value is reversed: e.g. palette blue RGB (31,119,180) -> (180,119,31).
+
 
 def test_draw_rle_mask_overlay_colors_masked_pixels(rle_from_mask):
-    image = Image.new("RGB", (2, 1), (10, 20, 30))
+    image = np.full((1, 2, 3), (10, 20, 30), dtype=np.uint8)
     mask = np.array([[True, False]])
 
     output = draw_rle_mask_overlay(
         image,
         rle_from_mask(mask),
-        color=(110, 120, 130),
+        color=(110, 120, 130),  # RGB
         alpha=1.0,
     )
 
-    assert output.getpixel((0, 0)) == (110, 120, 130)
-    assert output.getpixel((1, 0)) == (10, 20, 30)
+    assert tuple(output[0, 0]) == (130, 120, 110)  # RGB color flipped to BGR
+    assert tuple(output[0, 1]) == (10, 20, 30)
 
 
 def test_apply_alpha_mask_rejects_invalid_alpha():
-    image = Image.new("RGB", (1, 1))
+    image = np.zeros((1, 1, 3), dtype=np.uint8)
     mask = np.array([[True]])
 
     with pytest.raises(ValueError, match="alpha"):
@@ -33,15 +35,15 @@ def test_apply_alpha_mask_rejects_invalid_alpha():
 
 
 def test_apply_alpha_mask_rejects_shape_mismatch():
-    image = Image.new("RGB", (2, 1))
+    image = np.zeros((1, 2, 3), dtype=np.uint8)
     mask = np.array([[True], [False]])
 
     with pytest.raises(ValueError, match="mask shape"):
         apply_alpha_mask(image, mask)
 
 
-def test_visualize_predictions_draws_box_and_preserves_mode():
-    image = Image.new("RGB", (12, 12), (10, 20, 30))
+def test_visualize_predictions_draws_box_and_preserves_shape():
+    image = np.full((12, 12, 3), (10, 20, 30), dtype=np.uint8)
     predictions = [
         {
             "class": "ear",
@@ -56,12 +58,13 @@ def test_visualize_predictions_draws_box_and_preserves_mode():
 
     output = visualize_predictions(image, predictions)
 
-    assert output.mode == "RGB"
-    assert output.getpixel((1, 1)) == (31, 119, 180)
+    assert output.shape == (12, 12, 3) and output.dtype == np.uint8
+    # class_id 1 -> palette blue RGB (31,119,180) -> BGR (180,119,31).
+    assert tuple(output[1, 1]) == (180, 119, 31)
 
 
 def test_visualize_predictions_resizes_rle_mask_to_image(rle_from_mask):
-    image = Image.new("RGB", (4, 4), (10, 20, 30))
+    image = np.full((4, 4, 3), (10, 20, 30), dtype=np.uint8)
     predictions = [
         {
             "class": "tail",
@@ -77,12 +80,13 @@ def test_visualize_predictions_resizes_rle_mask_to_image(rle_from_mask):
 
     output = visualize_predictions(image, predictions, mask_alpha=1.0)
 
-    assert output.mode == "RGB"
-    assert output.getpixel((0, 0)) == (44, 160, 44)
+    assert output.shape == (4, 4, 3)
+    # class_id 2 -> palette green (44,160,44); symmetric under BGR flip.
+    assert tuple(output[0, 0]) == (44, 160, 44)
 
 
 def test_visualize_predictions_uses_full_size_mask_without_resize(rle_from_mask):
-    image = Image.new("RGB", (4, 4), (10, 20, 30))
+    image = np.full((4, 4, 3), (10, 20, 30), dtype=np.uint8)
     mask = np.zeros((4, 4), dtype=bool)
     mask[0, 0] = True
     predictions = [
@@ -100,25 +104,25 @@ def test_visualize_predictions_uses_full_size_mask_without_resize(rle_from_mask)
 
     output = visualize_predictions(image, predictions, mask_alpha=1.0)
 
-    assert output.mode == "RGB"
-    assert output.getpixel((0, 0)) == (44, 160, 44)
+    assert output.shape == (4, 4, 3)
+    assert tuple(output[0, 0]) == (44, 160, 44)
 
 
 def test_visualize_predictions_fills_defaults_for_minimal_prediction():
-    image = Image.new("RGB", (12, 12), (10, 20, 30))
+    image = np.full((12, 12, 3), (10, 20, 30), dtype=np.uint8)
 
     # Only the bounding box keys are present; class/class_id/confidence default.
     output = visualize_predictions(image, [{"x1": 1, "y1": 1, "x2": 8, "y2": 8}])
 
-    assert output.mode == "RGB"
-    # class_id defaults to 0 -> first palette colour (orange).
-    assert output.getpixel((1, 1)) == (255, 127, 14)
+    assert output.shape == (12, 12, 3)
+    # class_id defaults to 0 -> palette orange RGB (255,127,14) -> BGR (14,127,255).
+    assert tuple(output[1, 1]) == (14, 127, 255)
 
 
 def test_visualize_predictions_empty_list_returns_unchanged_copy():
-    image = Image.new("RGB", (3, 2), (10, 20, 30))
+    image = np.full((2, 3, 3), (10, 20, 30), dtype=np.uint8)
 
     output = visualize_predictions(image, [])
 
-    assert output.mode == "RGB"
-    assert output.tobytes() == image.tobytes()
+    assert output is not image
+    assert np.array_equal(output, image)
