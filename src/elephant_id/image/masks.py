@@ -7,21 +7,37 @@ from pycocotools import mask as coco_mask
 
 
 def decode_rle_mask(rle_mask: dict[str, Any]) -> np.ndarray:
-    """Decode a COCO-style RLE mask into a 2D boolean array."""
-    encoded = {
-        "size": rle_mask["size"],
-        "counts": rle_mask["counts"].encode("utf-8")
-        if isinstance(rle_mask["counts"], str)
-        else rle_mask["counts"],
-    }
-    decoded = coco_mask.decode(encoded)
+    """Decode a COCO-style RLE mask into a 2D boolean array.
+
+    Raises:
+        ValueError: If the mask is missing ``size``/``counts``, or either field
+            has the wrong type or shape.
+    """
+    if "size" not in rle_mask or "counts" not in rle_mask:
+        raise ValueError("Invalid RLE mask: must have size and counts")
+    size = rle_mask["size"]
+    counts = rle_mask["counts"]
+    if not size or not counts:
+        raise ValueError("Invalid RLE mask: size and counts must be non-empty")
+    if not isinstance(counts, str | bytes):
+        raise ValueError("Invalid RLE mask: counts must be a string or bytes")
+    if not isinstance(size, list | tuple) or len(size) != 2:
+        raise ValueError("Invalid RLE mask: size must be a list or tuple of length 2")
+
+    decoded = coco_mask.decode(rle_mask)
     if decoded.ndim == 3:
         decoded = decoded[:, :, 0]
     return decoded.astype(bool)
 
 
 def mask_bounds(mask: np.ndarray) -> tuple[int, int, int, int]:
-    """Return xyxy bounds around True mask pixels."""
+    """Return xyxy bounds (half-open) around True mask pixels.
+
+    Raises:
+        ValueError: If the mask is not 2D or contains no True pixels.
+    """
+    if mask.ndim != 2:
+        raise ValueError(f"Mask must be 2D, got shape {mask.shape}")
     ys, xs = np.where(mask)
     if xs.size == 0 or ys.size == 0:
         raise ValueError("Cannot compute bounds for an empty mask")

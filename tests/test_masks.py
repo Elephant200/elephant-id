@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from elephant_id.image.masks import decode_rle_mask, mask_bounds
 
@@ -14,6 +15,16 @@ def test_decode_rle_mask_returns_boolean_mask(rle_from_mask):
     decoded = decode_rle_mask(rle_from_mask(mask))
 
     assert decoded.dtype == bool
+    assert decoded.tolist() == mask.tolist()
+
+
+def test_decode_rle_mask_accepts_bytes_counts(rle_from_mask):
+    mask = np.array([[True, False], [False, True]])
+    rle = rle_from_mask(mask)
+    rle["counts"] = rle["counts"].encode("utf-8")
+
+    decoded = decode_rle_mask(rle)
+
     assert decoded.tolist() == mask.tolist()
 
 
@@ -40,6 +51,45 @@ def test_decode_rle_mask_collapses_single_mask_stack(monkeypatch):
     ]
 
 
+@pytest.mark.parametrize(
+    "rle",
+    [
+        {},
+        {"size": [2, 3]},
+        {"counts": "abc"},
+    ],
+)
+def test_decode_rle_mask_rejects_missing_fields(rle):
+    with pytest.raises(ValueError, match="must have size and counts"):
+        decode_rle_mask(rle)
+
+
+@pytest.mark.parametrize(
+    "rle",
+    [
+        {"size": [], "counts": "abc"},
+        {"size": [2, 3], "counts": ""},
+    ],
+)
+def test_decode_rle_mask_rejects_empty_fields(rle):
+    with pytest.raises(ValueError, match="must be non-empty"):
+        decode_rle_mask(rle)
+
+
+def test_decode_rle_mask_rejects_non_string_counts():
+    with pytest.raises(ValueError, match="counts must be a string or bytes"):
+        decode_rle_mask({"size": [2, 3], "counts": [1, 2, 3]})
+
+
+@pytest.mark.parametrize(
+    "size",
+    [123, [2, 3, 1], (2,)],
+)
+def test_decode_rle_mask_rejects_bad_size(size):
+    with pytest.raises(ValueError, match="size must be a list or tuple of length 2"):
+        decode_rle_mask({"size": size, "counts": "abc"})
+
+
 def test_mask_bounds_wrap_true_pixels():
     mask = np.array(
         [
@@ -50,3 +100,30 @@ def test_mask_bounds_wrap_true_pixels():
     )
 
     assert mask_bounds(mask) == (1, 1, 3, 3)
+
+
+def test_mask_bounds_single_pixel():
+    mask = np.zeros((4, 5), dtype=bool)
+    mask[2, 3] = True
+
+    assert mask_bounds(mask) == (3, 2, 4, 3)
+
+
+def test_mask_bounds_full_mask():
+    mask = np.ones((3, 4), dtype=bool)
+
+    assert mask_bounds(mask) == (0, 0, 4, 3)
+
+
+def test_mask_bounds_rejects_empty_mask():
+    with pytest.raises(ValueError, match="empty mask"):
+        mask_bounds(np.zeros((3, 4), dtype=bool))
+
+
+@pytest.mark.parametrize(
+    "shape",
+    [(4,), (2, 3, 1)],
+)
+def test_mask_bounds_rejects_non_2d_mask(shape):
+    with pytest.raises(ValueError, match="must be 2D"):
+        mask_bounds(np.ones(shape, dtype=bool))
