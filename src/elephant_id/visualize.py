@@ -124,7 +124,9 @@ def visualize_predictions(
             image_width,
             image_height,
         )
-        cv2.rectangle(output, (x1, y1), (x2, y2), color, 2)
+        # clip_xyxy returns half-open coords (x2/y2 exclusive); cv2.rectangle
+        # treats its second corner as inclusive, so step back one pixel.
+        cv2.rectangle(output, (x1, y1), (x2 - 1, y2 - 1), color, 2)
 
         label = f"{class_name} {confidence:.2f}"
         text_anchor = (x1, max(20, y1 - 8))
