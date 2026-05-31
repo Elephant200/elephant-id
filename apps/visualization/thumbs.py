@@ -11,7 +11,7 @@ from __future__ import annotations
 import io
 from pathlib import Path
 
-from PIL import Image, ImageOps
+import cv2
 
 from .config import (
     CODED_ROOT,
@@ -26,14 +26,20 @@ def _clamp_size(size: int) -> int:
 
 
 def _render_thumb(src: Path, size: int) -> io.BytesIO:
-    buf = io.BytesIO()
-    with Image.open(src) as im:
-        im = ImageOps.exif_transpose(im)
-        im = im.convert("RGB")
-        im.thumbnail((size, size), Image.Resampling.LANCZOS)
-        im.save(buf, format="JPEG", quality=85, optimize=True)
-    buf.seek(0)
-    return buf
+    image = cv2.imread(str(src), cv2.IMREAD_COLOR)
+    if image is None:
+        raise FileNotFoundError(f"Could not read image: {src}")
+    height, width = image.shape[:2]
+    # Fit within a size x size box, downscaling only (like PIL's thumbnail).
+    scale = min(size / width, size / height, 1.0)
+    if scale < 1.0:
+        image = cv2.resize(
+            image,
+            (max(1, round(width * scale)), max(1, round(height * scale))),
+            interpolation=cv2.INTER_AREA,
+        )
+    _ok, encoded = cv2.imencode(".jpg", image, [cv2.IMWRITE_JPEG_QUALITY, 85])
+    return io.BytesIO(encoded.tobytes())
 
 
 def coded_thumb(rel: str, size: int) -> io.BytesIO:

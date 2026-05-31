@@ -11,6 +11,7 @@ import io
 import logging
 from pathlib import Path
 
+import cv2
 from flask import Blueprint, abort, jsonify, render_template, request, send_file
 
 from elephant_id.constants import SAM3_QUERY_PRESETS
@@ -253,13 +254,11 @@ def create_blueprint(state: ReviewerState, *, dataset: Dataset, sam3=None) -> Bl
         try:
             image = dataset.read_image(photo)
             overlay = visualize_predictions(image, result.get("predictions", []))
+            _ok, encoded = cv2.imencode(".jpg", overlay, [cv2.IMWRITE_JPEG_QUALITY, 88])
         except Exception as e:
             logger.exception("Failed to render SAM3 overlay for %s", identifier)
             return jsonify({"error": f"Overlay failed: {e}"}), 500
 
-        buf = io.BytesIO()
-        overlay.save(buf, format="JPEG", quality=88)
-        buf.seek(0)
-        return send_file(buf, mimetype="image/jpeg")
+        return send_file(io.BytesIO(encoded.tobytes()), mimetype="image/jpeg")
 
     return bp
