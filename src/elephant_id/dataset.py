@@ -3,10 +3,11 @@ from collections.abc import Iterator
 from datetime import date
 from pathlib import Path
 
+import cv2
 import pandas as pd
-from PIL import Image, ImageOps
 
 from elephant_id.domain import Photo, SeekCode, Sighting
+from elephant_id.image import BgrImage
 
 
 class Dataset:
@@ -38,7 +39,7 @@ class Dataset:
             raise ValueError(f"Metadata path must be a CSV file: {self.metadata_path}")
 
         self.metadata: pd.DataFrame | None = None # Lazily loaded
-        self._image_cache: OrderedDict[str, Image.Image] = OrderedDict()
+        self._image_cache: OrderedDict[str, BgrImage] = OrderedDict()
         self.image_cache_size: int = image_cache_size
 
     def path_for(self, photo: Photo) -> Path:
@@ -187,17 +188,21 @@ class Dataset:
             )
         return SeekCode.from_str(code)
 
-    def read_image(
-        self,
-        photo: Photo,
-    ) -> Image.Image:
-        """Load a photo's image as RGB, using an LRU cache.
+    def read_image(self, photo: Photo) -> BgrImage:
+        """Load a photo's image as a BgrImage, using an LRU cache.
+
+        ``cv2.imread`` decodes to BGR and applies EXIF orientation by default.
+        This is the dataset's storage boundary -- swap the ``cv2.imread`` call
+        for a remote fetch + ``cv2.imdecode`` when images move to GCS.
 
         Args:
             photo: The photo to load.
 
         Returns:
-            A fresh RGB copy of the image
+            A fresh copy of the decoded image.
+
+        Raises:
+            FileNotFoundError: If the image is missing or cannot be decoded.
         """
         key = f"{photo.identifier}"
 
@@ -206,9 +211,10 @@ class Dataset:
             self._image_cache[key] = image
             return image.copy()
 
-        with Image.open(self.path_for(photo)) as image:
-            image = ImageOps.exif_transpose(image).convert("RGB")
-            loaded = image.copy()
+        path = self.path_for(photo)
+        loaded = cv2.imread(str(path), cv2.IMREAD_COLOR)
+        if loaded is None:
+            raise FileNotFoundError(f"Could not read image: {path}")
 
         self._image_cache[key] = loaded
 

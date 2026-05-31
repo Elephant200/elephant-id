@@ -1,14 +1,14 @@
 import json
 from pathlib import Path
 
-from PIL import Image
 from ultralytics import YOLO
 
 from elephant_id.cache import CacheManager
 from elephant_id.constants import DEFAULT_CACHE_ROOT
 from elephant_id.dataset import Dataset
 from elephant_id.domain import Photo
-from elephant_id.image_utils import apply_crop
+from elephant_id.image import BgrImage
+from elephant_id.image.transforms import apply_crop
 
 
 class AnchorRunner:
@@ -20,7 +20,7 @@ class AnchorRunner:
         # Initialize ultralytics model and configure for inference
         self.model = YOLO("model_weights/anchor_extraction_yolo26/weights.pt")
 
-    def run(self, image: Image.Image) -> dict:
+    def run(self, image: BgrImage) -> dict:
         """
         Runs the anchor keypoint detection YOLO26 model on the given image.
 

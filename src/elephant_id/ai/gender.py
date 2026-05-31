@@ -1,13 +1,13 @@
 from pathlib import Path
 from typing import Any
 
-from PIL import Image
-
 from elephant_id.cache import CacheManager
 from elephant_id.constants import DEFAULT_CACHE_ROOT
 from elephant_id.dataset import Dataset
 from elephant_id.domain import Photo
-from elephant_id.image_utils import apply_mask, decode_rle_mask
+from elephant_id.image import BgrImage
+from elephant_id.image.masks import decode_rle_mask
+from elephant_id.image.transforms import apply_mask
 
 
 class GenderRunner:
@@ -19,7 +19,7 @@ class GenderRunner:
         # Initialize pytorch model and configure for inference
         ...
 
-    def run(self, image: Image.Image) -> dict:
+    def run(self, image: BgrImage) -> dict:
         # Run model on image
         ...
 

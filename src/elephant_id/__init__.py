@@ -9,6 +9,8 @@ structured, SEEK-coded identification record. It is organised into:
 * :mod:`elephant_id.ai` -- cached wrappers around the segmentation, keypoint,
   gender, and age models.
 * :mod:`elephant_id.coding` -- feature extraction and SEEK-code generation.
-* :mod:`elephant_id.cache`, :mod:`elephant_id.image_utils`,
-  :mod:`elephant_id.visualize` -- supporting utilities.
+* :mod:`elephant_id.image` -- the canonical ``BgrImage`` type plus box, mask,
+  I/O, and pixel-transform utilities.
+* :mod:`elephant_id.cache`, :mod:`elephant_id.visualize` -- supporting
+  utilities.
 """

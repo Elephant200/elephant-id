@@ -1,9 +1,10 @@
 from datetime import date
 from pathlib import Path
 
+import cv2
+import numpy as np
 import pandas as pd
 import pytest
-from PIL import Image
 
 from elephant_id.dataset import Dataset
 from elephant_id.domain import Photo, SeekCode, Sighting
@@ -46,7 +47,10 @@ def dataset(tmp_path: Path) -> Dataset:
     for identifier, name, date_str, color, _ in ROWS:
         path = root / _image_path(identifier, name, date_str)
         path.parent.mkdir(parents=True, exist_ok=True)
-        Image.new("RGB", (4, 4), color).save(path)
+        # PNG bytes written to the .jpg path: cv2 sniffs format from content, so
+        # the fixture stays lossless and pixel assertions are exact.
+        _ok, buf = cv2.imencode(".png", np.full((4, 4, 3), color, dtype=np.uint8))
+        path.write_bytes(buf.tobytes())
     return Dataset(dataset_root=root, metadata_path=tmp_path / "images.csv")
 
 
@@ -177,19 +181,26 @@ def test_get_ground_truth_missing_code_raises(dataset: Dataset):
         dataset.get_ground_truth(sighting)
 
 
-def test_read_image_returns_rgb_copy_and_caches(dataset: Dataset):
+def test_read_image_returns_copy_and_caches(dataset: Dataset):
     photo = dataset.get_photo("Aaron_2008-11-24_01")
     image = dataset.read_image(photo)
-    assert image.mode == "RGB" and image.size == (4, 4)
-    assert image.getpixel((0, 0)) == ROWS[0][3]
+    assert image.shape == (4, 4, 3) and image.dtype == np.uint8
+    assert tuple(image[0, 0]) == ROWS[0][3]
     assert image is not dataset._image_cache[photo.identifier]
+
+
+def test_read_image_raises_for_missing_file(dataset: Dataset):
+    photo = dataset.get_photo("Aaron_2008-11-24_01")
+    dataset.path_for(photo).unlink()
+    with pytest.raises(FileNotFoundError, match="Could not read image"):
+        dataset.read_image(photo)
 
 
 def test_read_image_repeated_reads_return_distinct_copies(dataset: Dataset):
     photo = dataset.get_photo("Aaron_2008-11-24_01")
     first, second = dataset.read_image(photo), dataset.read_image(photo)
     assert first is not second
-    assert first.getpixel((0, 0)) == second.getpixel((0, 0))
+    assert np.array_equal(first, second)
 
 
 def test_read_image_lru_eviction(dataset: Dataset):

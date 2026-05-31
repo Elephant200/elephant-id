@@ -6,7 +6,6 @@ import os
 from pathlib import Path
 
 from inference_sdk import InferenceHTTPClient
-from PIL import Image
 
 from elephant_id.cache import CacheManager
 from elephant_id.constants import (
@@ -21,7 +20,8 @@ from elephant_id.constants import (
 )
 from elephant_id.dataset import Dataset
 from elephant_id.domain import Photo
-from elephant_id.image_utils import center_to_xyxy
+from elephant_id.image import BgrImage
+from elephant_id.image.boxes import center_to_xyxy
 
 
 def prediction_center_to_xyxy(prediction: dict) -> dict:
@@ -80,12 +80,12 @@ class Sam3Runner:
         self.nms: bool = nms
         self.nms_iou_threshold: float = nms_iou_threshold
 
-    def run(self, image: Image.Image, query_preset: str) -> dict:
+    def run(self, image: BgrImage, query_preset: str) -> dict:
         """
-        Run the SAM3 workflow for the given PIL image
+        Run the SAM3 workflow for the given image
 
         Args:
-            image: PIL image to run SAM3 on
+            image: BGR image to run SAM3 on
             query_preset: Name of a SAM3 query preset (see SAM3_QUERY_PRESETS)
 
         Returns:

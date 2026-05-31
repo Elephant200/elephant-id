@@ -37,7 +37,7 @@ class PhotoAnalyzer:
         sam3_body = self.sam3.run(photo, "body")
 
         if len(sam3_body["predictions"]) == 0:
-            return None # No elephant found in photo; reject image.
+            return None # TODO: Don't do this. Instead, see if there is a clear ear, tusk, etc. and if not, then reject image.
 
         body_rle_mask = sam3_body["predictions"][0]["rle_mask"]
 
