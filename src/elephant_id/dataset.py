@@ -48,9 +48,17 @@ class Dataset:
             photo: The photo whose path to resolve.
 
         Returns:
-            Absolute path to the photo's image file.
+            Path to the photo's image file, under the dataset root.
+
+        Raises:
+            ValueError: If the resolved path escapes the dataset root.
         """
-        return self.dataset_root / photo.image_path
+        candidate = self.dataset_root / photo.image_path
+        if not candidate.resolve().is_relative_to(self.dataset_root.resolve()):
+            raise ValueError(
+                f"Image path escapes dataset root: {photo.image_path}"
+            )
+        return candidate
 
     def get_photo(self, identifier: str) -> Photo:
         """Look up a single photo by identifier.

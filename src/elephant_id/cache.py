@@ -26,14 +26,23 @@ class CacheManager:
             cache_root: The root cache directory. Defaults to DEFAULT_CACHE_ROOT.
         """
         self.namespace: str = namespace
-        self.cache_dir: Path = cache_root.resolve() / namespace
+        cache_root_resolved = cache_root.resolve()
+        self.cache_dir: Path = cache_root_resolved / namespace
+        if not self.cache_dir.resolve().is_relative_to(cache_root_resolved):
+            raise ValueError(f"Cache namespace escapes cache root: {namespace!r}")
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
     def path_for(self, key: str) -> Path:
         """
-        Return the path for the given key
+        Return the path for the given key.
+
+        Raises:
+            ValueError: If the key would resolve outside the namespace directory.
         """
-        return self.cache_dir / f"{key}.json"
+        path = self.cache_dir / f"{key}.json"
+        if not path.resolve().is_relative_to(self.cache_dir.resolve()):
+            raise ValueError(f"Cache key escapes namespace directory: {key!r}")
+        return path
 
     def exists(self, key: str) -> bool:
         """

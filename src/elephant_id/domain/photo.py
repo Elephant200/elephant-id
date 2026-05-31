@@ -21,6 +21,8 @@ class Photo:
             raise ValueError(f"Sighting id is empty: {self.sighting_id}")
         if self.image_path.is_absolute():
             raise ValueError(f"Image path must be relative: {self.image_path}")
+        if ".." in self.image_path.parts:
+            raise ValueError(f"Image path must not contain '..': {self.image_path}")
         if self.identifier != self.image_path.stem:
             raise ValueError(f"Identifier does not match image path stem: {self.identifier} != {self.image_path.stem}")
         if not self.identifier.startswith(self.sighting_id + "_"):
