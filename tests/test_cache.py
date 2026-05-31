@@ -70,3 +70,15 @@ def test_init_creates_namespace_directory(tmp_path):
 
     assert cache.cache_dir.is_dir()
     assert cache.cache_dir == tmp_path.resolve() / "nested/space"
+
+
+def test_init_rejects_namespace_escaping_cache_root(tmp_path):
+    with pytest.raises(ValueError, match="namespace escapes"):
+        CacheManager("../evil", cache_root=tmp_path)
+
+
+def test_path_for_rejects_key_escaping_namespace(tmp_path):
+    cache = CacheManager("sam3/body", cache_root=tmp_path)
+
+    with pytest.raises(ValueError, match="key escapes"):
+        cache.path_for("../../escape")

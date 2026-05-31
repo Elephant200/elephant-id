@@ -1,6 +1,12 @@
+import json
+from pathlib import Path
+
 import pytest
 
-from elephant_id.ai.sam3 import Sam3Service, prediction_center_to_xyxy
+from elephant_id.ai.sam3 import Sam3Runner, Sam3Service, prediction_center_to_xyxy
+from elephant_id.constants import SAM3_QUERY_PRESETS
+
+_SAMPLE_RESPONSE = Path(__file__).resolve().parents[1] / "docs" / "sam3_sample_response.json"
 
 
 def test_prediction_center_to_xyxy_preserves_non_bbox_fields():
@@ -84,3 +90,79 @@ def test_sam3_service_rejects_unknown_query_preset(make_photo):
 
     with pytest.raises(ValueError, match="Unknown SAM3 query preset"):
         service.run(make_photo(), "unknown")
+
+
+class _FakeClient:
+    def __init__(self, response):
+        self._response = response
+        self.calls = []
+
+    def run_workflow(self, **kwargs):
+        self.calls.append(kwargs)
+        return self._response
+
+
+def _runner(response) -> Sam3Runner:
+    runner = Sam3Runner.__new__(Sam3Runner)
+    runner.client = _FakeClient(response)
+    runner.workspace_name = "ws"
+    runner.workflow_id = "wf"
+    runner.confidence_threshold = 0.5
+    runner.nms = True
+    runner.nms_iou_threshold = 0.2
+    return runner
+
+
+def test_sam3_runner_parses_sample_response_and_converts_bbox():
+    response = json.loads(_SAMPLE_RESPONSE.read_text())
+    runner = _runner(response)
+
+    result = runner.run(image=object(), query_preset="features")
+
+    assert result["queries"] == list(SAM3_QUERY_PRESETS["features"])
+    assert result["confidence_threshold"] == 0.5
+    assert result["nms"] is True
+    assert result["nms_iou_threshold"] == 0.2
+
+    preds = result["predictions"]
+    assert len(preds) == 3
+
+    # First detection: center (x=1194.5, y=686), size (w=345, h=392).
+    first = preds[0]
+    assert first["x1"] == 1194.5 - 345 / 2
+    assert first["y1"] == 686 - 392 / 2
+    assert first["x2"] == 1194.5 + 345 / 2
+    assert first["y2"] == 686 + 392 / 2
+    # Center keys are dropped; non-bbox fields are preserved.
+    assert "x" not in first and "width" not in first
+    assert first["class"] == "trunk"
+    assert first["rle_mask"]["size"] == [1080, 1920]
+
+
+def test_sam3_runner_passes_preset_queries_and_params_to_client():
+    response = json.loads(_SAMPLE_RESPONSE.read_text())
+    runner = _runner(response)
+
+    runner.run(image=object(), query_preset="features")
+
+    call = runner.client.calls[0]
+    assert call["workspace_name"] == "ws"
+    assert call["workflow_id"] == "wf"
+    assert call["parameters"]["queries"] == "elephant trunk,tusk,ear,tail"
+    assert call["parameters"]["confidence_threshold"] == 0.5
+    assert call["parameters"]["nms"] is True
+    assert call["parameters"]["nms_iou_threshold"] == 0.2
+
+
+def test_sam3_runner_rejects_empty_response():
+    runner = _runner([{"predictions": {}}])
+
+    with pytest.raises(ValueError, match="Unexpected response from SAM3"):
+        runner.run(image=object(), query_preset="body")
+
+
+def test_sam3_runner_rejects_unknown_query_preset():
+    runner = _runner([{"predictions": {"predictions": []}}])
+
+    with pytest.raises(ValueError, match="Unknown SAM3 query preset"):
+        runner.run(image=object(), query_preset="nope")

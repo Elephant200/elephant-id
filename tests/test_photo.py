@@ -47,6 +47,11 @@ def test_absolute_image_path_raises(make_photo):
         make_photo(sequence=9, image_path=Path("/abs/Devin_2015-11-05_09.jpg"))
 
 
+def test_image_path_with_parent_traversal_raises(make_photo):
+    with pytest.raises(ValueError, match=r"\.\."):
+        make_photo(sequence=9, image_path=Path("../Devin_2015-11-05_09.jpg"))
+
+
 def test_identifier_must_match_image_path_stem(make_photo):
     with pytest.raises(ValueError, match="does not match"):
         make_photo(

@@ -87,6 +87,15 @@ def test_path_for_resolves_to_existing_file(dataset: Dataset):
     assert dataset.path_for(photo).exists()
 
 
+def test_path_for_rejects_escaping_image_path(dataset: Dataset):
+    # Defense in depth: a photo-like object whose path escapes the root.
+    class _Escaping:
+        image_path = Path("../../etc/passwd")
+
+    with pytest.raises(ValueError, match="escapes dataset root"):
+        dataset.path_for(_Escaping())
+
+
 def test_get_photo_returns_fully_populated_photo(dataset: Dataset):
     assert dataset.get_photo("Devin_2017-06-27_01") == Photo(
         identifier="Devin_2017-06-27_01",
