@@ -93,7 +93,7 @@ class Detection:
         )
         return cls(
             xyxy=xyxy,
-            class_name=str(prediction["class"]).strip(),  # SAM3 emits " ear" etc.
+            class_name=str(prediction["class"]).strip(),  # SAM3 can emit leading whitespace
             class_id=int(prediction["class_id"]),
             confidence=float(prediction["confidence"]),
             rle_mask=prediction.get("rle_mask"),
