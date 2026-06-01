@@ -12,7 +12,8 @@ The services are:
 
 from .age import AgeService
 from .anchor import AnchorService
+from .detection import Detection
 from .gender import GenderService
 from .sam3 import Sam3Service
 
-__all__ = ["AgeService", "AnchorService", "GenderService", "Sam3Service"]
+__all__ = ["AgeService", "AnchorService", "Detection", "GenderService", "Sam3Service"]
