@@ -126,3 +126,38 @@ def test_visualize_predictions_empty_list_returns_unchanged_copy():
 
     assert output is not image
     assert np.array_equal(output, image)
+
+
+def test_visualize_predictions_mixes_masked_and_unmasked_detections(rle_from_mask):
+    # One detection carries a mask, the other does not. The masked detection
+    # still renders its mask; the maskless one gets an all-False plane and only
+    # contributes a box/label, leaving its own corner pixel untouched by a mask.
+    image = np.full((8, 8, 3), (10, 20, 30), dtype=np.uint8)
+    masked_pixel = np.zeros((8, 8), dtype=bool)
+    masked_pixel[0, 0] = True
+    predictions = [
+        {
+            "class": "ear",
+            "class_id": 2,  # green (44, 160, 44), symmetric under BGR flip
+            "confidence": 0.9,
+            "x1": 0,
+            "y1": 0,
+            "x2": 4,
+            "y2": 4,
+            "rle_mask": rle_from_mask(masked_pixel),
+        },
+        {
+            "class": "tusk",
+            "class_id": 3,
+            "confidence": 0.5,
+            "x1": 5,
+            "y1": 5,
+            "x2": 7,
+            "y2": 7,
+        },
+    ]
+
+    output = visualize_predictions(image, predictions, mask_alpha=1.0)
+
+    assert output.shape == (8, 8, 3)
+    assert tuple(output[0, 0]) == (44, 160, 44)  # masked detection's mask
