@@ -58,9 +58,10 @@ class Detection:
         """Intersection over union of this detection's mask and another detection's mask."""
         if self.rle_mask is None or other.rle_mask is None:
             raise ValueError("Both detections need a mask")
-        if self.union_area(other) == 0:
+        union_area = self.union_area(other)
+        if union_area == 0.0:
             return 0.0
-        return self.intersection_area(other) / self.union_area(other)
+        return self.intersection_area(other) / union_area
 
     # --- transforms (return new instances) ---
     def translate(self, dx: float, dy: float) -> "Detection":
