@@ -130,7 +130,6 @@ class Sam3Service:
 
     def __init__(
         self,
-        api_key: str,
         dataset: Dataset,
         cache_root: Path = Path(DEFAULT_CACHE_ROOT),
     ) -> None:
