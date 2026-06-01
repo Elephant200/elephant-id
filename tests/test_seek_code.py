@@ -10,8 +10,8 @@ def test_seek_code_from_str_all_zero():
     assert code.g == "B"
     assert code.a == 0
     assert code.tr is False and code.tl is False
-    assert code.rt1 == 0 and code.rh1 == 0 and code.rt2 == 0 and code.rh2 == 0
-    assert code.lt1 == 0 and code.lh1 == 0 and code.lt2 == 0 and code.lh2 == 0
+    assert code.ert1 == 0 and code.erh1 == 0 and code.ert2 == 0 and code.erh2 == 0
+    assert code.elt1 == 0 and code.elh1 == 0 and code.elt2 == 0 and code.elh2 == 0
     assert code.xr is False and code.xl is False
     assert code.sr is False and code.sl is False and code.sb is False
 
@@ -19,8 +19,8 @@ def test_seek_code_from_str_all_zero():
 def test_seek_code_from_str_all_unknown():
     code = SeekCode.from_str("___T__E____-____X__S___")
     for v in (code.g, code.a, code.tr, code.tl,
-              code.rt1, code.rh1, code.rt2, code.rh2,
-              code.lt1, code.lh1, code.lt2, code.lh2,
+              code.ert1, code.erh1, code.ert2, code.erh2,
+              code.elt1, code.elh1, code.elt2, code.elh2,
               code.xr, code.xl, code.sr, code.sl, code.sb):
         assert v is None
 
@@ -28,7 +28,7 @@ def test_seek_code_from_str_all_unknown():
 def test_seek_code_to_str():
     code = SeekCode(
         g="C", a=0, tr=False, tl=False,
-        rt1=0, rh1=0, rt2=0, rh2=0, lt1=0, lh1=0, lt2=0, lh2=0,
+        ert1=0, erh1=0, ert2=0, erh2=0, elt1=0, elh1=0, elt2=0, elh2=0,
         xr=False, xl=False, sr=False, sl=False, sb=False,
     )
     assert str(code) == "C00T00E0000-0000X00S000"
@@ -106,13 +106,13 @@ def test_invalid_codes_raise(bad):
     {"a": True},                       # bool is not a valid age
     {"tr": 2},                         # bad boolean flag
     {"xl": "yes"},                     # bad boolean flag
-    {"rt1": 3},                        # left sector on right ear
-    {"lt1": 7},                        # right sector on left ear
-    {"rt1": False},                    # bool is not a valid sector (False == 0)
-    {"rt1": True},                     # bool is not a valid sector
-    {"lt1": False},                    # bool is not a valid sector (False == 0)
-    {"rt1": 7.0},                      # float is not a valid sector
-    {"rt1": "7"},                      # str is not a valid sector
+    {"ert1": 3},                       # left sector on right ear
+    {"elt1": 7},                       # right sector on left ear
+    {"ert1": False},                   # bool is not a valid sector (False == 0)
+    {"ert1": True},                    # bool is not a valid sector
+    {"elt1": False},                   # bool is not a valid sector (False == 0)
+    {"ert1": 7.0},                     # float is not a valid sector
+    {"ert1": "7"},                     # str is not a valid sector
     {"a": 5.0},                        # float is not a valid age
 ])
 def test_invalid_construction_raises(kwargs):
@@ -122,7 +122,7 @@ def test_invalid_construction_raises(kwargs):
 
 
 def test_zero_sector_and_age_still_accepted():
-    code = SeekCode(g="B", a=0, tr=False, tl=False, rt1=0, lt1=0)
+    code = SeekCode(g="B", a=0, tr=False, tl=False, ert1=0, elt1=0)
     assert code.a == 0
-    assert code.rt1 == 0 and code.lt1 == 0
+    assert code.ert1 == 0 and code.elt1 == 0
     assert str(code) == "B00T00E0___-0___X__S___"

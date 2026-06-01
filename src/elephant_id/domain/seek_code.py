@@ -26,8 +26,8 @@ _SEEK_RE = re.compile(
     r"(?P<g>[BC_])"
     r"(?P<a>\d{2}|__)"
     r"T(?P<tr>[01_])(?P<tl>[01_])"
-    r"E(?P<rt1>[0789_])(?P<rh1>[0789_])(?P<rt2>[0789_])(?P<rh2>[0789_])"
-    r"-(?P<lt1>[0345_])(?P<lh1>[0345_])(?P<lt2>[0345_])(?P<lh2>[0345_])"
+    r"E(?P<ert1>[0789_])(?P<erh1>[0789_])(?P<ert2>[0789_])(?P<erh2>[0789_])"
+    r"-(?P<elt1>[0345_])(?P<elh1>[0345_])(?P<elt2>[0345_])(?P<elh2>[0345_])"
     r"X(?P<xr>[01_])(?P<xl>[01_])"
     r"S(?P<sr>[01_])(?P<sl>[01_])(?P<sb>[01_])"
 )
@@ -71,15 +71,15 @@ class SeekCode:
     tr: bool | None  # Whether the elephant has a right tusk.
     tl: bool | None  # Whether the elephant has a left tusk.
 
-    rt1: RightEarSector | None = None  # Sector of largest tear on the right ear.
-    rh1: RightEarSector | None = None  # Sector of largest hole on the right ear.
-    rt2: RightEarSector | None = None  # Sector of second largest tear on the right ear.
-    rh2: RightEarSector | None = None  # Sector of second largest hole on the right ear.
+    ert1: RightEarSector | None = None  # Sector of largest tear on the right ear.
+    erh1: RightEarSector | None = None  # Sector of largest hole on the right ear.
+    ert2: RightEarSector | None = None  # Sector of second largest tear on the right ear.
+    erh2: RightEarSector | None = None  # Sector of second largest hole on the right ear.
 
-    lt1: LeftEarSector | None = None  # Sector of largest tear on the left ear.
-    lh1: LeftEarSector | None = None  # Sector of largest hole on the left ear.
-    lt2: LeftEarSector | None = None  # Sector of second largest tear on the left ear.
-    lh2: LeftEarSector | None = None  # Sector of second largest hole on the left ear.
+    elt1: LeftEarSector | None = None  # Sector of largest tear on the left ear.
+    elh1: LeftEarSector | None = None  # Sector of largest hole on the left ear.
+    elt2: LeftEarSector | None = None  # Sector of second largest tear on the left ear.
+    elh2: LeftEarSector | None = None  # Sector of second largest hole on the left ear.
 
     xr: bool | None = None  # Whether the elephant has a right extreme feature.
     xl: bool | None = None  # Whether the elephant has a left extreme feature.
@@ -104,15 +104,15 @@ class SeekCode:
                         ("sr", self.sr), ("sl", self.sl), ("sb", self.sb)):
             if v is not None and not isinstance(v, bool):
                 raise ValueError(f"{name}={v!r} is not a boolean flag")
-        for name, v in (("rt1", self.rt1), ("rh1", self.rh1),
-                        ("rt2", self.rt2), ("rh2", self.rh2)):
+        for name, v in (("ert1", self.ert1), ("erh1", self.erh1),
+                        ("ert2", self.ert2), ("erh2", self.erh2)):
             if v is not None and (type(v) is not int or v not in _RIGHT_EAR_SECTORS):
                 raise ValueError(
                     f"{name}={v!r} is not a right-ear sector "
                     f"(allowed: {sorted(_RIGHT_EAR_SECTORS)})"
                 )
-        for name, v in (("lt1", self.lt1), ("lh1", self.lh1),
-                        ("lt2", self.lt2), ("lh2", self.lh2)):
+        for name, v in (("elt1", self.elt1), ("elh1", self.elh1),
+                        ("elt2", self.elt2), ("elh2", self.elh2)):
             if v is not None and (type(v) is not int or v not in _LEFT_EAR_SECTORS):
                 raise ValueError(
                     f"{name}={v!r} is not a left-ear sector "
@@ -146,10 +146,10 @@ class SeekCode:
             g=None if parts["g"] == "_" else parts["g"],
             a=None if parts["a"] == "__" else int(parts["a"]),
             tr=boolean[parts["tr"]], tl=boolean[parts["tl"]],
-            rt1=sector[parts["rt1"]], rh1=sector[parts["rh1"]],
-            rt2=sector[parts["rt2"]], rh2=sector[parts["rh2"]],
-            lt1=sector[parts["lt1"]], lh1=sector[parts["lh1"]],
-            lt2=sector[parts["lt2"]], lh2=sector[parts["lh2"]],
+            ert1=sector[parts["ert1"]], erh1=sector[parts["erh1"]],
+            ert2=sector[parts["ert2"]], erh2=sector[parts["erh2"]],
+            elt1=sector[parts["elt1"]], elh1=sector[parts["elh1"]],
+            elt2=sector[parts["elt2"]], elh2=sector[parts["elh2"]],
             xr=boolean[parts["xr"]], xl=boolean[parts["xl"]],
             sr=boolean[parts["sr"]], sl=boolean[parts["sl"]], sb=boolean[parts["sb"]],
         )
@@ -165,8 +165,8 @@ class SeekCode:
         return (
             f"{self.g or '_'}{age}"
             f"T{boolean[self.tr]}{boolean[self.tl]}"
-            f"E{sector[self.rt1]}{sector[self.rh1]}{sector[self.rt2]}{sector[self.rh2]}"
-            f"-{sector[self.lt1]}{sector[self.lh1]}{sector[self.lt2]}{sector[self.lh2]}"
+            f"E{sector[self.ert1]}{sector[self.erh1]}{sector[self.ert2]}{sector[self.erh2]}"
+            f"-{sector[self.elt1]}{sector[self.elh1]}{sector[self.elt2]}{sector[self.elh2]}"
             f"X{boolean[self.xr]}{boolean[self.xl]}"
             f"S{boolean[self.sr]}{boolean[self.sl]}{boolean[self.sb]}"
         )
