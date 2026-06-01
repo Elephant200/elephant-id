@@ -35,13 +35,12 @@ class PhotoAnalyzer:
 
     def analyze(self, photo: Photo) -> dict:
         sam3_body = self.sam3.run(photo, "body")
+        sam3_features = self.sam3.run(photo, "features")
 
-        if len(sam3_body["predictions"]) == 0:
-            return None # TODO: Don't do this. Instead, see if there is a clear ear, tusk, etc. and if not, then reject image.
+        if len(sam3_body["predictions"]) == 0: # Nothing visible in the photo
+            return None
 
         body_rle_mask = sam3_body["predictions"][0]["rle_mask"]
-
-        sam3_features = self.sam3.run(photo, "features")
 
         features_on_body = []
         for pred in sam3_features["predictions"]:

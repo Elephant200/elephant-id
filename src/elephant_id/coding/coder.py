@@ -1,5 +1,5 @@
 """
-Generates a SEEK code for one elephant
+Generates a SEEK code for a sighting of an elephant
 """
 
 from elephant_id.coding.photo_analyzer import PhotoAnalyzer
