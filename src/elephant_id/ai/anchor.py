@@ -88,7 +88,7 @@ class AnchorService:
         key = (
             f"{photo.identifier}__"
             f"crop_{int(crop_xyxy[0])}_{int(crop_xyxy[1])}_"
-            f"{int(crop_xyxy[2])}_{int(crop_xyxy[3])}" # QUESTION: Each image will be run twice, once per ear. Is this sufficiently unique?
+            f"{int(crop_xyxy[2])}_{int(crop_xyxy[3])}"
         )
 
         results = self.cache_manager.get_or_compute(
