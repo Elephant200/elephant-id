@@ -38,6 +38,9 @@ visualization = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+filterwarnings = [
+    "ignore::DeprecationWarning:pycocotools.*",
+]
 
 [tool.ruff]
 exclude = ["legacy"]
