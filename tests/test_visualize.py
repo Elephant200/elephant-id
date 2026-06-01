@@ -34,6 +34,26 @@ def test_apply_alpha_mask_rejects_invalid_alpha():
         apply_alpha_mask(image, mask, alpha=1.1)
 
 
+@pytest.mark.parametrize("alpha", [-0.1, 1.1])
+def test_visualize_predictions_rejects_invalid_mask_alpha(rle_from_mask, alpha):
+    image = np.full((4, 4, 3), (10, 20, 30), dtype=np.uint8)
+    predictions = [
+        {
+            "class": "ear",
+            "class_id": 1,
+            "confidence": 0.5,
+            "x1": 0,
+            "y1": 0,
+            "x2": 2,
+            "y2": 2,
+            "rle_mask": rle_from_mask(np.ones((4, 4), dtype=bool)),
+        }
+    ]
+
+    with pytest.raises(ValueError, match="alpha"):
+        visualize_predictions(image, predictions, mask_alpha=alpha)
+
+
 def test_apply_alpha_mask_rejects_shape_mismatch():
     image = np.zeros((1, 2, 3), dtype=np.uint8)
     mask = np.array([[True], [False]])

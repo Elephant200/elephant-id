@@ -90,6 +90,23 @@ def test_decode_rle_mask_rejects_bad_size(size):
         decode_rle_mask({"size": size, "counts": "abc"})
 
 
+@pytest.mark.parametrize(
+    "size",
+    [
+        [0, 3],
+        [2, 0],
+        [-1, 3],
+        [2, -1],
+        [2.5, 3],
+        [2, "3"],
+        [True, 3],
+    ],
+)
+def test_decode_rle_mask_rejects_non_positive_integer_size_values(size):
+    with pytest.raises(ValueError, match="positive integers"):
+        decode_rle_mask({"size": size, "counts": "abc"})
+
+
 def test_mask_bounds_wrap_true_pixels():
     mask = np.array(
         [

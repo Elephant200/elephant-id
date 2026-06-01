@@ -46,6 +46,22 @@ def test_apply_mask_replaces_unmasked_pixels():
     assert tuple(output[0, 1]) == (1, 2, 3)
 
 
+def test_apply_mask_decodes_rle_dict_masks(rle_from_mask):
+    image = np.full((2, 2, 3), (10, 20, 30), dtype=np.uint8)
+    mask = np.array(
+        [
+            [True, False],
+            [False, True],
+        ]
+    )
+
+    output = apply_mask(image, rle_from_mask(mask), background=(3, 2, 1))
+
+    assert tuple(output[0, 0]) == (10, 20, 30)
+    assert tuple(output[0, 1]) == (1, 2, 3)
+    assert tuple(output[1, 1]) == (10, 20, 30)
+
+
 def test_apply_mask_can_crop_to_mask_bounds():
     image = np.full((3, 4, 3), (10, 20, 30), dtype=np.uint8)
     mask = np.array(

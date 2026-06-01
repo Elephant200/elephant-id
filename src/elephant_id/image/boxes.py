@@ -1,7 +1,7 @@
 """Bounding-box coordinate utilities."""
 
 
-from math import ceil, floor
+from math import ceil, floor, isfinite
 
 
 def center_to_xyxy(
@@ -52,6 +52,8 @@ def clip_xyxy(
         raise ValueError(
             f"Image must have positive width and height: {(image_width, image_height)}"
         )
+    if not all(isfinite(coord) for coord in (x1, y1, x2, y2)):
+        raise ValueError(f"Box coordinates must be finite: xyxy={(x1, y1, x2, y2)}")
     if x2 <= x1 or y2 <= y1:
         raise ValueError(
             f"Box must have positive width and height: xyxy={(x1, y1, x2, y2)}"

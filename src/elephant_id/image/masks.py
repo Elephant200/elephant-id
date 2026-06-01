@@ -27,6 +27,8 @@ def decode_rle_mask(rle_mask: RleMask) -> np.ndarray:
         raise ValueError("Invalid RLE mask: counts must be a string or bytes")
     if not isinstance(size, list | tuple) or len(size) != 2:
         raise ValueError("Invalid RLE mask: size must be a list or tuple of length 2")
+    if any(type(dim) is not int or dim <= 0 for dim in size):
+        raise ValueError("Invalid RLE mask: size values must be positive integers")
 
     decoded = coco_mask.decode(rle_mask)
     if decoded.ndim == 3:

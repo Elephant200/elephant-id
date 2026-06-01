@@ -53,6 +53,24 @@ def test_clip_xyxy_rejects_reversed_box():
         clip_xyxy(x1=6, y1=2, x2=3, y2=5, image_width=8, image_height=6)
 
 
+@pytest.mark.parametrize(
+    "xyxy",
+    [
+        (float("nan"), 1, 4, 4),
+        (1, float("nan"), 4, 4),
+        (1, 1, float("nan"), 4),
+        (1, 1, 4, float("nan")),
+        (float("-inf"), 1, 4, 4),
+        (1, float("-inf"), 4, 4),
+        (1, 1, float("inf"), 4),
+        (1, 1, 4, float("inf")),
+    ],
+)
+def test_clip_xyxy_rejects_non_finite_coordinates(xyxy):
+    with pytest.raises(ValueError, match="finite"):
+        clip_xyxy(*xyxy, image_width=8, image_height=6)
+
+
 def test_clip_xyxy_rejects_box_outside_image():
     with pytest.raises(ValueError, match="outside image bounds"):
         clip_xyxy(x1=-20, y1=-20, x2=-5, y2=-5, image_width=8, image_height=6)
