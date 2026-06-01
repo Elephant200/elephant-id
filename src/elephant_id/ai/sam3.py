@@ -24,7 +24,7 @@ from elephant_id.image import BgrImage
 from elephant_id.image.boxes import center_to_xyxy
 
 
-def prediction_center_to_xyxy(prediction: dict) -> dict:
+def _prediction_center_to_xyxy(prediction: dict) -> dict:
     """
     Return a copy of a SAM3 prediction with xyxy bbox keys instead of center keys.
     """
@@ -109,7 +109,7 @@ class Sam3Runner:
 
         # Convert center-format bbox to corner coordinates
         predictions = [
-            prediction_center_to_xyxy(prediction)
+            _prediction_center_to_xyxy(prediction)
             for prediction in response[0]["predictions"]["predictions"]
         ]
 

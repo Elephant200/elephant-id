@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from elephant_id.ai.sam3 import Sam3Runner, Sam3Service, prediction_center_to_xyxy
+from elephant_id.ai.sam3 import Sam3Runner, Sam3Service, _prediction_center_to_xyxy
 from elephant_id.constants import SAM3_QUERY_PRESETS
 
 _SAMPLE_RESPONSE = Path(__file__).resolve().parents[1] / "docs" / "sam3_sample_response.json"
@@ -20,7 +20,7 @@ def test_prediction_center_to_xyxy_preserves_non_bbox_fields():
         "height": 357.0,
     }
 
-    converted = prediction_center_to_xyxy(prediction)
+    converted = _prediction_center_to_xyxy(prediction)
 
     assert converted == {
         "class": "elephant",
