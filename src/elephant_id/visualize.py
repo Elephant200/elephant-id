@@ -41,7 +41,20 @@ def _blend_bgr(
     bgr: tuple[int, int, int],
     alpha: float,
 ) -> None:
-    """Alpha-blend a solid BGR color into image where mask is True, in place."""
+    """Alpha-blend a solid BGR color into image where mask is True, in place.
+
+    Raises:
+        ValueError: If the alpha is not in the interval [0, 1], the mask shape
+        does not match the image shape, or the bgr color is not three values in
+        [0, 255].
+    """
+    if not 0 <= alpha <= 1:
+        raise ValueError("alpha must be between 0 and 1")
+    if mask.shape != image.shape[:2]:
+        raise ValueError(f"mask shape {mask.shape} does not match image size {image.shape[:2]}")
+    if len(bgr) != 3 or any(not 0 <= c <= 255 for c in bgr):
+        raise ValueError(f"bgr must be three values in [0, 255]: {bgr}")
+
     color = np.array(bgr, dtype=np.float32)
     image[mask] = ((1.0 - alpha) * image[mask] + alpha * color).astype(np.uint8)
 
@@ -62,18 +75,7 @@ def apply_alpha_mask(
 
     Returns:
         A new BGR image with the mask overlaid.
-
-    Raises:
-        ValueError: If the alpha is not in the interval [0, 1].
-        ValueError: If the mask shape does not match the image shape.
     """
-    if not 0 <= alpha <= 1:
-        raise ValueError("alpha must be between 0 and 1")
-    if mask.shape != image.shape[:2]:
-        raise ValueError(
-            f"mask shape {mask.shape} does not match image size {image.shape[:2]}"
-        )
-
     output = image.copy()
     _blend_bgr(output, mask.astype(bool), color[::-1], alpha)
     return output
