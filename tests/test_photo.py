@@ -68,6 +68,24 @@ def test_identifier_must_start_with_sighting_id_prefix(make_photo):
         )
 
 
+def test_identifier_equal_to_sighting_id_without_suffix_raises(make_photo):
+    with pytest.raises(ValueError, match="does not start with"):
+        make_photo(
+            identifier="Devin_2015-11-05",
+            sighting_id="Devin_2015-11-05",
+            image_path=Path("Devin/2015-11-05/Devin_2015-11-05.jpg"),
+        )
+
+
+def test_identifier_sharing_prefix_without_separator_raises(make_photo):
+    with pytest.raises(ValueError, match="does not start with"):
+        make_photo(
+            identifier="Devin_2015-11-05extra",
+            sighting_id="Devin_2015-11-05",
+            image_path=Path("Devin/2015-11-05/Devin_2015-11-05extra.jpg"),
+        )
+
+
 def test_sighting_id_must_start_with_elephant_name(make_photo):
     with pytest.raises(ValueError, match="Sighting id does not start"):
         make_photo(

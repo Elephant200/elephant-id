@@ -24,6 +24,11 @@ def test_sighting_id_must_match_name_and_date(make_sighting):
         make_sighting(sighting_id="Wrong_2015-11-05")
 
 
+def test_sighting_id_uses_zero_padded_iso_date(make_sighting):
+    s = make_sighting(sighting_date=date(2015, 1, 5))
+    assert s.sighting_id == "Devin_2015-01-05"
+
+
 @pytest.mark.parametrize(
     "field, value",
     [
