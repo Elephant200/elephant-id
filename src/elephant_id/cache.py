@@ -19,7 +19,7 @@ class CacheManager:
         cache_root: Path = Path(DEFAULT_CACHE_ROOT),
     ) -> None:
         """
-        Initialize the cache manager for the given namespace.
+        Initialize the JSON cache manager for the given namespace.
 
         Args:
             namespace: The namespace to cache the results in, eg. name of the model.
