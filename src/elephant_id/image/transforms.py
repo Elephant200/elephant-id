@@ -4,7 +4,7 @@ import numpy as np
 
 from elephant_id.image.bgr import BgrImage
 from elephant_id.image.boxes import clip_xyxy
-from elephant_id.image.masks import mask_bounds
+from elephant_id.image.masks import RleMask, decode_rle_mask, mask_bounds
 
 
 def apply_crop(
@@ -25,7 +25,7 @@ def apply_crop(
 
 def apply_mask(
     image: BgrImage,
-    mask: np.ndarray,
+    mask: np.ndarray | RleMask,
     background: tuple[int, int, int] = (0, 0, 0),
     crop: bool = False,
 ) -> BgrImage:
@@ -33,7 +33,7 @@ def apply_mask(
 
     Args:
         image: A BGR image to apply the mask to.
-        mask: A boolean mask to apply to the image.
+        mask: A boolean mask to apply to the image. Either a numpy array or a RleMask.
         background: The background color to use for the masked pixels. (Default: black)
         crop: Whether to crop the image to the mask's True-pixel bounds.
 
@@ -48,6 +48,10 @@ def apply_mask(
         raise ValueError(
             f"background must be three values in [0, 255]: {background}"
         )
+
+    if isinstance(mask, RleMask):
+        mask = decode_rle_mask(mask)
+
     bool_mask = mask.astype(bool)
     if bool_mask.shape != image.shape[:2]:
         raise ValueError(

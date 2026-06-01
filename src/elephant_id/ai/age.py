@@ -1,12 +1,11 @@
 from pathlib import Path
-from typing import Any
 
 from elephant_id.cache import CacheManager
 from elephant_id.constants import DEFAULT_CACHE_ROOT
 from elephant_id.dataset import Dataset
 from elephant_id.domain import Photo
 from elephant_id.image import BgrImage
-from elephant_id.image.masks import decode_rle_mask
+from elephant_id.image.masks import RleMask
 from elephant_id.image.transforms import apply_mask
 
 
@@ -40,14 +39,12 @@ class AgeService:
             cache_root=cache_root,
         )
 
-    def run(self, photo: Photo, body_rle_mask: dict[str, Any]) -> dict:
+    def run(self, photo: Photo, body_rle_mask: RleMask) -> dict:
         key = f"{photo.identifier}"
-
-        body_mask = decode_rle_mask(body_rle_mask)
 
         return self.cache_manager.get_or_compute(
             key=key,
             compute_fn=lambda: self.runner.run(
-                image=apply_mask(self.dataset.read_image(photo), body_mask, crop=True),
+                image=apply_mask(self.dataset.read_image(photo), body_rle_mask, crop=True),
             ),
         )

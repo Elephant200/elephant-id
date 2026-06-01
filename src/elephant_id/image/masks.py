@@ -1,12 +1,16 @@
 """COCO RLE mask decoding and mask geometry."""
 
-from typing import Any
+from typing import TypedDict
 
 import numpy as np
 from pycocotools import mask as coco_mask
 
 
-def decode_rle_mask(rle_mask: dict[str, Any]) -> np.ndarray:
+class RleMask(TypedDict):
+    size: list[int] # [height, width]
+    counts: str | bytes # COCO RLE, utf-8 encoded
+
+def decode_rle_mask(rle_mask: RleMask) -> np.ndarray:
     """Decode a COCO-style RLE mask into a 2D boolean array.
 
     Raises:
