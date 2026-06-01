@@ -4,15 +4,15 @@ from pathlib import Path
 
 @dataclass(frozen=True, slots=True)
 class Photo:
-    """
-    Metadata for one photo of an elephant.
-    """
+    """Metadata for one photo of an elephant."""
+
     identifier: str         # Unique identifier; consists of elephant name, sighting date, and sequential number separated by underscores. Does not include extension.
     image_path: Path        # Relative to dataset root
     elephant_name: str      # Unique elephant name
     sighting_id: str        # Unique sighting identifier; consists of elephant name and sighting date separated by underscore.
 
     def __post_init__(self) -> None:
+        """Validate the identity fields and image path at construction."""
         if not self.identifier:
             raise ValueError(f"Identifier is empty: {self.identifier}")
         if not self.elephant_name:
@@ -31,4 +31,5 @@ class Photo:
             raise ValueError(f"Sighting id does not start with elephant name: {self.sighting_id} does not start with {self.elephant_name}_")
 
     def __str__(self) -> str:
+        """Return a compact, identifier-based representation."""
         return f"Photo({self.identifier})"
