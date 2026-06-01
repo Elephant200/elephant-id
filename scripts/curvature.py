@@ -9,7 +9,7 @@ from PIL import Image
 
 from elephant_id.ai.sam3 import Sam3Service
 from elephant_id.dataset import Dataset
-from elephant_id.image_utils import decode_rle_mask
+from elephant_id.image.masks import decode_rle_mask
 from elephant_id.visualize import visualize_predictions
 
 PHOTO_ID = "Adam_2011-03-31_03"
