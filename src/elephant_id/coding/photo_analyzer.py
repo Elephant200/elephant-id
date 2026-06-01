@@ -58,13 +58,13 @@ class PhotoAnalyzer:
 
         trunks, ears, tusks, tails = [], [], [], []
         for pred in features_on_body:
-            if pred["class"] == "trunk":
+            if pred["class"].strip() == "elephant trunk":
                 trunks.append(pred)
-            elif pred["class"] == "ear":
+            elif pred["class"].strip() == "ear":
                 ears.append(pred)
-            elif pred["class"] == "tusk":
+            elif pred["class"].strip() == "tusk":
                 tusks.append(pred)
-            elif pred["class"] == "tail":
+            elif pred["class"].strip() == "tail":
                 tails.append(pred)
             else:
                 raise ValueError(f"Unknown class: {pred['class']}")
