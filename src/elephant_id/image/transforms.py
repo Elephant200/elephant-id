@@ -34,7 +34,7 @@ def apply_mask(
     Args:
         image: A BGR image to apply the mask to.
         mask: A boolean mask to apply to the image. Either a numpy array or a RleMask.
-        background: The background color to use for the masked pixels. (Default: black)
+        background: The background RGB color to use for the masked pixels. (Default: black)
         crop: Whether to crop the image to the mask's True-pixel bounds.
 
     Returns:
@@ -49,7 +49,7 @@ def apply_mask(
             f"background must be three values in [0, 255]: {background}"
         )
 
-    if isinstance(mask, RleMask):
+    if isinstance(mask, dict) and "size" in mask and "counts" in mask:
         mask = decode_rle_mask(mask)
 
     bool_mask = mask.astype(bool)
@@ -59,6 +59,7 @@ def apply_mask(
         )
 
     output = np.empty_like(image)
+    background = background[::-1] # BGR -> RGB
     output[:, :] = np.array(background, dtype=np.uint8)
     output[bool_mask] = image[bool_mask]
 
