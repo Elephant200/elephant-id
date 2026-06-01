@@ -59,7 +59,7 @@ def apply_mask(
         )
 
     output = np.empty_like(image)
-    background = background[::-1] # BGR -> RGB
+    background = background[::-1] # RGB -> BGR
     output[:, :] = np.array(background, dtype=np.uint8)
     output[bool_mask] = image[bool_mask]
 

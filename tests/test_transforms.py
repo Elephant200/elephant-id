@@ -39,7 +39,7 @@ def test_apply_mask_replaces_unmasked_pixels():
     image = np.full((1, 2, 3), (10, 20, 30), dtype=np.uint8)
     mask = np.array([[True, False]])
 
-    output = apply_mask(image, mask, background=(1, 2, 3), crop=False)
+    output = apply_mask(image, mask, background=(3, 2, 1), crop=False)
 
     assert output.shape == (1, 2, 3)
     assert tuple(output[0, 0]) == (10, 20, 30)
