@@ -43,9 +43,9 @@ class Sam3Runner:
 
     def __init__(
         self,
-        confidence_threshold: float = DEFAULT_SAM3_CONFIDENCE_THRESHOLD,
-        nms: bool = DEFAULT_SAM3_NMS,
-        nms_iou_threshold: float = DEFAULT_SAM3_NMS_IOU_THRESHOLD,
+        confidence_threshold: float,
+        nms: bool,
+        nms_iou_threshold: float,
     ) -> None:
         api_key = os.getenv("ROBOFLOW_API_KEY")
         if not api_key:
