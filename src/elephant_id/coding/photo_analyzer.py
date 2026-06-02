@@ -3,10 +3,16 @@ Module that computes features for an elephant in a given photo by running the SA
 """
 
 
-from pycocotools import mask as coco_mask
+from pathlib import Path
 
-from elephant_id.ai import AgeService, AnchorService, GenderService, Sam3Service
-from elephant_id.constants import MIN_FEATURE_BODY_OVERLAP
+from elephant_id.ai import (
+    AgeService,
+    AnchorService,
+    Detection,
+    GenderService,
+    Sam3Service,
+)
+from elephant_id.constants import DEFAULT_CACHE_ROOT, MIN_FEATURE_BODY_OVERLAP
 from elephant_id.dataset import Dataset
 from elephant_id.domain import Photo
 
@@ -18,62 +24,69 @@ class PhotoAnalyzer:
     combining the results.
     """
 
-    def __init__(self, dataset: Dataset) -> None:
+    def __init__(self, dataset: Dataset, cache_root: Path = Path(DEFAULT_CACHE_ROOT)) -> None:
         self.dataset = dataset
         self.sam3: Sam3Service = Sam3Service(
             dataset=dataset,
+            cache_root=cache_root,
         )
         self.anchor_model: AnchorService = AnchorService(
             dataset=dataset,
+            cache_root=cache_root,
         )
         self.gender_model: GenderService = GenderService(
             dataset=dataset,
+            cache_root=cache_root,
         )
         self.age_model: AgeService = AgeService(
             dataset=dataset,
+            cache_root=cache_root,
         )
 
-    def analyze(self, photo: Photo) -> dict:
-        sam3_body = self.sam3.run(photo, "body")
-        sam3_features = self.sam3.run(photo, "features")
+    def analyze(self, photo: Photo) -> dict | None:
+        body_detections = self.sam3.run(photo, "body")
+        feature_detections = self.sam3.run(photo, "features")
 
-        if len(sam3_body["predictions"]) == 0: # Nothing visible in the photo
+        if not body_detections: # Nothing visible in the photo
             return None
 
-        body_rle_mask = sam3_body["predictions"][0]["rle_mask"]
+        body = body_detections[0] # TODO: Choose by size; if two are similar size, flag for manual review
 
-        features_on_body = []
-        for pred in sam3_features["predictions"]:
-            feature_rle = pred["rle_mask"]
-            feature_area = float(coco_mask.area([feature_rle])[0])
+        features_on_body: list[Detection] = []
+        for feature in feature_detections:
+            feature_area = feature.area()
             if feature_area == 0.0:
                 continue
-            intersection = coco_mask.merge(
-                [feature_rle, body_rle_mask], intersect=True
-            )
-            overlap = float(coco_mask.area([intersection])[0]) / feature_area
+            # Fraction of the feature's mask that lies on the body (not IoU).
+            overlap = feature.intersection_area(body) / feature_area
             if overlap > MIN_FEATURE_BODY_OVERLAP:
-                features_on_body.append(pred)
+                features_on_body.append(feature)
 
         trunks, ears, tusks, tails = [], [], [], []
-        for pred in features_on_body:
-            if pred["class"].strip() == "elephant trunk":
-                trunks.append(pred)
-            elif pred["class"].strip() == "ear":
-                ears.append(pred)
-            elif pred["class"].strip() == "tusk":
-                tusks.append(pred)
-            elif pred["class"].strip() == "tail":
-                tails.append(pred)
+        for feature in features_on_body:
+            if feature.class_name == "elephant trunk":
+                trunks.append(feature)
+            elif feature.class_name == "ear":
+                ears.append(feature)
+            elif feature.class_name == "tusk":
+                tusks.append(feature)
+            elif feature.class_name == "tail":
+                tails.append(feature)
             else:
-                raise ValueError(f"Unknown class: {pred['class']}")
+                raise ValueError(f"Unknown class: {feature.class_name}")
 
         # TODO: Filter sam3 predictions to only include actually visible ears
+        if len(ears) > 2:
+            # TODO: flag for manual review
+            pass
+
+        if len(ears) == 2:
+            # Compare sizes; if one is much larger than the other, ignore the smaller one
+            pass
 
         anchor_predictions = []
         for ear in ears:
-            crop_xyxy = (ear["x1"], ear["y1"], ear["x2"], ear["y2"])
-            anchor_predictions.append(self.anchor_model.run(photo, crop_xyxy=crop_xyxy))
+            anchor_predictions.append(self.anchor_model.run(photo, crop_xyxy=ear.xyxy))
 
         # TODO: Run anchor model on each ear; remove bad results entirely
 
@@ -82,7 +95,7 @@ class PhotoAnalyzer:
         # TODO: Convert mask to contour and cut using anchor points
 
         # Run gender model on body with background removed
-        gender_results = self.gender_model.run(photo, body_rle_mask=body_rle_mask)
+        gender_results = self.gender_model.run(photo, body_rle_mask=body.rle_mask)
         bull_prob = gender_results["predictions"]["bull"]
         cow_prob = gender_results["predictions"]["cow"]
         if bull_prob > 0.6:
@@ -96,7 +109,7 @@ class PhotoAnalyzer:
             gender_conf = 0.5
 
         # Run age model on body with background removed
-        age_results = self.age_model.run(photo, body_rle_mask=body_rle_mask)
+        age_results = self.age_model.run(photo, body_rle_mask=body.rle_mask)
         age_confidence = age_results["predictions"]["confidence"]
         age_code = age_results["predictions"]["age"]
 
