@@ -116,13 +116,23 @@ def test_invalid_codes_raise(bad):
     {"a": 5.0},                        # float is not a valid age
 ])
 def test_invalid_construction_raises(kwargs):
-    base = dict(g="B", a=0, tr=False, tl=False)
+    base = dict(
+        g="B", a=0, tr=False, tl=False,
+        ert1=None, erh1=None, ert2=None, erh2=None,
+        elt1=None, elh1=None, elt2=None, elh2=None,
+        xr=None, xl=None, sr=None, sl=None, sb=None,
+    )
     with pytest.raises(ValueError):
         SeekCode(**(base | kwargs))
 
 
 def test_zero_sector_and_age_still_accepted():
-    code = SeekCode(g="B", a=0, tr=False, tl=False, ert1=0, elt1=0)
+    code = SeekCode(
+        g="B", a=0, tr=False, tl=False,
+        ert1=0, erh1=None, ert2=None, erh2=None,
+        elt1=0, elh1=None, elt2=None, elh2=None,
+        xr=None, xl=None, sr=None, sl=None, sb=None,
+    )
     assert code.a == 0
     assert code.ert1 == 0 and code.elt1 == 0
     assert str(code) == "B00T00E0___-0___X__S___"

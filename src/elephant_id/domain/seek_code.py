@@ -71,22 +71,22 @@ class SeekCode:
     tr: bool | None  # Whether the elephant has a right tusk.
     tl: bool | None  # Whether the elephant has a left tusk.
 
-    ert1: RightEarSector | None = None  # Sector of largest tear on the right ear.
-    erh1: RightEarSector | None = None  # Sector of largest hole on the right ear.
-    ert2: RightEarSector | None = None  # Sector of second largest tear on the right ear.
-    erh2: RightEarSector | None = None  # Sector of second largest hole on the right ear.
+    ert1: RightEarSector | None  # Sector of largest tear on the right ear.
+    erh1: RightEarSector | None  # Sector of largest hole on the right ear.
+    ert2: RightEarSector | None  # Sector of second largest tear on the right ear.
+    erh2: RightEarSector | None  # Sector of second largest hole on the right ear.
 
-    elt1: LeftEarSector | None = None  # Sector of largest tear on the left ear.
-    elh1: LeftEarSector | None = None  # Sector of largest hole on the left ear.
-    elt2: LeftEarSector | None = None  # Sector of second largest tear on the left ear.
-    elh2: LeftEarSector | None = None  # Sector of second largest hole on the left ear.
+    elt1: LeftEarSector | None  # Sector of largest tear on the left ear.
+    elh1: LeftEarSector | None  # Sector of largest hole on the left ear.
+    elt2: LeftEarSector | None  # Sector of second largest tear on the left ear.
+    elh2: LeftEarSector | None  # Sector of second largest hole on the left ear.
 
-    xr: bool | None = None  # Whether the elephant has a right extreme feature.
-    xl: bool | None = None  # Whether the elephant has a left extreme feature.
+    xr: bool | None  # Whether the elephant has a right extreme feature.
+    xl: bool | None  # Whether the elephant has a left extreme feature.
 
-    sr: bool | None = None  # Whether the elephant has a special feature on the right ear.
-    sl: bool | None = None  # Whether the elephant has a special feature on the left ear.
-    sb: bool | None = None  # Whether the elephant has a special feature on the body.
+    sr: bool | None  # Whether the elephant has a special feature on the right ear.
+    sl: bool | None  # Whether the elephant has a special feature on the left ear.
+    sb: bool | None  # Whether the elephant has a special feature on the body.
 
     def __post_init__(self) -> None:
         """Validate field invariants at construction time.
