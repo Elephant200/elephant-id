@@ -14,7 +14,7 @@ def decode_rle_mask(rle_mask: RleMask) -> np.ndarray:
     """Decode a COCO-style RLE mask into a 2D boolean array.
 
     Raises:
-        ValueError: If the mask is missing ``size``/``counts``, or either field
+        ValueError: If ``size``/``counts`` is missing, or a field
             has the wrong type or shape.
     """
     if "size" not in rle_mask or "counts" not in rle_mask:

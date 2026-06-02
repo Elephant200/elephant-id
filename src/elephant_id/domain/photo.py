@@ -12,7 +12,7 @@ class Photo:
     sighting_id: str        # Unique sighting identifier; consists of elephant name and sighting date separated by underscore.
 
     def __post_init__(self) -> None:
-        """Validate the identity fields and image path at construction."""
+        """Validate identity fields and image path."""
         if not self.identifier:
             raise ValueError(f"Identifier is empty: {self.identifier}")
         if not self.elephant_name:

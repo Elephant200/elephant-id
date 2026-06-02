@@ -18,11 +18,10 @@ logger = logging.getLogger(__name__)
 
 
 def _build_sam3_service(dataset: Dataset):
-    """Construct the Sam3Service if dependencies and API key are available.
+    """Construct Sam3Service when dependencies and API key are ready.
 
-    Returns None when the optional ``local`` extras (inference-sdk) are not
-    installed or ``ROBOFLOW_API_KEY`` is unset. The SAM3 route surfaces a 503
-    in that case.
+    Returns None when optional ``local`` extras are not installed or
+    ``ROBOFLOW_API_KEY`` is unset. The SAM3 route surfaces a 503 then.
     """
     try:
         from dotenv import load_dotenv
@@ -51,8 +50,8 @@ def _build_sam3_service(dataset: Dataset):
 def create_app() -> Flask:
     """Build a fully configured Flask app.
 
-    Performs startup work (CSV load + one-shot starred reconciliation) so the
-    returned app is ready to serve. Raises if the dataset CSV is missing.
+    Performs startup work so the returned app is ready to serve. Raises
+    if the dataset CSV is missing.
     """
     logging.basicConfig(
         level=os.environ.get("LOG_LEVEL", "INFO"),

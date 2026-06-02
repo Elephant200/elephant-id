@@ -1,7 +1,8 @@
 """
 AI model services for the Elephant ID system.
 
-These services provide a unified interface for running AI models and caching the results.
+These services provide a unified interface for running AI models and
+caching their results.
 
 The services are:
 - AgeService: for running the age regression CNN

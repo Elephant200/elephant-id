@@ -1,6 +1,4 @@
-"""
-Module that computes features for an elephant in a given photo by running the SAM3, Anchor, Gender, and Age models.
-"""
+"""Compute per-photo elephant features from AI model outputs."""
 
 
 from pathlib import Path
@@ -18,11 +16,7 @@ from elephant_id.domain import Photo
 
 
 class PhotoAnalyzer:
-    """
-    Service that analyzes a photo to compute features, such as the ear masks, gender, and age,
-    for an elephant in the photo by running the SAM3, Anchor, Gender, and Age models and
-    combining the results.
-    """
+    """Analyze a photo by combining model outputs."""
 
     def __init__(self, dataset: Dataset, cache_root: Path = Path(DEFAULT_CACHE_ROOT)) -> None:
         self.dataset = dataset

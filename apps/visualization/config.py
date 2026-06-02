@@ -1,7 +1,7 @@
 """Paths and constants for the sighting reviewer.
 
-Single source of truth for filesystem layout. Nothing here performs I/O at
-import time.
+Single source of truth for filesystem layout. Nothing here performs I/O
+at import time.
 """
 
 from __future__ import annotations

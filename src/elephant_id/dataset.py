@@ -24,7 +24,7 @@ class Dataset:
         Args:
             dataset_root: Directory containing the image files.
             metadata_path: Path to the metadata CSV.
-            image_cache_size: Max number of decoded images to keep in memory.
+            image_cache_size: Maximum decoded images to keep in memory.
         """
         self.dataset_root: Path = dataset_root
         if not self.dataset_root.exists():
@@ -62,14 +62,7 @@ class Dataset:
         return candidate
 
     def get_photo(self, identifier: str) -> Photo:
-        """Look up a single photo by identifier.
-
-        Args:
-            identifier: The photo's identifier (filename stem).
-
-        Returns:
-            The matching Photo.
-        """
+        """Look up a single photo by identifier."""
         self._ensure_loaded()
 
         rows = self.metadata[self.metadata["identifier"] == identifier]
@@ -99,15 +92,7 @@ class Dataset:
             )
 
     def get_sighting(self, elephant_name: str, sighting_date: date) -> Sighting:
-        """Look up the sighting for an elephant on a given date.
-
-        Args:
-            elephant_name: The elephant's name.
-            sighting_date: The date of the sighting.
-
-        Returns:
-            The Sighting containing every photo for that elephant on that date.
-        """
+        """Look up the sighting for an elephant on a given date."""
         self._ensure_loaded()
 
         mask = (
@@ -138,11 +123,7 @@ class Dataset:
         )
 
     def iter_sightings(self) -> Iterator[Sighting]:
-        """Yield one Sighting per unique (elephant, date), in CSV row order.
-
-        Yields:
-            Each Sighting in the dataset.
-        """
+        """Yield sightings in first-seen CSV row order."""
         self._ensure_loaded()
         for (name, sighting_date), rows in self.metadata.groupby(
             ["name", "date"], sort=False
@@ -198,7 +179,7 @@ class Dataset:
             A fresh copy of the decoded image.
 
         Raises:
-            FileNotFoundError: If the image is missing or cannot be decoded.
+            FileNotFoundError: If the image is missing or undecodable.
         """
         key = f"{photo.identifier}"
 

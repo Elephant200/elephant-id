@@ -1,9 +1,9 @@
-"""
-Visualization utilities for model predictions. This file will be deprecated soon.
+"""Visualization utilities for model predictions.
+This file will be deprecated soon.
 
-Functions take and return a :data:`BgrImage`. ``color`` arguments and the
-palette are authored in **RGB** (the human-facing convention) and flipped to BGR
-only at the point they are written into the image buffer.
+Functions take and return a :data:`BgrImage`. ``color`` arguments and
+the palette are authored in RGB and flipped to BGR only when written
+into the image buffer.
 """
 
 from typing import Any
@@ -22,12 +22,10 @@ def _blend_bgr(
     bgr: tuple[int, int, int],
     alpha: float,
 ) -> None:
-    """Alpha-blend a solid BGR color into image where mask is True, in place.
+    """Alpha-blend a solid BGR color into image, in place.
 
     Raises:
-        ValueError: If the alpha is not in the interval [0, 1], the mask shape
-        does not match the image shape, or the bgr color is not three values in
-        [0, 255].
+        ValueError: If alpha, mask shape, or BGR color is invalid.
     """
     if not 0 <= alpha <= 1:
         raise ValueError("alpha must be between 0 and 1")
@@ -46,7 +44,7 @@ def apply_alpha_mask(
     color: tuple[int, int, int] = (255, 0, 0),
     alpha: float = 0.35,
 ) -> BgrImage:
-    """Return a copy of image with a semi-transparent overlay where mask is True.
+    """Return a copy with a semi-transparent overlay where mask is True.
 
     Args:
         image: A BGR image to overlay the mask on.

@@ -14,7 +14,10 @@ from elephant_id.image.transforms import apply_crop
 
 
 def detection_from_prediction(prediction: dict[str, Any]) -> Detection:
-    """Build a :class:`Detection` from a raw ultralytics keypoint prediction entry."""
+    """
+    Build a :class:`Detection` from a raw ultralytics keypoint
+    prediction.
+    """
     box = prediction["box"]
     keypoints = prediction["keypoints"]
     return Detection(
@@ -27,17 +30,14 @@ def detection_from_prediction(prediction: dict[str, Any]) -> Detection:
 
 
 class AnchorRunner:
-    """
-    **Local-only** runner for the anchor keypoint detection YOLO26 model. Uses ultralytics.
-    """
+    """Local-only runner for the anchor keypoint YOLO26 model."""
 
     def __init__(self) -> None:
         # Initialize ultralytics model and configure for inference
         self.model = YOLO("model_weights/anchor_extraction_yolo26/weights.pt")
 
     def run(self, image: BgrImage) -> list[Detection]:
-        """
-        Runs the anchor keypoint detection YOLO26 model on the given image.
+        """Run anchor keypoint detection on an image.
 
         Args:
             image: The image to run the model on.
@@ -52,9 +52,7 @@ class AnchorRunner:
 
 
 class AnchorService:
-    """
-    Service for running the anchor keypoint detection YOLO26 model and caching the results.
-    """
+    """Run the anchor keypoint detection YOLO26 model with caching."""
 
     def __init__(
         self,
@@ -73,16 +71,16 @@ class AnchorService:
         photo: Photo,
         crop_xyxy: tuple[float, float, float, float]
     ) -> list[Detection]:
-        """
-        Runs the anchor keypoint detection YOLO26 model on the given photo and ear crop coordinates.
-        Should never be rerun for the same photo. Must be run on an image of a single ear.
+        """Run anchor keypoint detection on a photo crop.
+
+        Should never be rerun for the same photo. Must run on one ear.
 
         Args:
             photo: The photo to run the model on.
-            crop_xyxy: The crop to apply to the image, in xyxy (top left, bottom right) coordinates.
+            crop_xyxy: Ear crop in xyxy coordinates.
 
         Returns:
-            The anchor keypoint detections, in absolute image coordinates.
+            Anchor keypoint detections in absolute image coordinates.
         """
         # ``apply_crop`` crops at the floored, non-negative pixel origin (see
         # ``clip_xyxy``). Cached detections are relative to that integer origin,
@@ -106,7 +104,7 @@ class AnchorService:
     def _compute(
         self, photo: Photo, crop_xyxy: tuple[float, float, float, float]
     ) -> dict:
-        """Run the model on the ear crop and build the cache envelope."""
+        """Run the model on the ear crop and build the cache entry."""
         detections = self.runner.run(
             image=apply_crop(self.dataset.read_image(photo), crop_xyxy)
         )

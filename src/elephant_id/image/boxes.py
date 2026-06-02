@@ -2,10 +2,10 @@
 
 Coordinate convention (repo-wide): geometry is stored and computed in
 **float** (boxes, keypoints, contours, anything rotated/interpolated).
-Convert to **int** only at the raster boundary -- indexing a pixel array or
-calling an OpenCV draw function -- and do it through :func:`clip_xyxy` (boxes)
-or :func:`elephant_id.image.masks.mask_bounds` (masks) rather than ad-hoc
-``int()`` casts. Boxes are half-open: ``x2``/``y2`` are exclusive.
+Convert to **int** only at the raster boundary, such as indexing a
+pixel array or calling an OpenCV draw function. Do it through
+:func:`clip_xyxy` for boxes or mask helpers rather than ad-hoc casts.
+Boxes are half-open: ``x2``/``y2`` are exclusive.
 """
 
 
@@ -37,8 +37,8 @@ def clip_xyxy(
 ) -> tuple[int, int, int, int]:
     """Clip an xyxy box to image bounds.
 
-    Coordinates use the half-open convention: ``x2``/``y2`` are exclusive, so a
-    valid box has ``x2 > x1`` and ``y2 > y1`` and must overlap the image.
+    Coordinates use the half-open convention: ``x2``/``y2`` are
+    exclusive. A valid box has positive area and overlaps the image.
 
     Args:
         x1: Left edge of the box (inclusive).
@@ -49,12 +49,12 @@ def clip_xyxy(
         image_height: Height of the image in pixels.
 
     Returns:
-        The integer-valued box clipped to the image, expanded outward to whole
-        pixels. The result always has positive area.
+        The integer box clipped to the image, expanded outward to
+        whole pixels. The result always has positive area.
 
     Raises:
-        ValueError: If the image has non-positive size, the box has non-positive
-            area, or the box does not overlap the image.
+        ValueError: If the image has non-positive size, the box has
+            non-positive area, or the box does not overlap the image.
     """
     if image_width <= 0 or image_height <= 0:
         raise ValueError(

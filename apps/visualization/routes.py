@@ -1,8 +1,8 @@
 """HTTP routes for the sighting reviewer.
 
-All endpoints return JSON except for thumbnail endpoints (binary images) and
-``/`` (the HTML shell). The frontend in ``static/app.js`` is the sole client;
-field names here form the API contract with it.
+All endpoints return JSON except thumbnails and ``/``. The frontend in
+``static/app.js`` is the sole client; field names are part of that API
+contract.
 """
 
 from __future__ import annotations
@@ -170,10 +170,10 @@ def create_blueprint(state: ReviewerState, *, dataset: Dataset, sam3=None) -> Bl
     # -------- full-resolution image + SAM3 ----------------------------
 
     def _resolve_image_request() -> tuple[Path, str]:
-        """Resolve an image source from query/body to ``(abs_path, identifier)``.
+        """Resolve the requested image to ``(abs_path, identifier)``.
 
-        ``identifier`` is the Photo identifier (filename stem with the priority
-        prefix stripped for samples files).
+        ``identifier`` is the Photo identifier. For samples files, the
+        priority prefix is stripped from the filename stem.
         """
         rel = (request.args.get("p") or "").strip()
         samples_rel = (request.args.get("samplesRel") or "").strip()

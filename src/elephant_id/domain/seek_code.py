@@ -1,4 +1,4 @@
-"""Parsing and formatting of SEEK ear codes for elephant identification."""
+"""Parse and format SEEK ear codes."""
 
 import re
 from dataclasses import dataclass
@@ -37,29 +37,30 @@ _SEEK_RE = re.compile(
 class SeekCode:
     """Structured representation of a SEEK code.
 
-    A SEEK code is a fixed-width string that encodes coarse, human-observable
-    features of an elephant. The grammar accepted by :meth:`from_str` is::
+    A SEEK code is a fixed-width string that encodes coarse,
+    human-observable elephant features. The grammar is::
 
-        <g> <aa> T<r><l> E<rt1><rh1><rt2><rh2>-<lt1><lh1><lt2><lh2> X<r><l> S<r><l><b>
+        <g> <aa> T<r><l> E<rt1><rh1><rt2><rh2>-<lt1><lh1>
+        <lt2><lh2> X<r><l> S<r><l><b>
 
-    The spaces above are only for readability; an actual code is the components
-    concatenated with no separators (the literal markers ``T``/``E``/``X``/``S``
-    and the ``-`` between the ear groups are required). Where each component is:
+    Spaces above are only for readability; an actual code has no
+    separators. Literal markers ``T``/``E``/``X``/``S`` and the ear
+    group ``-`` are required. Components:
 
-    * ``<g>``        — gender: ``B`` (bull), ``C`` (cow), or ``_`` (unknown).
-    * ``<aa>``       — birth-year (last two digits), or ``__`` if unknown.
-    * ``T<r><l>``  — right/left tusk presence: ``0``, ``1``, or ``_``.
-    * ``E<rt1><rh1><rt2><rh2>-<lt1><lh1><lt2><lh2>``       — four right-ear sectors: largest tear, largest hole,
-                     second-largest tear, second-largest hole. Each is one of
-                     ``0/7/8/9`` (right-ear sector ids) or ``_``.
-    * ``-<lt1><lh1><lt2><lh2>``       — four left-ear sectors with the same meaning, using the
-                     left-ear sector ids ``0/3/4/5`` or ``_``.
-    * ``X<r><l>``  — right/left "extreme feature" flags.
-    * ``S<r><l><b>`` — special features on right ear / left ear / body.
+    * ``<g>`` - gender: ``B`` (bull), ``C`` (cow), or ``_``.
+    * ``<aa>`` - birth-year last two digits, or ``__``.
+    * ``T<r><l>`` - right/left tusk presence: ``0``, ``1``, or ``_``.
+    * ``E<rt1><rh1><rt2><rh2>`` - right-ear largest tear, largest
+      hole, second-largest tear, and second-largest hole. Each is one of
+      ``0/7/8/9`` or ``_``.
+    * ``-<lt1><lh1><lt2><lh2>`` - left-ear sectors with the same
+      meaning, using ``0/3/4/5`` or ``_``.
+    * ``X<r><l>`` - right/left "extreme feature" flags.
+    * ``S<r><l><b>`` - special features on right ear / left ear / body.
 
-    Instances are immutable, hashable, and use ``__slots__``, so they can
+    Instances are immutable, hashable, and use ``__slots__``, so they
     be held in large quantities and used as dict keys / set members.
-    Use :meth:`from_str` to parse a code and ``str(code)`` to format one;
+    Use :meth:`from_str` to parse and ``str(code)`` to format one;
     round-tripping is exact.
 
     All fields are ``None`` when unknown.

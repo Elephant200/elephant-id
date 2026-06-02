@@ -27,7 +27,7 @@ from elephant_id.image.boxes import center_to_xyxy
 
 
 def detection_from_prediction(prediction: dict[str, Any]) -> Detection:
-    """Build a :class:`Detection` from a raw Roboflow SAM3 prediction (center-format bbox)."""
+    """Build a :class:`Detection` from a raw Roboflow SAM3 prediction."""
     xyxy = center_to_xyxy(
         float(prediction["x"]),
         float(prediction["y"]),
@@ -56,9 +56,7 @@ def _resolve_preset(preset: str) -> tuple[str, ...]:
 
 
 class Sam3Runner:
-    """
-    **Local-only** runner for the Facebook SAM3 segmentation model. Uses the Roboflow Inference SDK.
-    """
+    """Local-only runner for the Facebook SAM3 segmentation model."""
 
     def __init__(
         self,
@@ -86,7 +84,7 @@ class Sam3Runner:
 
         Args:
             image: BGR image to run SAM3 on
-            query_preset: Name of a SAM3 query preset (see SAM3_QUERY_PRESETS)
+            query_preset: Name of a SAM3 query preset.
 
         Returns:
             The detections found in the image.
@@ -114,9 +112,7 @@ class Sam3Runner:
 
 
 class Sam3Service:
-    """
-    Service for running the Facebook SAM3 segmentation model and caching the results.
-    """
+    """Run the Facebook SAM3 segmentation model with caching."""
 
     def __init__(
         self,
@@ -141,7 +137,7 @@ class Sam3Service:
 
         Args:
             photo: Photo object to run SAM3 for
-            query_preset: Name of a SAM3 query preset (see SAM3_QUERY_PRESETS)
+            query_preset: Name of a SAM3 query preset.
 
         Returns:
             The detections found in the photo.
@@ -162,7 +158,7 @@ class Sam3Service:
         return [Detection.from_dict(d) for d in envelope["detections"]]
 
     def _compute(self, photo: Photo, query_preset: str) -> dict:
-        """Run the model and build the cache envelope (metadata + detections)."""
+        """Run the model and build the cache envelope."""
         detections = self.runner.run(
             image=self.dataset.read_image(photo), query_preset=query_preset
         )

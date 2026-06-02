@@ -62,7 +62,7 @@ class Detection:
         return decode_rle_mask(self.rle_mask)
 
     def intersection_area(self, other: "Detection") -> float:
-        """Overlap area with another detection (RLE mask, box, or both, as available on each)."""
+        """Return overlap area with another detection."""
         if self.rle_mask is not None and other.rle_mask is not None:
             return float(coco_mask.area([coco_mask.merge([self.rle_mask, other.rle_mask], intersect=True)])[0])
 
@@ -77,11 +77,11 @@ class Detection:
         return float(np.sum(mask[y1:y2, x1:x2]))
 
     def union_area(self, other: "Detection") -> float:
-        """Combined coverage of this detection and another (RLE mask, box, or both, as available on each)."""
+        """Return combined coverage of this detection and another."""
         return self.area() + other.area() - self.intersection_area(other)
 
     def iou(self, other: "Detection") -> float:
-        """Intersection-over-union with another detection (RLE mask, box, or both, as available on each)."""
+        """Return intersection-over-union with another detection."""
         return self.intersection_area(other) / self.union_area(other)
 
     # --- transforms (return new instances) ---

@@ -1,7 +1,8 @@
 """Filesystem path safety and resolution helpers.
 
-All public helpers raise :class:`ValueError` for malformed or out-of-tree
-input. They never silently return ``None`` for path traversal attempts.
+All public helpers raise :class:`ValueError` for malformed or
+out-of-tree input. They never silently return ``None`` for traversal
+attempts.
 """
 
 from __future__ import annotations
@@ -24,7 +25,7 @@ def is_image(path: Path) -> bool:
 
 
 def parse_sighting_folder_name(folder_name: str) -> tuple[str, str] | None:
-    """Return ``(name, date)`` for ``Name_YYYY-MM-DD[_dupN]`` folders."""
+    """Return ``(name, date)`` for saved sighting folder names."""
     m = SAVED_SIGHTING_DIR_RE.match(folder_name)
     if not m:
         return None
@@ -39,12 +40,12 @@ def _normalize_rel(rel: str) -> str:
 
 
 def safe_coded_rel_image(rel: str) -> str:
-    """Validate a rel path under ``coded/`` and return its normalized form."""
+    """Validate and normalize a relative image path under ``coded/``."""
     return _normalize_rel(rel)
 
 
 def safe_saved_sighting_dir(rel: str) -> Path:
-    """Resolve ``sightings/<folder>`` under ``samples/`` to an absolute path."""
+    """Resolve a saved sighting folder under ``samples/``."""
     rel = _normalize_rel(rel)
     if not rel.startswith("sightings/"):
         raise ValueError("Invalid sighting path")
@@ -54,7 +55,7 @@ def safe_saved_sighting_dir(rel: str) -> Path:
 
 
 def safe_saved_sighting_file(rel: str) -> Path:
-    """Resolve ``sightings/<folder>/<file>`` under ``samples/`` to a real image."""
+    """Resolve a saved sighting image under ``samples/``."""
     rel = _normalize_rel(rel)
     if not rel.startswith("sightings/"):
         raise ValueError("Invalid path")

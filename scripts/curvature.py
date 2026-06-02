@@ -334,10 +334,10 @@ def plot_integral_curvature(
     radii: np.ndarray,
     marker_step: int,
 ) -> None:
-    """Plot multi-scale curvature and the Gaussian-weighted mean on one axes.
+    """Plot multi-scale curvature and Gaussian-weighted mean.
 
     Args:
-        curvature: Per-radius curvature values, shape ``(len(radii), num_points)``.
+        curvature: Per-radius values, shaped ``(len(radii), n)``.
         mean_curvature: Mean curvature values, shape ``(num_points)``.
         radii: Physical radius per scale (for legend only).
         marker_step: Subsample markers along the contour index.

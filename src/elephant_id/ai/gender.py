@@ -10,9 +10,7 @@ from elephant_id.image.transforms import apply_mask
 
 
 class GenderRunner:
-    """
-    **Local-only** runner for the gender classification CNN. Uses pytorch.
-    """
+    """Local-only runner for the gender classification CNN."""
 
     def __init__(self) -> None:
         # Initialize pytorch model and configure for inference
@@ -23,9 +21,7 @@ class GenderRunner:
         ...
 
 class GenderService:
-    """
-    Service for running the gender classification CNN and caching the results.
-    """
+    """Run the gender classification CNN with caching."""
 
     def __init__(
         self,

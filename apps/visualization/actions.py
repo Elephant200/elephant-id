@@ -1,8 +1,8 @@
 """Typed undo-stack actions.
 
-Each action records exactly the information needed to undo a single user-
-initiated mutation. Action objects are immutable; the dispatcher in
-``state.py`` pattern-matches on the concrete subtype.
+Each action records the data needed to undo one user-initiated
+mutation. Action objects are immutable; the dispatcher in ``state.py``
+pattern-matches on the concrete subtype.
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class PriorityToggle:
-    """A priority star was toggled on a single image within a sighting folder."""
+    """A priority star was toggled on one image in a sighting folder."""
 
     key: SightingKey
     queue_index: int

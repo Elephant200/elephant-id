@@ -2,12 +2,12 @@
 
 The reviewer "starring" model has two related stores:
 
-1. ``samples/sightings/<Name_YYYY-MM-DD>/`` mirrors a sighting folder copied
-   from ``coded/``. Files prefixed with ``** `` are *priority* (starred)
-   copies — that prefix is the ground truth for star state.
-2. ``samples/starred/`` is a denormalized flat directory of priority files
-   (named without the prefix) for external tooling. It is kept eventually
-   consistent with (1) by :func:`sync_starred_for_basenames`.
+1. ``samples/sightings/<Name_YYYY-MM-DD>/`` mirrors a sighting copied
+   from ``coded/``. Files prefixed with ``** `` are priority copies;
+   that prefix is the ground truth for star state.
+2. ``samples/starred/`` is a flat directory of priority files for
+   external tooling. It is kept consistent with (1) by
+   :func:`sync_starred_for_basenames`.
 
 If two sightings hold a priority file with the same plain basename, the
 lexicographically smallest sighting folder name wins.
@@ -59,7 +59,7 @@ def plain_basename(filename: str) -> str:
 # ---------------------------------------------------------------------------
 
 def find_sighting_folder(name: str, date: str) -> Path | None:
-    """Return the saved sighting folder matching ``(name, date)`` if any."""
+    """Return the saved sighting folder for ``(name, date)``, if any."""
     if not SAMPLES_SIGHTINGS_ROOT.is_dir():
         return None
     try:
@@ -97,7 +97,11 @@ def _copy_sighting_to_samples(name: str, date: str) -> Path:
 
 
 def ensure_sighting_folder(name: str, date: str) -> tuple[Path, bool]:
-    """Get or create the saved sighting folder; returns ``(path, created)``."""
+    """Get or create a saved sighting folder.
+
+    Returns:
+        ``(path, created)``.
+    """
     existing = find_sighting_folder(name, date)
     if existing is not None:
         return existing, False
@@ -114,14 +118,13 @@ def toggle_priority(
     sighting_date: str,
     plain_bn: str,
 ) -> tuple[str, str] | None:
-    """Toggle ``plain_bn`` between plain and priority within ``folder_path``.
+    """Toggle ``plain_bn`` within ``folder_path``.
 
     If neither variant currently exists in ``folder_path`` we copy from
     ``coded/`` and immediately mark it priority.
 
     Returns ``(from_basename, to_basename)`` describing the change, or
-    ``None`` if nothing changed (e.g. both variants already present, or the
-    source file is missing).
+    ``None`` if nothing changed.
     """
     plain = folder_path / plain_bn
     pri = folder_path / priority_basename(plain_bn)
@@ -150,7 +153,7 @@ def toggle_priority(
 # ---------------------------------------------------------------------------
 
 def first_priority_or_any_image(folder: Path) -> Path | None:
-    """Return the first priority image, else the first plain image, else ``None``."""
+    """Return first priority image, first plain image, or None."""
     try:
         files = sorted(p for p in folder.iterdir() if p.is_file() and is_image(p))
     except OSError:
@@ -179,7 +182,7 @@ def remove_sighting_folder(folder: Path) -> None:
 
 
 def restore_sighting_folder(saved_rel: str) -> None:
-    """Re-copy ``coded/<name>/<date>`` back into a removed saved sighting slot."""
+    """Restore a removed saved sighting from ``coded/<name>/<date>``."""
     saved_rel = (saved_rel or "").replace("\\", "/").strip().lstrip("/")
     folder_name = Path(saved_rel).name
     parsed = parse_sighting_folder_name(folder_name)
@@ -197,7 +200,7 @@ def restore_sighting_folder(saved_rel: str) -> None:
 
 
 def prune_empty_parents(start: Path, stop: Path) -> None:
-    """Remove empty parent directories from ``start`` up to (excluding) ``stop``."""
+    """Remove empty parents from ``start`` up to ``stop``."""
     p = start
     while True:
         if p == stop or not p.exists():
@@ -214,7 +217,7 @@ def prune_empty_parents(start: Path, stop: Path) -> None:
 # ---------------------------------------------------------------------------
 
 def _resolve_winner(plain_bn: str) -> Path | None:
-    """Find the priority file under ``sightings/`` that should mirror to starred/."""
+    """Find the priority file under ``sightings/`` for ``starred/``."""
     if not SAMPLES_SIGHTINGS_ROOT.is_dir():
         return None
     try:
@@ -237,8 +240,8 @@ def sync_starred_for_basenames(plain_basenames: Iterable[str]) -> None:
     """Re-mirror the starred/ entries for each given plain basename.
 
     For each basename, we look for the winning priority file and copy it
-    (creating ``starred/`` as needed). If no winner exists, the starred copy
-    is removed. Quiet on filesystem errors — they are logged.
+    (creating ``starred/`` as needed). If no winner exists, the starred
+    copy is removed. Quiet on filesystem errors; they are logged.
     """
     seen: set[str] = set()
     try:
@@ -268,8 +271,8 @@ def sync_starred_for_basenames(plain_basenames: Iterable[str]) -> None:
 def reconcile_all_starred() -> None:
     """Full sweep: rebuild ``starred/`` from scratch.
 
-    Invoked once at startup. Cheaper paths (incremental sync) handle steady
-    state. Quiet on filesystem errors.
+    Invoked once at startup. Incremental sync handles steady state.
+    Quiet on filesystem errors.
     """
     try:
         STARRED_SAMPLES_ROOT.mkdir(parents=True, exist_ok=True)

@@ -33,16 +33,16 @@ def apply_mask(
 
     Args:
         image: A BGR image to apply the mask to.
-        mask: A boolean mask to apply to the image. Either a numpy array or a RleMask.
-        background: The background RGB color to use for the masked pixels. (Default: black)
+        mask: Boolean numpy array or RLE mask to apply.
+        background: RGB color for masked pixels. Defaults to black.
         crop: Whether to crop the image to the mask's True-pixel bounds.
 
     Returns:
         A new BGR image with the mask applied.
 
     Raises:
-        ValueError: If the background is not three values in ``[0, 255]``, the
-            mask shape does not match the image, or cropping an empty mask.
+        ValueError: If the background is invalid, the mask shape does
+            not match the image, or cropping an empty mask.
     """
     if len(background) != 3 or any(not 0 <= c <= 255 for c in background):
         raise ValueError(

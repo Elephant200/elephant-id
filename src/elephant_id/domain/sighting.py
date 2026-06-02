@@ -14,7 +14,7 @@ class Sighting:
     photos: tuple[Photo, ...]
 
     def __post_init__(self) -> None:
-        """Validate identity, date, and per-photo consistency at construction."""
+        """Validate identity, date, and per-photo consistency."""
         if not self.elephant_name:
             raise ValueError(f"Elephant name is empty: {self.elephant_name}")
         if not self.sighting_date:

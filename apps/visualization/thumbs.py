@@ -43,7 +43,7 @@ def _render_thumb(src: Path, size: int) -> io.BytesIO:
 
 
 def coded_thumb(rel: str, size: int) -> io.BytesIO:
-    """Return an in-memory JPEG thumbnail for an image under ``coded/``."""
+    """Return an in-memory JPEG thumbnail for a ``coded/`` image."""
     rel = safe_coded_rel_image(rel)
     size = _clamp_size(size)
     src = CODED_ROOT / rel
@@ -53,6 +53,6 @@ def coded_thumb(rel: str, size: int) -> io.BytesIO:
 
 
 def absolute_thumb(src_abs: Path, size: int) -> io.BytesIO:
-    """Return an in-memory JPEG thumbnail for an absolute source path."""
+    """Return an in-memory JPEG thumbnail for an absolute path."""
     size = _clamp_size(size)
     return _render_thumb(src_abs, size)

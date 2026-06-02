@@ -1,6 +1,4 @@
-"""
-General-purpose cache manager for AI models.
-"""
+"""General-purpose cache manager for AI models."""
 
 import json
 import os
@@ -12,20 +10,17 @@ from elephant_id.constants import DEFAULT_CACHE_ROOT
 
 
 class CacheManager:
-    """
-    Class for caching results of AI models as json
-    """
+    """Cache AI model results as JSON envelopes."""
     def __init__(
         self,
         namespace: str,
         cache_root: Path = Path(DEFAULT_CACHE_ROOT),
     ) -> None:
-        """
-        Initialize the JSON cache manager for the given namespace.
+        """Initialize the JSON cache manager for a namespace.
 
         Args:
-            namespace: The namespace to cache the results in, eg. name of the model.
-            cache_root: The root cache directory. Defaults to DEFAULT_CACHE_ROOT.
+            namespace: Cache namespace, such as the model name.
+            cache_root: Root cache directory. Defaults to project cache.
         """
         self.namespace: str = namespace
         cache_root_resolved = cache_root.resolve()
@@ -35,11 +30,10 @@ class CacheManager:
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
     def path_for(self, key: str) -> Path:
-        """
-        Return the path for the given key.
+        """Return the path for the given key.
 
         Raises:
-            ValueError: If the key would resolve outside the namespace directory.
+            ValueError: If the key would escape the namespace directory.
         """
         path = self.cache_dir / f"{key}.json"
         if not path.resolve().is_relative_to(self.cache_dir.resolve()):
@@ -47,21 +41,18 @@ class CacheManager:
         return path
 
     def exists(self, key: str) -> bool:
-        """
-        Check if the given key is cached
-        """
+        """Return whether the given key is cached."""
         return self.path_for(key).exists()
 
     def load(self, key: str) -> dict:
-        """
-        Load the results for the given key
-        """
+        """Load the results for the given key."""
         with open(self.path_for(key)) as f:
             return json.load(f)
 
     def save(self, key: str, value: dict) -> None:
-        """
-        Save the results for the given key. Uses a temporary file to avoid
+        """Save the results for the given key.
+
+        Uses a temporary file to avoid
         partially written files.
         """
         path = self.path_for(key)
@@ -80,14 +71,11 @@ class CacheManager:
             raise
 
     def delete(self, key: str) -> None:
-        """
-        Delete the results for the given key
-        """
+        """Delete the results for the given key."""
         self.path_for(key).unlink()
 
     def get_or_compute(self, key: str, compute_fn: Callable[[], dict]) -> dict:
-        """
-        Get the results for the given key, computing them if they are not cached.
+        """Get the results for a key, computing them on cache miss.
 
         Args:
             key: The key to get the results for

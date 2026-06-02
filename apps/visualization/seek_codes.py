@@ -1,12 +1,12 @@
 """Parsing helpers for SEEK codes.
 
-A SEEK code is a compact string describing an elephant. The leading character
-may be a digit (legacy prefix) which we strip. After that:
+A SEEK code is a compact string describing an elephant. The leading
+character may be a legacy digit, which we strip. After that:
 
 * index 0:        sex (``B`` bull / ``C`` cow)
 * indices 3..6:   ``T<left><right>`` for tusks (``0``/``1``)
-* trailing tail:  ``X<xl><xr>S<sl><sm><sr>`` (``0``/``1``) for extreme/special
-                  features. Other characters in those slots are wildcards.
+* trailing tail:  ``X<xl><xr>S<sl><sm><sr>`` for extreme/special
+                  features; other characters there are wildcards.
 """
 
 from __future__ import annotations
@@ -54,9 +54,8 @@ def slot_01(ch: str) -> int | None:
 def explicit_non_normal(code_raw: str) -> bool:
     """True iff SEEK explicitly flags non-normal.
 
-    A code is non-normal when there is a ``0`` in either T slot, or a ``1`` in
-    any X/S slot. Any character other than ASCII ``0``/``1`` in those positions
-    is treated as a wildcard (normal).
+    A code is non-normal when either T slot is ``0``, or any X/S slot is
+    ``1``. Other characters there are treated as unknown.
     """
     s = strip_leading_digit((code_raw or "").strip())
     if not s:

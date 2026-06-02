@@ -1,8 +1,7 @@
 """
 Data models for the SEEK elephant ID system.
 
-These models are used to represent the data in the system and are used to
-validate and normalize the data.
+These models represent system data and validate dataset structure.
 """
 
 from .photo import Photo
