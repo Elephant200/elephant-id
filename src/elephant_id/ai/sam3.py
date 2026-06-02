@@ -47,9 +47,12 @@ class Sam3Runner:
         nms: bool = DEFAULT_SAM3_NMS,
         nms_iou_threshold: float = DEFAULT_SAM3_NMS_IOU_THRESHOLD,
     ) -> None:
+        api_key = os.getenv("ROBOFLOW_API_KEY")
+        if not api_key:
+            raise ValueError("ROBOFLOW_API_KEY is not set")
         self.client = InferenceHTTPClient(
             api_url=ROBOFLOW_API_URL,
-            api_key=os.getenv("ROBOFLOW_API_KEY"),
+            api_key=api_key,
         )
 
         self.workspace_name: str = ROBOFLOW_WORKSPACE
