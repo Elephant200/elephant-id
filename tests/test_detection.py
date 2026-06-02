@@ -39,22 +39,22 @@ def test_area_uses_mask_pixel_count_when_masked(rle_from_mask):
     assert _masked(mask, rle_from_mask).area() == 3.0
 
 
-def test_mask_property_decodes_rle(rle_from_mask):
+def test_mask_decodes_rle(rle_from_mask):
     mask = np.array([[True, False], [False, True]])
 
-    decoded = _masked(mask, rle_from_mask).mask
+    decoded = _masked(mask, rle_from_mask).mask()
 
     assert decoded.dtype == bool
     assert decoded.tolist() == mask.tolist()
 
 
-def test_mask_property_without_rle_raises():
+def test_mask_without_rle_raises():
     detection = Detection(
         xyxy=(0.0, 0.0, 1.0, 1.0), class_name="ear", class_id=2, confidence=0.9
     )
 
     with pytest.raises(ValueError, match="no mask"):
-        _ = detection.mask
+        detection.mask()
 
 
 def test_intersection_union_and_iou(rle_from_mask):

@@ -54,9 +54,8 @@ class Detection:
             return float(coco_mask.area([self.rle_mask])[0])
         return (self.x2 - self.x1) * (self.y2 - self.y1)
 
-    @property
     def mask(self) -> np.ndarray:
-        """Decoded boolean mask. Recomputed each access."""
+        """Decoded boolean mask. Recomputed on each call."""
         if self.rle_mask is None:
             raise ValueError("Detection has no mask")
         return decode_rle_mask(self.rle_mask)
