@@ -1,6 +1,7 @@
 import numpy as np
 import pytest
 
+from elephant_id.ai.detection import Detection
 from elephant_id.visualize import (
     apply_alpha_mask,
     draw_rle_mask_overlay,
@@ -38,16 +39,13 @@ def test_apply_alpha_mask_rejects_invalid_alpha():
 def test_visualize_predictions_rejects_invalid_mask_alpha(rle_from_mask, alpha):
     image = np.full((4, 4, 3), (10, 20, 30), dtype=np.uint8)
     predictions = [
-        {
-            "class": "ear",
-            "class_id": 1,
-            "confidence": 0.5,
-            "x1": 0,
-            "y1": 0,
-            "x2": 2,
-            "y2": 2,
-            "rle_mask": rle_from_mask(np.ones((4, 4), dtype=bool)),
-        }
+        Detection(
+            xyxy=(0, 0, 2, 2),
+            class_name="ear",
+            class_id=1,
+            confidence=0.5,
+            rle_mask=rle_from_mask(np.ones((4, 4), dtype=bool)),
+        )
     ]
 
     with pytest.raises(ValueError, match="alpha"):
@@ -65,15 +63,12 @@ def test_apply_alpha_mask_rejects_shape_mismatch():
 def test_visualize_predictions_draws_box_and_preserves_shape():
     image = np.full((12, 12, 3), (10, 20, 30), dtype=np.uint8)
     predictions = [
-        {
-            "class": "ear",
-            "class_id": 1,
-            "confidence": 0.75,
-            "x1": 1,
-            "y1": 1,
-            "x2": 8,
-            "y2": 8,
-        }
+        Detection(
+            xyxy=(1, 1, 8, 8),
+            class_name="ear",
+            class_id=1,
+            confidence=0.75,
+        )
     ]
 
     output = visualize_predictions(image, predictions)
@@ -86,16 +81,13 @@ def test_visualize_predictions_draws_box_and_preserves_shape():
 def test_visualize_predictions_resizes_rle_mask_to_image(rle_from_mask):
     image = np.full((4, 4, 3), (10, 20, 30), dtype=np.uint8)
     predictions = [
-        {
-            "class": "tail",
-            "class_id": 2,
-            "confidence": 0.25,
-            "x1": 1,
-            "y1": 1,
-            "x2": 2,
-            "y2": 2,
-            "rle_mask": rle_from_mask(np.array([[True]])),
-        }
+        Detection(
+            xyxy=(1, 1, 2, 2),
+            class_name="tail",
+            class_id=2,
+            confidence=0.25,
+            rle_mask=rle_from_mask(np.array([[True]])),
+        )
     ]
 
     output = visualize_predictions(image, predictions, mask_alpha=1.0)
@@ -110,16 +102,13 @@ def test_visualize_predictions_uses_full_size_mask_without_resize(rle_from_mask)
     mask = np.zeros((4, 4), dtype=bool)
     mask[0, 0] = True
     predictions = [
-        {
-            "class": "tail",
-            "class_id": 2,
-            "confidence": 0.25,
-            "x1": 1,
-            "y1": 1,
-            "x2": 2,
-            "y2": 2,
-            "rle_mask": rle_from_mask(mask),
-        }
+        Detection(
+            xyxy=(1, 1, 2, 2),
+            class_name="tail",
+            class_id=2,
+            confidence=0.25,
+            rle_mask=rle_from_mask(mask),
+        )
     ]
 
     output = visualize_predictions(image, predictions, mask_alpha=1.0)
@@ -128,14 +117,16 @@ def test_visualize_predictions_uses_full_size_mask_without_resize(rle_from_mask)
     assert tuple(output[0, 0]) == (44, 160, 44)
 
 
-def test_visualize_predictions_fills_defaults_for_minimal_prediction():
+def test_visualize_predictions_renders_maskless_detection():
     image = np.full((12, 12, 3), (10, 20, 30), dtype=np.uint8)
 
-    # Only the bounding box keys are present; class/class_id/confidence default.
-    output = visualize_predictions(image, [{"x1": 1, "y1": 1, "x2": 8, "y2": 8}])
+    detection = Detection(
+        xyxy=(1, 1, 8, 8), class_name="ear", class_id=0, confidence=0.5
+    )
+    output = visualize_predictions(image, [detection])
 
     assert output.shape == (12, 12, 3)
-    # class_id defaults to 0 -> palette orange RGB (255,127,14) -> BGR (14,127,255).
+    # class_id 0 -> palette orange RGB (255,127,14) -> BGR (14,127,255).
     assert tuple(output[1, 1]) == (14, 127, 255)
 
 
@@ -156,25 +147,19 @@ def test_visualize_predictions_mixes_masked_and_unmasked_detections(rle_from_mas
     masked_pixel = np.zeros((8, 8), dtype=bool)
     masked_pixel[0, 0] = True
     predictions = [
-        {
-            "class": "ear",
-            "class_id": 2,  # green (44, 160, 44), symmetric under BGR flip
-            "confidence": 0.9,
-            "x1": 0,
-            "y1": 0,
-            "x2": 4,
-            "y2": 4,
-            "rle_mask": rle_from_mask(masked_pixel),
-        },
-        {
-            "class": "tusk",
-            "class_id": 3,
-            "confidence": 0.5,
-            "x1": 5,
-            "y1": 5,
-            "x2": 7,
-            "y2": 7,
-        },
+        Detection(
+            xyxy=(0, 0, 4, 4),
+            class_name="ear",
+            class_id=2,  # green (44, 160, 44), symmetric under BGR flip
+            confidence=0.9,
+            rle_mask=rle_from_mask(masked_pixel),
+        ),
+        Detection(
+            xyxy=(5, 5, 7, 7),
+            class_name="tusk",
+            class_id=3,
+            confidence=0.5,
+        ),
     ]
 
     output = visualize_predictions(image, predictions, mask_alpha=1.0)

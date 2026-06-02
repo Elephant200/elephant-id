@@ -4,25 +4,6 @@ Visualization utilities for model predictions. This file will be deprecated soon
 Functions take and return a :data:`BgrImage`. ``color`` arguments and the
 palette are authored in **RGB** (the human-facing convention) and flipped to BGR
 only at the point they are written into the image buffer.
-
-SAM3 prediction schema (per detection), as returned by ``Sam3Runner.run`` /
-``Sam3Service.run`` inside ``response["predictions"]`` (a flat list).
-
-    {
-        "x1": float,           # bbox left edge in pixels
-        "y1": float,           # bbox top edge in pixels
-        "x2": float,           # bbox right edge in pixels
-        "y2": float,           # bbox bottom edge in pixels
-        "confidence": float,
-        "class_id": int,
-        "class": str,          # may have leading whitespace (e.g. " ear")
-        "detection_id": str,
-        "parent_id": str,
-        "rle_mask": {
-            "size": [H, W],    # COCO convention: [height, width]
-            "counts": str,     # COCO RLE, utf-8 encoded
-        },
-    }
 """
 
 from typing import Any
@@ -30,8 +11,8 @@ from typing import Any
 import cv2
 import numpy as np
 
+from elephant_id.ai.detection import Detection
 from elephant_id.image import BgrImage
-from elephant_id.image.boxes import clip_xyxy
 from elephant_id.image.masks import decode_rle_mask
 
 
@@ -116,15 +97,14 @@ _PALETTE: tuple[tuple[int, int, int], ...] = (
 
 def visualize_predictions(
     image: BgrImage,
-    predictions: list[dict[str, Any]],
+    detections: list[Detection],
     mask_alpha: float = 0.35,
 ) -> BgrImage:
-    """Draw SAM3 detections (RLE masks + boxes + labels) on an image.
+    """Draw detections (RLE masks + boxes + labels) on an image.
 
     Args:
         image: Source BGR image.
-        predictions: List of detection dicts following the schema in this
-            module's docstring
+        detections: Detections to render (see :class:`Detection`).
         mask_alpha: Blend factor for the mask overlay in [0, 1].
 
     Returns:
@@ -133,15 +113,14 @@ def visualize_predictions(
     output = image.copy()
     image_height, image_width = output.shape[:2]
 
-    for prediction in predictions:
-        class_id = int(prediction.get("class_id", 0))
-        class_name = str(prediction.get("class", "unknown")).strip()
-        confidence = float(prediction.get("confidence", 0.0))
+    for detection in detections:
+        class_id = detection.class_id
+        class_name = detection.class_name
+        confidence = detection.confidence
         bgr = _PALETTE[class_id % len(_PALETTE)][::-1]  # RGB palette -> BGR
 
-        rle_mask = prediction.get("rle_mask")
-        if rle_mask:
-            mask = decode_rle_mask(rle_mask)
+        if detection.rle_mask is not None:
+            mask = decode_rle_mask(detection.rle_mask)
             if mask.shape != (image_height, image_width):
                 mask = cv2.resize(
                     mask.astype(np.uint8),
@@ -150,16 +129,15 @@ def visualize_predictions(
                 ).astype(bool)
             _blend_bgr(output, mask, bgr, mask_alpha)
 
-        x1, y1, x2, y2 = clip_xyxy(
-            prediction["x1"],
-            prediction["y1"],
-            prediction["x2"],
-            prediction["y2"],
-            image_width,
-            image_height,
-        )
-        # clip_xyxy returns half-open coords (x2/y2 exclusive); cv2.rectangle
-        # treats its second corner as inclusive, so step back one pixel.
+        if detection.keypoints:
+            for keypoint in detection.keypoints:
+                x, y = int(keypoint[0]), int(keypoint[1])
+                cv2.circle(output, (x, y), 5, bgr, -1)
+
+        x1, y1, x2, y2 = detection.clip(image_width, image_height).xyxy
+        x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
+        # Detection boxes are half-open (x2/y2 exclusive); cv2.rectangle treats
+        # its second corner as inclusive, so step back one pixel.
         cv2.rectangle(output, (x1, y1), (x2 - 1, y2 - 1), bgr, 2)
 
         label = f"{class_name} {confidence:.2f}"

@@ -45,7 +45,7 @@ def _build_sam3_service(dataset: Dataset):
         )
         return None
 
-    return Sam3Service(api_key=api_key, dataset=dataset)
+    return Sam3Service(dataset=dataset)
 
 
 def create_app() -> Flask:

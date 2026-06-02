@@ -246,14 +246,14 @@ def create_blueprint(state: ReviewerState, *, dataset: Dataset, sam3=None) -> Bl
             )
 
         try:
-            result = sam3.run(photo, preset)
+            detections = sam3.run(photo, preset)
         except Exception as e:
             logger.exception("SAM3 run failed for %s", identifier)
             return jsonify({"error": f"SAM3 failed: {e}"}), 500
 
         try:
             image = dataset.read_image(photo)
-            overlay = visualize_predictions(image, result.get("predictions", []))
+            overlay = visualize_predictions(image, detections)
             _ok, encoded = cv2.imencode(".jpg", overlay, [cv2.IMWRITE_JPEG_QUALITY, 88])
         except Exception as e:
             logger.exception("Failed to render SAM3 overlay for %s", identifier)
