@@ -79,7 +79,7 @@ class Detection:
         Keypoints are left untouched.
         """
         return dataclasses.replace(
-            self, xyxy=clip_xyxy(*self.xyxy, image_width, image_height)
+            self, xyxy=tuple(float(coord) for coord in clip_xyxy(*self.xyxy, image_width, image_height))
         )
 
     # --- adapters from raw model output ---
