@@ -13,8 +13,8 @@ Run Python commands from the repo root with `uv`; do not activate `.venv` or
 call `python` directly.
 
 ```bash
-uv run pytest -v
-uv run pytest tests/test_boxes.py -v
+uv run pytest
+uv run pytest tests/test_boxes.py
 uv run ruff check .
 uv run python -m apps.visualization
 uv sync
