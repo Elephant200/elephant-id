@@ -1,4 +1,12 @@
-"""Bounding-box coordinate utilities."""
+"""Bounding-box coordinate utilities.
+
+Coordinate convention (repo-wide): geometry is stored and computed in
+**float** (boxes, keypoints, contours, anything rotated/interpolated).
+Convert to **int** only at the raster boundary -- indexing a pixel array or
+calling an OpenCV draw function -- and do it through :func:`clip_xyxy` (boxes)
+or :func:`elephant_id.image.masks.mask_bounds` (masks) rather than ad-hoc
+``int()`` casts. Boxes are half-open: ``x2``/``y2`` are exclusive.
+"""
 
 
 from math import ceil, floor, isfinite

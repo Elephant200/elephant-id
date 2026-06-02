@@ -70,11 +70,13 @@ class AnchorService:
         Returns:
             The anchor keypoint detections, in absolute image coordinates.
         """
-        key = (
-            f"{photo.identifier}__"
-            f"crop_{int(crop_xyxy[0])}_{int(crop_xyxy[1])}_"
-            f"{int(crop_xyxy[2])}_{int(crop_xyxy[3])}"
-        )
+        # ``apply_crop`` crops at the floored, non-negative pixel origin (see
+        # ``clip_xyxy``). Cached detections are relative to that integer origin,
+        # so we derive it once and reuse it for both the cache key and the
+        # translate-back, keeping the float crop request and the integer pixel
+        # grid consistent.
+        ox1, oy1, ox2, oy2 = (int(coord) for coord in crop_xyxy)
+        key = f"{photo.identifier}__crop_{ox1}_{oy1}_{ox2}_{oy2}"
 
         envelope = self.cache_manager.get_or_compute(
             key=key,
@@ -83,7 +85,7 @@ class AnchorService:
 
         # Cached detections are crop-relative; translate to absolute image coords.
         return [
-            Detection.from_dict(d).translate(crop_xyxy[0], crop_xyxy[1])
+            Detection.from_dict(d).translate(float(ox1), float(oy1))
             for d in envelope["detections"]
         ]
 
