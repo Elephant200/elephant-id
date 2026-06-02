@@ -4,10 +4,32 @@ from pathlib import Path
 import pytest
 
 from elephant_id.ai.detection import Detection
-from elephant_id.ai.sam3 import Sam3Runner, Sam3Service
+from elephant_id.ai.sam3 import Sam3Runner, Sam3Service, detection_from_prediction
 from elephant_id.constants import SAM3_QUERY_PRESETS
 
 _SAMPLE_RESPONSE = Path(__file__).resolve().parents[1] / "docs" / "sam3_sample_response.json"
+
+
+def test_detection_from_prediction_converts_center_box_and_strips_class():
+    detection = detection_from_prediction(
+        {
+            "class": " ear",  # leading whitespace from SAM3
+            "class_id": 2,
+            "confidence": 0.75,
+            "x": 100.0,
+            "y": 200.0,
+            "width": 20.0,
+            "height": 40.0,
+            "rle_mask": {"size": [4, 4], "counts": "abc"},
+        }
+    )
+
+    assert detection.xyxy == (90.0, 180.0, 110.0, 220.0)
+    assert detection.class_name == "ear"
+    assert detection.class_id == 2
+    assert detection.confidence == 0.75
+    assert detection.rle_mask == {"size": [4, 4], "counts": "abc"}
+    assert detection.keypoints == ()
 
 
 class _RecordingDataset:

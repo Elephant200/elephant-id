@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from typing import Any
 
 from ultralytics import YOLO
 
@@ -10,6 +11,19 @@ from elephant_id.dataset import Dataset
 from elephant_id.domain import Photo
 from elephant_id.image import BgrImage
 from elephant_id.image.transforms import apply_crop
+
+
+def detection_from_prediction(prediction: dict[str, Any]) -> Detection:
+    """Build a :class:`Detection` from a raw ultralytics keypoint prediction entry."""
+    box = prediction["box"]
+    keypoints = prediction["keypoints"]
+    return Detection(
+        xyxy=(box["x1"], box["y1"], box["x2"], box["y2"]),
+        class_name=str(prediction["name"]).strip(),
+        class_id=int(prediction["class"]),
+        confidence=float(prediction["confidence"]),
+        keypoints=tuple(zip(keypoints["x"], keypoints["y"], strict=True)),
+    )
 
 
 class AnchorRunner:
@@ -34,7 +48,7 @@ class AnchorRunner:
         results = self.model.predict(source=image, device="mps", conf=0.25)
 
         predictions = json.loads(results[0].to_json(decimals=1))
-        return [Detection.from_anchor(prediction) for prediction in predictions]
+        return [detection_from_prediction(prediction) for prediction in predictions]
 
 
 class AnchorService:

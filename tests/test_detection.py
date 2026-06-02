@@ -14,43 +14,6 @@ def _masked(mask: np.ndarray, rle_from_mask) -> Detection:
     )
 
 
-def test_from_sam3_converts_center_box_and_strips_class():
-    detection = Detection.from_sam3(
-        {
-            "class": " ear",  # leading whitespace from SAM3
-            "class_id": 2,
-            "confidence": 0.75,
-            "x": 100.0,
-            "y": 200.0,
-            "width": 20.0,
-            "height": 40.0,
-            "rle_mask": {"size": [4, 4], "counts": "abc"},
-        }
-    )
-
-    assert detection.xyxy == (90.0, 180.0, 110.0, 220.0)
-    assert detection.class_name == "ear"
-    assert detection.class_id == 2
-    assert detection.confidence == 0.75
-    assert detection.rle_mask == {"size": [4, 4], "counts": "abc"}
-    assert detection.keypoints == ()
-
-
-def test_from_anchor_reads_box_and_pairs_keypoints():
-    detection = Detection.from_anchor(
-        {
-            "name": "anchor",
-            "class": 0,
-            "confidence": 0.5,
-            "box": {"x1": 1.0, "y1": 2.0, "x2": 3.0, "y2": 4.0},
-            "keypoints": {"x": [5.0, 7.0], "y": [6.0, 8.0]},
-        }
-    )
-
-    assert detection.xyxy == (1.0, 2.0, 3.0, 4.0)
-    assert detection.keypoints == ((5.0, 6.0), (7.0, 8.0))
-
-
 def test_area_uses_box_when_unmasked():
     detection = Detection(
         xyxy=(0.0, 0.0, 4.0, 3.0), class_name="ear", class_id=2, confidence=0.9

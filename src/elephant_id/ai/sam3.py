@@ -4,6 +4,7 @@ Module wrapping the SAM3 Roboflow workflow.
 
 import os
 from pathlib import Path
+from typing import Any
 
 from inference_sdk import InferenceHTTPClient
 
@@ -22,6 +23,24 @@ from elephant_id.constants import (
 from elephant_id.dataset import Dataset
 from elephant_id.domain import Photo
 from elephant_id.image import BgrImage
+from elephant_id.image.boxes import center_to_xyxy
+
+
+def detection_from_prediction(prediction: dict[str, Any]) -> Detection:
+    """Build a :class:`Detection` from a raw Roboflow SAM3 prediction (center-format bbox)."""
+    xyxy = center_to_xyxy(
+        float(prediction["x"]),
+        float(prediction["y"]),
+        float(prediction["width"]),
+        float(prediction["height"]),
+    )
+    return Detection(
+        xyxy=xyxy,
+        class_name=str(prediction["class"]).strip(),  # SAM3 can emit leading whitespace
+        class_id=int(prediction["class_id"]),
+        confidence=float(prediction["confidence"]),
+        rle_mask=prediction.get("rle_mask"),
+    )
 
 
 def _resolve_preset(preset: str) -> tuple[str, ...]:
@@ -89,7 +108,7 @@ class Sam3Runner:
             raise ValueError(f"Unexpected response from SAM3: {response}")
 
         return [
-            Detection.from_sam3(prediction)
+            detection_from_prediction(prediction)
             for prediction in response[0]["predictions"]["predictions"]
         ]
 

@@ -7,7 +7,7 @@ from typing import Any
 import numpy as np
 from pycocotools import mask as coco_mask
 
-from elephant_id.image.boxes import center_to_xyxy, clip_xyxy
+from elephant_id.image.boxes import clip_xyxy
 from elephant_id.image.masks import RleMask, decode_rle_mask
 
 
@@ -80,37 +80,6 @@ class Detection:
         """
         return dataclasses.replace(
             self, xyxy=tuple(float(coord) for coord in clip_xyxy(*self.xyxy, image_width, image_height))
-        )
-
-    # --- adapters from raw model output ---
-    @classmethod
-    def from_sam3(cls, prediction: dict[str, Any]) -> "Detection":
-        """Build from a raw Roboflow SAM3 prediction (center-format bbox)."""
-        xyxy = center_to_xyxy(
-            float(prediction["x"]),
-            float(prediction["y"]),
-            float(prediction["width"]),
-            float(prediction["height"]),
-        )
-        return cls(
-            xyxy=xyxy,
-            class_name=str(prediction["class"]).strip(),  # SAM3 can emit leading whitespace
-            class_id=int(prediction["class_id"]),
-            confidence=float(prediction["confidence"]),
-            rle_mask=prediction.get("rle_mask"),
-        )
-
-    @classmethod
-    def from_anchor(cls, prediction: dict[str, Any]) -> "Detection":
-        """Build from a raw ultralytics keypoint prediction entry."""
-        box = prediction["box"]
-        keypoints = prediction["keypoints"]
-        return cls(
-            xyxy=(box["x1"], box["y1"], box["x2"], box["y2"]),
-            class_name=str(prediction["name"]).strip(),
-            class_id=int(prediction["class"]),
-            confidence=float(prediction["confidence"]),
-            keypoints=tuple(zip(keypoints["x"], keypoints["y"], strict=True)),
         )
 
     # --- cache serialization ---

@@ -1,8 +1,23 @@
 from pathlib import Path
 
-from elephant_id.ai.anchor import AnchorService
+from elephant_id.ai.anchor import AnchorService, detection_from_prediction
 from elephant_id.ai.detection import Detection
 from elephant_id.domain import Photo
+
+
+def test_detection_from_prediction_reads_box_and_pairs_keypoints():
+    detection = detection_from_prediction(
+        {
+            "name": "anchor",
+            "class": 0,
+            "confidence": 0.5,
+            "box": {"x1": 1.0, "y1": 2.0, "x2": 3.0, "y2": 4.0},
+            "keypoints": {"x": [5.0, 7.0], "y": [6.0, 8.0]},
+        }
+    )
+
+    assert detection.xyxy == (1.0, 2.0, 3.0, 4.0)
+    assert detection.keypoints == ((5.0, 6.0), (7.0, 8.0))
 
 
 class _RecordingCache:
