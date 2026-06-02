@@ -4,6 +4,10 @@ import pytest
 from elephant_id.ai.detection import Detection
 
 
+def _box(xyxy: tuple[float, float, float, float]) -> Detection:
+    return Detection(xyxy=xyxy, class_name="ear", class_id=2, confidence=0.9)
+
+
 def _masked(mask: np.ndarray, rle_from_mask) -> Detection:
     return Detection(
         xyxy=(0.0, 0.0, float(mask.shape[1]), float(mask.shape[0])),
@@ -73,12 +77,41 @@ def test_iou_of_disjoint_masks_is_zero(rle_from_mask):
     assert a.iou(b) == 0.0
 
 
-def test_intersection_requires_both_masks(rle_from_mask):
-    a = _masked(np.array([[True]]), rle_from_mask)
-    b = Detection(xyxy=(0.0, 0.0, 1.0, 1.0), class_name="ear", class_id=2, confidence=0.9)
+def test_intersection_union_and_iou_boxes_only():
+    a = _box((0.0, 0.0, 2.0, 2.0))
+    b = _box((1.0, 1.0, 3.0, 3.0))
 
-    with pytest.raises(ValueError, match="need a mask"):
-        a.intersection_area(b)
+    assert a.intersection_area(b) == 1.0
+    assert a.union_area(b) == 7.0
+    assert a.iou(b) == pytest.approx(1 / 7)
+
+
+def test_iou_of_disjoint_boxes_is_zero():
+    a = _box((0.0, 0.0, 1.0, 1.0))
+    b = _box((2.0, 0.0, 3.0, 1.0))
+
+    assert a.intersection_area(b) == 0.0
+    assert a.iou(b) == 0.0
+
+
+def test_intersection_union_and_iou_mask_with_box(rle_from_mask):
+    mask = np.array([[True, True], [False, False]])
+    masked = _masked(mask, rle_from_mask)
+    box = _box((0.0, 0.0, 1.0, 1.0))
+
+    assert masked.intersection_area(box) == 1.0
+    assert box.intersection_area(masked) == 1.0
+    assert masked.union_area(box) == 2.0
+    assert masked.iou(box) == pytest.approx(0.5)
+
+
+def test_intersection_mask_with_box_counts_pixels_in_overlap(rle_from_mask):
+    mask = np.array([[True, True], [False, False]])
+    masked = _masked(mask, rle_from_mask)
+    box = _box((0.0, 0.0, 2.0, 1.0))
+
+    assert masked.intersection_area(box) == 2.0
+    assert box.intersection_area(masked) == 2.0
 
 
 def test_translate_shifts_box_and_keypoints_returning_new_instance():
