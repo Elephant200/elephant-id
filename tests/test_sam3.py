@@ -3,35 +3,11 @@ from pathlib import Path
 
 import pytest
 
-from elephant_id.ai.sam3 import Sam3Runner, Sam3Service, _prediction_center_to_xyxy
+from elephant_id.ai.detection import Detection
+from elephant_id.ai.sam3 import Sam3Runner, Sam3Service
 from elephant_id.constants import SAM3_QUERY_PRESETS
 
 _SAMPLE_RESPONSE = Path(__file__).resolve().parents[1] / "docs" / "sam3_sample_response.json"
-
-
-def test_prediction_center_to_xyxy_preserves_non_bbox_fields():
-    prediction = {
-        "class": "elephant",
-        "class_id": 0,
-        "confidence": 0.75,
-        "x": 1072.5,
-        "y": 1319.5,
-        "width": 315.0,
-        "height": 357.0,
-    }
-
-    converted = _prediction_center_to_xyxy(prediction)
-
-    assert converted == {
-        "class": "elephant",
-        "class_id": 0,
-        "confidence": 0.75,
-        "x1": 915.0,
-        "y1": 1141.0,
-        "x2": 1230.0,
-        "y2": 1498.0,
-    }
-    assert prediction["x"] == 1072.5
 
 
 class _RecordingDataset:
@@ -53,7 +29,7 @@ class _RecordingRunner:
 
     def run(self, image, query_preset):
         self.calls.append((image, query_preset))
-        return {"predictions": []}
+        return []
 
 
 class _RecordingCache:
@@ -75,11 +51,44 @@ def test_sam3_service_uses_preset_cache_and_reads_photo(make_photo):
 
     result = service.run(photo, "body")
 
-    assert result == {"predictions": []}
+    assert result == []
     assert cache.key == "Adam_2011-03-31_02__conf-0.50__nms-True__iou-0.20"
     assert service.dataset.read_photos == [photo]
     assert len(service.runner.calls) == 1
     assert service.runner.calls[0][1] == "body"
+
+
+def test_sam3_service_returns_detections_from_cached_envelope(make_photo):
+    detection = Detection(
+        xyxy=(1.0, 2.0, 3.0, 4.0), class_name="ear", class_id=2, confidence=0.8
+    )
+
+    class _CannedCache:
+        def get_or_compute(self, key, compute_fn):
+            return {"detections": [detection.to_dict()]}
+
+    service = Sam3Service.__new__(Sam3Service)
+    service.runner = _RecordingRunner()
+    service.dataset = _RecordingDataset()
+    service.cache_managers = {"features": _CannedCache()}
+
+    result = service.run(make_photo(), "features")
+
+    assert result == [detection]
+
+
+def test_sam3_service_compute_builds_envelope(make_photo):
+    service = Sam3Service.__new__(Sam3Service)
+    service.runner = _RecordingRunner()
+    service.dataset = _RecordingDataset()
+
+    envelope = service._compute(make_photo(), "features")
+
+    assert envelope["queries"] == list(SAM3_QUERY_PRESETS["features"])
+    assert envelope["confidence_threshold"] == 0.5
+    assert envelope["nms"] is True
+    assert envelope["nms_iou_threshold"] == 0.2
+    assert envelope["detections"] == []
 
 
 def test_sam3_service_rejects_unknown_query_preset(make_photo):
@@ -113,30 +122,25 @@ def _runner(response) -> Sam3Runner:
     return runner
 
 
-def test_sam3_runner_parses_sample_response_and_converts_bbox():
+def test_sam3_runner_parses_sample_response_into_detections():
     response = json.loads(_SAMPLE_RESPONSE.read_text())
     runner = _runner(response)
 
-    result = runner.run(image=object(), query_preset="features")
+    detections = runner.run(image=object(), query_preset="features")
 
-    assert result["queries"] == list(SAM3_QUERY_PRESETS["features"])
-    assert result["confidence_threshold"] == 0.5
-    assert result["nms"] is True
-    assert result["nms_iou_threshold"] == 0.2
-
-    preds = result["predictions"]
-    assert len(preds) == 3
-
+    assert len(detections) == 3
     # First detection: center (x=1194.5, y=686), size (w=345, h=392).
-    first = preds[0]
-    assert first["x1"] == 1194.5 - 345 / 2
-    assert first["y1"] == 686 - 392 / 2
-    assert first["x2"] == 1194.5 + 345 / 2
-    assert first["y2"] == 686 + 392 / 2
-    # Center keys are dropped; non-bbox fields are preserved.
-    assert "x" not in first and "width" not in first
-    assert first["class"] == "trunk"
-    assert first["rle_mask"]["size"] == [1080, 1920]
+    first = detections[0]
+    assert first.xyxy == (
+        1194.5 - 345 / 2,
+        686 - 392 / 2,
+        1194.5 + 345 / 2,
+        686 + 392 / 2,
+    )
+    assert first.class_name == "trunk"
+    assert first.rle_mask["size"] == [1080, 1920]
+    # Class names are normalized (the sample emits " ear" with a leading space).
+    assert detections[1].class_name == "ear"
 
 
 def test_sam3_runner_passes_preset_queries_and_params_to_client():

@@ -3,6 +3,7 @@ from pathlib import Path
 
 from ultralytics import YOLO
 
+from elephant_id.ai.detection import Detection
 from elephant_id.cache import CacheManager
 from elephant_id.constants import DEFAULT_CACHE_ROOT
 from elephant_id.dataset import Dataset
@@ -20,7 +21,7 @@ class AnchorRunner:
         # Initialize ultralytics model and configure for inference
         self.model = YOLO("model_weights/anchor_extraction_yolo26/weights.pt")
 
-    def run(self, image: BgrImage) -> dict:
+    def run(self, image: BgrImage) -> list[Detection]:
         """
         Runs the anchor keypoint detection YOLO26 model on the given image.
 
@@ -28,33 +29,13 @@ class AnchorRunner:
             image: The image to run the model on.
 
         Returns:
-            A dictionary containing the anchor keypoint detection results.
+            The anchor keypoint detections found in the image.
         """
         results = self.model.predict(source=image, device="mps", conf=0.25)
 
-        # Only return first result
         predictions = json.loads(results[0].to_json(decimals=1))
+        return [Detection.from_anchor(prediction) for prediction in predictions]
 
-        normalized_predictions = []
-        for pred in predictions:
-            normalized_pred = {}
-            normalized_pred["confidence"] = pred["confidence"]
-            normalized_pred["class_id"] = pred["class"]
-            normalized_pred["class"] = pred["name"]
-            normalized_pred["x1"] = pred["box"]["x1"]
-            normalized_pred["y1"] = pred["box"]["y1"]
-            normalized_pred["x2"] = pred["box"]["x2"]
-            normalized_pred["y2"] = pred["box"]["y2"]
-            normalized_pred["keypoints"] = [
-                [pred["keypoints"]["x"][0], pred["keypoints"]["y"][0]],
-                [pred["keypoints"]["x"][1], pred["keypoints"]["y"][1]],
-            ]
-            normalized_predictions.append(normalized_pred)
-
-        # Can add metadata here if needed
-        return {
-            "predictions": normalized_predictions,
-        }
 
 class AnchorService:
     """
@@ -73,7 +54,11 @@ class AnchorService:
             cache_root=cache_root,
         )
 
-    def run(self, photo: Photo, crop_xyxy: tuple[float, float, float, float]) -> dict:
+    def run(
+        self,
+        photo: Photo,
+        crop_xyxy: tuple[float, float, float, float]
+    ) -> list[Detection]:
         """
         Runs the anchor keypoint detection YOLO26 model on the given photo and ear crop coordinates.
         Should never be rerun for the same photo. Must be run on an image of a single ear.
@@ -83,7 +68,7 @@ class AnchorService:
             crop_xyxy: The crop to apply to the image, in xyxy (top left, bottom right) coordinates.
 
         Returns:
-            A dictionary containing the anchor keypoint detection results.
+            The anchor keypoint detections, in absolute image coordinates.
         """
         key = (
             f"{photo.identifier}__"
@@ -91,22 +76,24 @@ class AnchorService:
             f"{int(crop_xyxy[2])}_{int(crop_xyxy[3])}"
         )
 
-        results = self.cache_manager.get_or_compute(
+        envelope = self.cache_manager.get_or_compute(
             key=key,
-            compute_fn=lambda: self.runner.run(
-                image=apply_crop(self.dataset.read_image(photo), crop_xyxy)
-            ),
+            compute_fn=lambda: self._compute(photo, crop_xyxy),
         )
 
-        # Translate coordinates to absolute coordinates
-        for prediction in results["predictions"]:
-            prediction["x1"] += crop_xyxy[0] # left x
-            prediction["y1"] += crop_xyxy[1] # top y
-            prediction["x2"] += crop_xyxy[0] # right x
-            prediction["y2"] += crop_xyxy[1] # bottom y
-            prediction["keypoints"][0][0] += crop_xyxy[0] # first x
-            prediction["keypoints"][0][1] += crop_xyxy[1] # first y
-            prediction["keypoints"][1][0] += crop_xyxy[0] # second x
-            prediction["keypoints"][1][1] += crop_xyxy[1] # second y
+        # Cached detections are crop-relative; translate to absolute image coords.
+        return [
+            Detection.from_dict(d).translate(crop_xyxy[0], crop_xyxy[1])
+            for d in envelope["detections"]
+        ]
 
-        return results
+    def _compute(
+        self, photo: Photo, crop_xyxy: tuple[float, float, float, float]
+    ) -> dict:
+        """Run the model on the ear crop and build the cache envelope."""
+        detections = self.runner.run(
+            image=apply_crop(self.dataset.read_image(photo), crop_xyxy)
+        )
+        return {
+            "detections": [detection.to_dict() for detection in detections],
+        }
