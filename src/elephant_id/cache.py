@@ -3,6 +3,8 @@ General-purpose cache manager for AI models.
 """
 
 import json
+import os
+import tempfile
 from collections.abc import Callable
 from pathlib import Path
 
@@ -59,10 +61,23 @@ class CacheManager:
 
     def save(self, key: str, value: dict) -> None:
         """
-        Save the results for the given key
+        Save the results for the given key. Uses a temporary file to avoid
+        partially written files.
         """
-        with open(self.path_for(key), "w") as f:
-            json.dump(value, f)
+        path = self.path_for(key)
+        fd, tmp_name = tempfile.mkstemp(
+            dir=path.parent, prefix=f".{path.name}.", suffix=".tmp"
+        )
+        tmp_path = Path(tmp_name)
+        try:
+            with os.fdopen(fd, "w") as f:
+                json.dump(value, f, indent=2)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp_path, path)
+        except BaseException:
+            tmp_path.unlink(missing_ok=True)
+            raise
 
     def delete(self, key: str) -> None:
         """
