@@ -13,7 +13,8 @@ from elephant_id.image.masks import RleMask, decode_rle_mask
 
 @dataclass(frozen=True, slots=True)
 class Detection:
-    """One model detection: a box, optional mask/keypoints, and a label.
+    """
+    One model detection: a box, optional mask/keypoints, and a label.
 
     ``xyxy`` is image-space and half-open (x2/y2 exclusive), matching
     ``image.boxes``. Immutable; ``translate`` and ``clip`` return new
@@ -61,25 +62,27 @@ class Detection:
         return decode_rle_mask(self.rle_mask)
 
     def intersection_area(self, other: "Detection") -> float:
-        """Intersection area of this detection's mask and another detection's mask."""
-        if self.rle_mask is None or other.rle_mask is None:
-            raise ValueError("Both detections need a mask")
-        return float(coco_mask.area([coco_mask.merge([self.rle_mask, other.rle_mask], intersect=True)])[0])
+        """Overlap area with another detection (RLE mask, box, or both, as available on each)."""
+        if self.rle_mask is not None and other.rle_mask is not None:
+            return float(coco_mask.area([coco_mask.merge([self.rle_mask, other.rle_mask], intersect=True)])[0])
+
+        if self.rle_mask is None and other.rle_mask is None:
+            width = max(0, min(self.x2, other.x2) - max(self.x1, other.x1))
+            height = max(0, min(self.y2, other.y2) - max(self.y1, other.y1))
+            return width * height
+
+        mask_detection, box_detection = (self, other) if self.rle_mask is not None else (other, self)
+        mask = mask_detection.mask()
+        x1, y1, x2, y2 = clip_xyxy(*box_detection.xyxy, mask.shape[1], mask.shape[0])
+        return float(np.sum(mask[y1:y2, x1:x2]))
 
     def union_area(self, other: "Detection") -> float:
-        """Union area of this detection's mask and another detection's mask."""
-        if self.rle_mask is None or other.rle_mask is None:
-            raise ValueError("Both detections need a mask")
-        return float(coco_mask.area([coco_mask.merge([self.rle_mask, other.rle_mask], intersect=False)])[0])
+        """Combined coverage of this detection and another (RLE mask, box, or both, as available on each)."""
+        return self.area() + other.area() - self.intersection_area(other)
 
     def iou(self, other: "Detection") -> float:
-        """Intersection over union of this detection's mask and another detection's mask."""
-        if self.rle_mask is None or other.rle_mask is None:
-            raise ValueError("Both detections need a mask")
-        union_area = self.union_area(other)
-        if union_area == 0.0:
-            return 0.0
-        return self.intersection_area(other) / union_area
+        """Intersection-over-union with another detection (RLE mask, box, or both, as available on each)."""
+        return self.intersection_area(other) / self.union_area(other)
 
     # --- transforms (return new instances) ---
     def translate(self, dx: float, dy: float) -> "Detection":
