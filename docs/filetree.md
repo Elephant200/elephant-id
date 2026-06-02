@@ -15,7 +15,7 @@ elephant-id/
 ├── .pre-commit-config.yaml
 │   └── Pre-commit hooks (`ruff --fix`).
 ├── .python-version
-│   └── Interpreter pin (~matches `pyproject.toml` `>=3.11,<3.14`).
+│   └── Interpreter pin (~matches `pyproject.toml` `>=3.12,<3.14`).
 ├── LICENSE · README.md
 │   └── License and project intro.
 ├── pyproject.toml · uv.lock
