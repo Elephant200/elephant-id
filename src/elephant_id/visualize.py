@@ -1,5 +1,5 @@
 """
-Visualization utilities for model predictions.
+Visualization utilities for model predictions. This file will be deprecated soon.
 
 Functions take and return a :data:`BgrImage`. ``color`` arguments and the
 palette are authored in **RGB** (the human-facing convention) and flipped to BGR
