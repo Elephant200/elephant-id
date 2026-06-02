@@ -86,7 +86,13 @@ class Detection:
 
     # --- transforms (return new instances) ---
     def translate(self, dx: float, dy: float) -> "Detection":
-        """Return a copy shifted by (dx, dy), moving box and keypoints."""
+        """Return a copy shifted by (dx, dy), moving box and keypoints.
+
+        Raises:
+            ValueError: If the detection has an RLE mask.
+        """
+        if self.rle_mask is not None:
+            raise ValueError("Cannot translate a detection with an RLE mask")
         return dataclasses.replace(
             self,
             xyxy=(self.x1 + dx, self.y1 + dy, self.x2 + dx, self.y2 + dy),
