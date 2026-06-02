@@ -88,6 +88,6 @@ def test_anchor_translates_every_prediction():
 
     translated = service.run(_photo(), crop_xyxy=(5.0, 7.0, 100.0, 100.0))
 
-    assert translated[0].xyxy[0] == 5.0
-    assert translated[1].xyxy[0] == 15.0
+    assert translated[0].x1 == 5.0
+    assert translated[1].x1 == 15.0
     assert translated[1].keypoints[1] == (16.0, 18.0)

@@ -28,12 +28,31 @@ class Detection:
     keypoints: tuple[tuple[float, float], ...] = ()
 
     # --- geometry ---
+    @property
+    def x1(self) -> float:
+        """Left edge of the detection box."""
+        return self.xyxy[0]
+
+    @property
+    def y1(self) -> float:
+        """Top edge of the detection box."""
+        return self.xyxy[1]
+
+    @property
+    def x2(self) -> float:
+        """Right edge of the detection box."""
+        return self.xyxy[2]
+
+    @property
+    def y2(self) -> float:
+        """Bottom edge of the detection box."""
+        return self.xyxy[3]
+
     def area(self) -> float:
         """Mask area (exact pixel count) if masked, else box area."""
         if self.rle_mask is not None:
             return float(coco_mask.area([self.rle_mask])[0])
-        x1, y1, x2, y2 = self.xyxy
-        return (x2 - x1) * (y2 - y1)
+        return (self.x2 - self.x1) * (self.y2 - self.y1)
 
     @property
     def mask(self) -> np.ndarray:
@@ -66,10 +85,9 @@ class Detection:
     # --- transforms (return new instances) ---
     def translate(self, dx: float, dy: float) -> "Detection":
         """Return a copy shifted by (dx, dy), moving box and keypoints."""
-        x1, y1, x2, y2 = self.xyxy
         return dataclasses.replace(
             self,
-            xyxy=(x1 + dx, y1 + dy, x2 + dx, y2 + dy),
+            xyxy=(self.x1 + dx, self.y1 + dy, self.x2 + dx, self.y2 + dy),
             keypoints=tuple((kx + dx, ky + dy) for kx, ky in self.keypoints),
         )
 
@@ -85,12 +103,11 @@ class Detection:
     # --- cache serialization ---
     def to_dict(self) -> dict[str, Any]:
         """Serialize to a JSON-friendly dict for the cache."""
-        x1, y1, x2, y2 = self.xyxy
         return {
-            "x1": x1,
-            "y1": y1,
-            "x2": x2,
-            "y2": y2,
+            "x1": self.x1,
+            "y1": self.y1,
+            "x2": self.x2,
+            "y2": self.y2,
             "class_name": self.class_name,
             "class_id": self.class_id,
             "confidence": self.confidence,

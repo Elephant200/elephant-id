@@ -14,6 +14,17 @@ def _masked(mask: np.ndarray, rle_from_mask) -> Detection:
     )
 
 
+def test_coordinate_properties_read_xyxy_values():
+    detection = Detection(
+        xyxy=(1.0, 2.0, 3.0, 4.0), class_name="ear", class_id=2, confidence=0.9
+    )
+
+    assert detection.x1 == 1.0
+    assert detection.y1 == 2.0
+    assert detection.x2 == 3.0
+    assert detection.y2 == 4.0
+
+
 def test_area_uses_box_when_unmasked():
     detection = Detection(
         xyxy=(0.0, 0.0, 4.0, 3.0), class_name="ear", class_id=2, confidence=0.9

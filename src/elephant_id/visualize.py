@@ -134,8 +134,8 @@ def visualize_predictions(
                 x, y = int(keypoint[0]), int(keypoint[1])
                 cv2.circle(output, (x, y), 5, bgr, -1)
 
-        x1, y1, x2, y2 = detection.clip(image_width, image_height).xyxy
-        x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
+        clipped = detection.clip(image_width, image_height)
+        x1, y1, x2, y2 = int(clipped.x1), int(clipped.y1), int(clipped.x2), int(clipped.y2)
         # Detection boxes are half-open (x2/y2 exclusive); cv2.rectangle treats
         # its second corner as inclusive, so step back one pixel.
         cv2.rectangle(output, (x1, y1), (x2 - 1, y2 - 1), bgr, 2)
