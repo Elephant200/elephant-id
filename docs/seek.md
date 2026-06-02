@@ -140,7 +140,7 @@ These include:
 ```text
 [Gender][Age]T[RT][LT]E[R1][R2][R3][R4]-[L1][L2][L3][L4]X[RX][LX]S[RS][LS][BS]
 
-Length: 23 characters, or 24 with the leading `1` version prefix used in raw data.
+Length: 23 characters
 
 Gender:
 B = bull
