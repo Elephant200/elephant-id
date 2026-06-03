@@ -179,6 +179,8 @@ def center_to_xyxy(
 
 ## Testing
 
+- Test all code within the `src/elephant_id` package; do not add tests for 
+  code outside the package or in tooling/scripts.
 - Prefer small synthetic arrays/images and fixtures over real dataset
   dependencies.
 - Use existing fixtures such as `rle_from_mask`, `make_photo`, and
