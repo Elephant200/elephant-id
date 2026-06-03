@@ -7,6 +7,13 @@ import numpy as np
 from elephant_id.constants import DEFAULT_CURVATURE_RADII, DEFAULT_CURVATURE_WEIGHTS
 
 
+def contour_max_dimension(contour: np.ndarray) -> float:
+    """Return the largest side length of the contour's bounding box."""
+    minimum = contour.min(axis=0)
+    maximum = contour.max(axis=0)
+    return float(np.max(maximum - minimum))
+
+
 def resample2d(points: np.ndarray, num_points: int) -> np.ndarray:
     """Resample a 2D polyline to evenly spaced points by arc length.
 
@@ -114,10 +121,3 @@ def oriented_curvature(
             curvatures[j, i] = curv
 
     return np.average(curvatures, axis=0, weights=weights) # shape: (n,)
-
-
-def contour_max_dimension(contour: np.ndarray) -> float:
-    """Return the largest side length of the contour's bounding box."""
-    minimum = contour.min(axis=0)
-    maximum = contour.max(axis=0)
-    return float(np.max(maximum - minimum))
