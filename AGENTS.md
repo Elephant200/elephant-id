@@ -106,6 +106,22 @@ def center_to_xyxy(
     """Convert center-format coordinates to half-open xyxy coordinates."""
 ```
 
+## Logging
+
+- Use `loguru`: `from loguru import logger`, then `logger.info(...)`,
+  `logger.warning(...)`, etc. Put detail in the message with an f-string, e.g.
+  `logger.info(f"Ran SAM3 {preset} for {photo.identifier}: {n} detections")`.
+- Never configure logging in library code. Entry points call
+  `configure_logging()` from `elephant_id.log` once; it sets the loguru level
+  from `LOG_LEVEL` or the parameter (default `INFO`). (The dev Flask app 
+  additionally configures stdlib `logging` for its own logs.)
+- Levels: `debug` for cache hits/misses and fine detail; `info` for milestones
+  (a model run finishing, a sighting coded); `warning` for recoverable or
+  needs-review cases (log a `warning` before raising on a known failure path);
+  `error`/`exception` for failures.
+- Never log secrets (API keys) or raw image/mask buffers — log identifiers,
+  counts, and durations.
+
 ## Images And Geometry
 
 - The canonical in-memory image type is `BgrImage` from `elephant_id.image`.
