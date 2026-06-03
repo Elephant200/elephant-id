@@ -37,8 +37,7 @@ ANCHOR_PRESETS = {
 CURVATURE_POINTS = 1024
 MARKER_STEP = 32
 SCALES = np.array([0.02, 0.04, 0.06, 0.08, 0.10], dtype=np.float32)
-WEIGHT_MEAN_SCALE = 0.06
-WEIGHT_STD_DEV = 0.04
+WEIGHTS = np.array([0.6, 0.9, 1.0, 0.9, 0.6], dtype=np.float32)
 MATPLOTLIB_COLORS = (
     (31, 119, 180),
     (255, 127, 14),
@@ -276,41 +275,23 @@ def remove_head_connection(
 
 def plot_integral_curvature(
     curvature: np.ndarray,
-    mean_curvature: np.ndarray,
-    radii: np.ndarray,
     marker_step: int,
 ) -> None:
-    """Plot multi-scale curvature and Gaussian-weighted mean.
+    """Plot curvature.
 
     Args:
-        curvature: Per-radius values, shaped ``(len(radii), n)``.
-        mean_curvature: Mean curvature values, shape ``(num_points)``.
-        radii: Physical radius per scale (for legend only).
+        curvature: Curvature values, shaped ``(num_points,)``.
         marker_step: Subsample markers along the contour index.
 
     Returns:
         None.
     """
     plt.figure(figsize=(19.2, 4.8))
-    marker_indices = np.arange(0, curvature.shape[1], marker_step)
-    for i, radius in enumerate(radii):
-        plt.plot(
-            curvature[i],
-            color=np.array(MATPLOTLIB_COLORS[i]) / 255,
-            marker="o",
-            markevery=marker_indices,
-            markersize=3,
-            label=f"r={radius:g}",
-            zorder=2,
-        )
 
     plt.plot(
-        mean_curvature,
+        curvature,
         color="black",
-        marker="o",
-        markevery=marker_indices,
-        markersize=3,
-        label="Mean",
+        label="Curvature",
     )
 
     plt.axhline(0.5, color="0.65", linewidth=1, alpha=0.75, zorder=1)
@@ -320,8 +301,9 @@ def plot_integral_curvature(
     ymin = 0.1
     ymax = 0.7
     plt.ylim(ymin, ymax)
-    plt.xticks(marker_indices, rotation=90)
-    plt.grid(axis="x", alpha=0.25)
+    plt.xticks(np.arange(0, curvature.shape[0], marker_step), rotation=90)
+    plt.yticks(np.arange(ymin, ymax, 0.025))
+    plt.grid(alpha=0.25)
     plt.legend()
     plt.tight_layout()
     plt.show()
@@ -355,7 +337,7 @@ if __name__ == "__main__":
     resampled_contour = resample2d(ear_contour, num_points=CURVATURE_POINTS)
 
     radii = SCALES * contour_max_dimension(resampled_contour)
-    curvature = oriented_curvature(resampled_contour, radii)
+    curvature = oriented_curvature(resampled_contour, radii, weights=WEIGHTS)
     print(f"Curvature min/max: {curvature.min():.4f}, {curvature.max():.4f}")
 
     visualized_image = visualize_predictions(image, ears)
@@ -370,14 +352,8 @@ if __name__ == "__main__":
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 
-    weights = np.array([0.6, 0.9, 1.0, 0.9, 0.6])
-
-    print(weights)
-    mean_curvature = np.average(curvature, axis=0, weights=weights)
     plot_integral_curvature(
         curvature,
-        mean_curvature,
-        radii,
         marker_step=MARKER_STEP,
     )
     print(curvature.shape)

@@ -117,5 +117,7 @@ def oriented_curvature(
                 curv = area / ((2 * radius) ** 2)
 
             curvatures[j, i] = curv
+    print(curvatures.shape[0])
+    print(len(weights))
 
     return np.average(curvatures, axis=0, weights=weights) # shape: (n,)
