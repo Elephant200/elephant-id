@@ -4,8 +4,6 @@ Module that computes integral curvature for an elephant ear.
 
 import numpy as np
 
-from elephant_id.constants import DEFAULT_CURVATURE_RADII, DEFAULT_CURVATURE_WEIGHTS
-
 
 def contour_max_dimension(contour: np.ndarray) -> float:
     """Return the largest side length of the contour's bounding box."""
@@ -71,8 +69,8 @@ def reorient(points: np.ndarray, theta: float, center: np.ndarray) -> np.ndarray
 
 def oriented_curvature(
     contour: np.ndarray,
-    radii: np.ndarray = DEFAULT_CURVATURE_RADII,
-    weights: np.ndarray = DEFAULT_CURVATURE_WEIGHTS,
+    radii: np.ndarray,
+    weights: np.ndarray,
 ) -> np.ndarray:
     """
     Compute weighted mean multi-scale integral curvature along a
