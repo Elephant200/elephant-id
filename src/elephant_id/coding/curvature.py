@@ -4,6 +4,8 @@ Module that computes integral curvature for an elephant ear.
 
 import numpy as np
 
+from elephant_id.constants import DEFAULT_CURVATURE_RADII, DEFAULT_CURVATURE_WEIGHTS
+
 
 def resample2d(points: np.ndarray, num_points: int) -> np.ndarray:
     """Resample a 2D polyline to evenly spaced points by arc length.
@@ -13,7 +15,8 @@ def resample2d(points: np.ndarray, num_points: int) -> np.ndarray:
         num_points: Number of evenly spaced output points.
 
     Returns:
-        A ``(num_points, 2)`` array sampled at uniform arc-length intervals.
+        A ``(num_points, 2)`` array sampled at uniform arc-length
+            intervals.
 
     Raises:
         ValueError: If the contour has zero total length.
@@ -59,21 +62,31 @@ def reorient(points: np.ndarray, theta: float, center: np.ndarray) -> np.ndarray
     return points_transformed + center
 
 
-def oriented_curvature(contour: np.ndarray, radii: np.ndarray) -> np.ndarray:
-    """Compute multi-scale integral curvature along a contour.
+def oriented_curvature(
+    contour: np.ndarray,
+    radii: np.ndarray = DEFAULT_CURVATURE_RADII,
+    weights: np.ndarray = DEFAULT_CURVATURE_WEIGHTS,
+) -> np.ndarray:
+    """
+    Compute weighted mean multi-scale integral curvature along a
+    contour.
 
-    For each contour point and radius, the curvature is the normalized area
-    under the locally reoriented neighborhood enclosed by the circle of that
-    radius.
+    For each contour point and radius, the curvature is the normalized
+    area under the locally reoriented neighborhood enclosed by the
+    circle of that radius, weighted by the given weights.
 
     Args:
         contour: Ordered ``(n, 2)`` contour coordinates.
         radii: Physical radii defining the integration scales.
+        weights: Weights for each radius.
 
     Returns:
-        A ``(len(radii), n)`` array of curvature values in ``[0, 1]``.
+        A ``(n,)`` array of curvature values in ``[0, 1]``.
     """
-    curvature = np.zeros((len(radii), contour.shape[0]), dtype=np.float32)
+    if len(weights) != len(radii):
+        raise ValueError("Number of radii weights must match number of radii")
+
+    curvatures = np.zeros((len(radii), contour.shape[0]), dtype=np.float32)
 
     for i, (x, y) in enumerate(contour):
         center = np.array([x, y])
@@ -98,9 +111,9 @@ def oriented_curvature(contour: np.ndarray, radii: np.ndarray) -> np.ndarray:
                 area = np.trapezoid(curve_p[:, 1] - lower[1], curve_p[:, 0], axis=0)
                 curv = area / ((2 * radius) ** 2)
 
-            curvature[j, i] = curv
+            curvatures[j, i] = curv
 
-    return curvature
+    return np.average(curvatures, axis=0, weights=weights) # shape: (n,)
 
 
 def contour_max_dimension(contour: np.ndarray) -> float:
