@@ -39,7 +39,7 @@ if __name__ == "__main__":
 
     sam3 = Sam3Service(dataset=dataset)
 
-    photo = dataset.get_photo("General_2011-01-15_01")
+    photo = dataset.get_photo("Bloom_2016-06-06_08")
 
     detections = sam3.run(photo, "features")
     ear = max(detections, key=lambda d: d.area() if d.class_name == "ear" else 0)
@@ -62,11 +62,12 @@ if __name__ == "__main__":
     # 1) Canny edge detection
 
     # Run Canny edge detection, then find contours
-    edges = cv2.Canny(ear_only, 125, 300)
+    blurred = cv2.GaussianBlur(ear_only, (3, 3), 0)
+    edges = cv2.Canny(blurred, 75, 200)
     cv2.imshow("Edges", edges)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
-    contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    contours, _ = cv2.findContours(edges, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE)
     ear_only_copy = ear_only.copy()
     for contour in contours:
         cv2.drawContours(ear_only_copy, [contour], -1, (0, 255, 0), 2)
@@ -74,7 +75,7 @@ if __name__ == "__main__":
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 
-    # 2) Run blob finding (pretty bad)
+    # 2)  Run blob finding (pretty bad)
     # params = cv2.SimpleBlobDetector_Params()
 
     # params.filterByArea = True
@@ -90,17 +91,17 @@ if __name__ == "__main__":
     # cv2.destroyAllWindows()
 
     # 3) Run Laplacian of Gaussian
-    gaussian = cv2.GaussianBlur(ear_only_gray, (5, 5), 0)
-    cv2.imshow("Gaussian", gaussian)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
-    laplacian = cv2.Laplacian(gaussian, cv2.CV_16S)
-    cv2.imshow("Laplacian", cv2.convertScaleAbs(laplacian))
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
-    contours = find_log_contours(ear_only_gray)
-    for contour in contours:
-        cv2.drawContours(ear_only, [contour], -1, (0, 255, 0), 2)
-    cv2.imshow("Contours", ear_only)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
+    # gaussian = cv2.GaussianBlur(ear_only_gray, (5, 5), 0)
+    # cv2.imshow("Gaussian", gaussian)
+    # cv2.waitKey(0)
+    # cv2.destroyAllWindows()
+    # laplacian = cv2.Laplacian(gaussian, cv2.CV_16S)
+    # cv2.imshow("Laplacian", cv2.convertScaleAbs(laplacian))
+    # cv2.waitKey(0)
+    # cv2.destroyAllWindows()
+    # contours = find_log_contours(ear_only_gray)
+    # for contour in contours:
+    #     cv2.drawContours(ear_only, [contour], -1, (0, 255, 0), 2)
+    # cv2.imshow("Contours", ear_only)
+    # cv2.waitKey(0)
+    # cv2.destroyAllWindows()
