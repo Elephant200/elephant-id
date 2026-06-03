@@ -18,13 +18,38 @@ def _year_from_date(date_str: str) -> int | None:
         return None
 
 
-def _coerce_optional_year(val: object) -> int | None:
+def _coerce_optional_int(val: object) -> int | None:
     if val is None or val == "":
         return None
     try:
         return int(val)  # type: ignore[arg-type]
     except (TypeError, ValueError):
         return None
+
+
+def _birth_year_midpoint(decade: int, sighting_year: int) -> int:
+    """Full birth year assuming birth at the recorded decade's midpoint.
+
+    ``decade`` is the last two digits of the birth decade as recorded in the
+    SEEK code (e.g. ``80`` → the 1980s). The century is the most recent one
+    whose decade start does not exceed ``sighting_year`` — so ``0`` reads as
+    the 2000s rather than the 1900s for the dataset's 2002+ sightings.
+    """
+    starts = [base + decade for base in (1900, 2000) if base + decade <= sighting_year]
+    start = max(starts) if starts else 1900 + decade
+    return start + 5
+
+
+def age_from_decade(decade: int | None, sighting_year: int | None) -> int | None:
+    """Approximate age at sighting, or ``None`` when either input is unknown.
+
+    The birth year is taken as the midpoint of the recorded birth decade, so
+    the result is coarse. Clamped at ``0`` since a midpoint estimate can land
+    just after a sighting (e.g. a calf seen early in its own birth decade).
+    """
+    if decade is None or sighting_year is None:
+        return None
+    return max(0, sighting_year - _birth_year_midpoint(decade, sighting_year))
 
 
 @dataclass
@@ -43,6 +68,8 @@ class FilterConfig:
     non_normal_only: bool = False
     year_min: int | None = None
     year_max: int | None = None
+    age_min: int | None = None
+    age_max: int | None = None
 
     @classmethod
     def from_json(cls, data: dict) -> FilterConfig:
@@ -63,8 +90,10 @@ class FilterConfig:
             special_right_ear=bool(sp.get("rightEar")),
             special_body=bool(sp.get("body")),
             non_normal_only=bool(data.get("nonNormalOnly")),
-            year_min=_coerce_optional_year(data.get("yearMin")),
-            year_max=_coerce_optional_year(data.get("yearMax")),
+            year_min=_coerce_optional_int(data.get("yearMin")),
+            year_max=_coerce_optional_int(data.get("yearMax")),
+            age_min=_coerce_optional_int(data.get("ageMin")),
+            age_max=_coerce_optional_int(data.get("ageMax")),
         )
 
     def to_json(self) -> dict:
@@ -88,6 +117,8 @@ class FilterConfig:
             "nonNormalOnly": self.non_normal_only,
             "yearMin": self.year_min,
             "yearMax": self.year_max,
+            "ageMin": self.age_min,
+            "ageMax": self.age_max,
         }
 
     def sex_active(self) -> bool:
@@ -110,6 +141,9 @@ class FilterConfig:
     def years_active(self) -> bool:
         return self.year_min is not None or self.year_max is not None
 
+    def ages_active(self) -> bool:
+        return self.age_min is not None or self.age_max is not None
+
 
 def matches(
     key: SightingKey,
@@ -128,6 +162,15 @@ def matches(
 
     code = elephant_seek.get(key.name, "")
     parsed = seek_codes.parse(code)
+
+    if cfg.ages_active():
+        age = age_from_decade(parsed.age, _year_from_date(key.date))
+        if age is None:
+            return False
+        if cfg.age_min is not None and age < cfg.age_min:
+            return False
+        if cfg.age_max is not None and age > cfg.age_max:
+            return False
 
     if cfg.sex_active() and not (
         (cfg.sex_bull and parsed.sex == "B")

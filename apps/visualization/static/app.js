@@ -29,6 +29,7 @@ const els = {
   helpSaved: document.getElementById("helpSaved"),
   browseEmpty: document.getElementById("browseEmpty"),
   yearExtentHint: document.getElementById("yearExtentHint"),
+  ageExtentHint: document.getElementById("ageExtentHint"),
   shuffleToggleBtn: document.getElementById("shuffleToggleBtn"),
   imageModal: document.getElementById("imageModal"),
   modalImage: document.getElementById("modalImage"),
@@ -171,6 +172,8 @@ function filtersPayloadFromServer(f) {
     },
     yearMin: z.yearMin ?? null,
     yearMax: z.yearMax ?? null,
+    ageMin: z.ageMin ?? null,
+    ageMax: z.ageMax ?? null,
     nonNormalOnly: !!z.nonNormalOnly,
   };
 }
@@ -196,6 +199,10 @@ function applyFiltersToModal(p) {
   const ymax = document.getElementById("f-year-max");
   if (ymin) ymin.value = p.yearMin != null ? String(p.yearMin) : "";
   if (ymax) ymax.value = p.yearMax != null ? String(p.yearMax) : "";
+  const amin = document.getElementById("f-age-min");
+  const amax = document.getElementById("f-age-max");
+  if (amin) amin.value = p.ageMin != null ? String(p.ageMin) : "";
+  if (amax) amax.value = p.ageMax != null ? String(p.ageMax) : "";
 }
 
 function collectFiltersPayload() {
@@ -221,6 +228,8 @@ function collectFiltersPayload() {
     },
     yearMin: optYearNum(document.getElementById("f-year-min")),
     yearMax: optYearNum(document.getElementById("f-year-max")),
+    ageMin: optYearNum(document.getElementById("f-age-min")),
+    ageMax: optYearNum(document.getElementById("f-age-max")),
     nonNormalOnly: !!document.getElementById("f-non-normal")?.checked,
   };
 }
@@ -236,12 +245,24 @@ function syncYearExtentHint() {
   }
 }
 
+function syncAgeExtentHint() {
+  const hint = els.ageExtentHint;
+  if (!hint) return;
+  const ext = lastState?.ageExtent;
+  if (ext && ext.min != null && ext.max != null) {
+    hint.textContent = `Approx. age at sighting, ${ext.min}–${ext.max} yrs (from birth decade). Leave blank to ignore.`;
+  } else {
+    hint.textContent = "";
+  }
+}
+
 function openFilterModal() {
   const m = els.filterModal;
   if (!m) return;
   modalFiltersSnapshot = filtersPayloadFromServer(lastState?.filters);
   applyFiltersToModal(modalFiltersSnapshot);
   syncYearExtentHint();
+  syncAgeExtentHint();
   m.hidden = false;
 }
 

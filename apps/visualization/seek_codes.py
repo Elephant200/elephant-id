@@ -4,6 +4,7 @@ A SEEK code is a compact string describing an elephant. The leading
 character may be a legacy digit, which we strip. After that:
 
 * index 0:        sex (``B`` bull / ``C`` cow)
+* indices 1..2:   ``<aa>`` age (birth-year last two digits), or ``__``
 * indices 3..6:   ``T<left><right>`` for tusks (``0``/``1``)
 * trailing tail:  ``X<xl><xr>S<sl><sm><sr>`` for extreme/special
                   features; other characters there are wildcards.
@@ -22,6 +23,7 @@ TUSK_XS_RE = re.compile(r"X(.)(.)S(...)(_*)$")
 @dataclass(frozen=True)
 class ParsedSeek:
     sex: str | None
+    age: int | None
     tusk_left: str | None
     tusk_right: str | None
     has_xs: bool
@@ -83,6 +85,10 @@ def parse(code_raw: str) -> ParsedSeek:
     if s and s[0] in ("B", "C"):
         sex = s[0]
 
+    age: int | None = None
+    if len(s) >= 3 and s[1:3].isdigit():
+        age = int(s[1:3])
+
     tusk_left: str | None = None
     tusk_right: str | None = None
     if len(s) >= 6 and s[3] == "T":
@@ -103,6 +109,7 @@ def parse(code_raw: str) -> ParsedSeek:
 
     return ParsedSeek(
         sex=sex,
+        age=age,
         tusk_left=tusk_left,
         tusk_right=tusk_right,
         has_xs=xm is not None,

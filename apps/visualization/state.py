@@ -15,7 +15,7 @@ from pathlib import Path
 
 from elephant_id.dataset import Dataset
 
-from . import filters, samples
+from . import filters, samples, seek_codes
 from .actions import Action, PriorityToggle, SavedRemoveSighting
 from .config import (
     PAGE_SIZE_DEFAULT,
@@ -75,6 +75,7 @@ class ReviewerState:
         self._sighting_images: dict[SightingKey, list[str]] = {}
         self._elephant_seek: dict[str, str] = {}
         self._available_years: list[int] = []
+        self._available_ages: list[int] = []
 
         self.queue: list[SightingKey] = []
         self.current_index: int = 0
@@ -121,11 +122,23 @@ class ReviewerState:
         years = sorted(
             {y for k in sighting_images if (y := filters.year_from_date(k.date)) is not None}
         )
+        # Age is computed per sighting (birth-decade midpoint vs. sighting
+        # year), so cache each elephant's decade once and span every sighting.
+        elephant_decade = {
+            name: seek_codes.parse(code).age for name, code in elephant_seek.items()
+        }
+        ages = sorted(
+            {age for k in sighting_images
+             if (age := filters.age_from_decade(
+                 elephant_decade.get(k.name), filters.year_from_date(k.date)
+             )) is not None}
+        )
 
         with self._lock:
             self._sighting_images = sighting_images
             self._elephant_seek = elephant_seek
             self._available_years = years
+            self._available_ages = ages
             self.shuffle_enabled = True
             random.shuffle(keys)
             self.queue = keys
@@ -523,9 +536,13 @@ class ReviewerState:
         extent: dict[str, int] | None = None
         if self._available_years:
             extent = {"min": self._available_years[0], "max": self._available_years[-1]}
+        age_extent: dict[str, int] | None = None
+        if self._available_ages:
+            age_extent = {"min": self._available_ages[0], "max": self._available_ages[-1]}
         return {
             "filters": self.filter_config.to_json(),
             "yearExtent": extent,
+            "ageExtent": age_extent,
             "elephantOnly": self._elephant_only_backup is not None,
             "elephantOnlyName": self._elephant_only_name,
             "shuffleEnabled": self.shuffle_enabled,
