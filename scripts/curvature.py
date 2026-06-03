@@ -1,12 +1,11 @@
-import os
 from pathlib import Path
 
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 from dotenv import load_dotenv
-from PIL import Image
 
+from elephant_id.ai import Detection
 from elephant_id.ai.sam3 import Sam3Service
 from elephant_id.coding.curvature import (
     contour_max_dimension,
@@ -14,6 +13,7 @@ from elephant_id.coding.curvature import (
     resample2d,
 )
 from elephant_id.dataset import Dataset
+from elephant_id.image.bgr import BgrImage
 from elephant_id.image.masks import decode_rle_mask
 from elephant_id.log import configure_logging
 from elephant_id.visualize import visualize_predictions
@@ -50,8 +50,8 @@ MATPLOTLIB_COLORS = (
 )
 
 
-def get_largest_external_contour(prediction: dict) -> np.ndarray:
-    mask = decode_rle_mask(prediction["rle_mask"])
+def get_largest_external_contour(prediction: Detection) -> np.ndarray:
+    mask = decode_rle_mask(prediction.rle_mask)
     mask_u8 = np.ascontiguousarray(mask.astype(np.uint8) * 255)
 
     contours, _ = cv2.findContours(
@@ -89,15 +89,15 @@ def score_contour_for_anchors(
 
 
 def select_ear_by_anchors(
-    predictions: list[dict],
+    predictions: list[Detection],
     start_point: tuple[int, int],
     end_point: tuple[int, int],
-) -> tuple[dict, np.ndarray]:
-    ears = [obj for obj in predictions if obj["class"].strip() == "ear"]
+) -> tuple[Detection, np.ndarray]:
+    ears = [prediction for prediction in predictions if prediction.class_name == "ear"]
     if not ears:
         raise ValueError("No ear predictions found")
 
-    candidates = []
+    candidates: list[tuple[float, Detection, np.ndarray]] = []
     for ear in ears:
         contour = get_largest_external_contour(ear)
         score = score_contour_for_anchors(contour, start_point, end_point)
@@ -107,8 +107,7 @@ def select_ear_by_anchors(
     print(f"Ear candidates: {len(candidates)}")
     for i, (score, ear, _) in enumerate(candidates):
         print(
-            f"  {i}: score={score:.1f}, confidence={ear.get('confidence', 0):.3f}, "
-            f"id={ear.get('detection_id', 'unknown')}"
+            f"  {i}: score={score:.1f}, confidence={ear.confidence:.3f}, "
         )
 
     _, selected_ear, selected_contour = candidates[0]
@@ -128,36 +127,39 @@ def anchors_for_photo(photo_id: str) -> tuple[tuple[int, int], tuple[int, int]]:
 
 
 def draw_contour(
-    image: Image.Image,
+    image: BgrImage,
     contour: np.ndarray,
     color: tuple[int, int, int] = (255, 0, 0),
     thickness: int = 1,
-) -> Image.Image:
-    output = np.array(image.convert("RGB")).copy()
-    cv2.drawContours(output, [contour], contourIdx=-1, color=color, thickness=thickness)
-    return Image.fromarray(output)
+) -> BgrImage:
+    """
+    Draw a contour on an image. (color is RGB)
+    """
+    output = image.copy()
+    cv2.drawContours(output, [contour], contourIdx=-1, color=color[::-1], thickness=thickness)
+    return output
 
 
 def draw_polyline(
-    image: Image.Image,
+    image: BgrImage,
     points: np.ndarray,
     color: tuple[int, int, int] = (255, 0, 0),
     thickness: int = 1,
     marker_step: int | None = None,
-) -> Image.Image:
-    output = np.array(image.convert("RGB")).copy()
+) -> BgrImage:
+    output = image.copy()
     points_i32 = points.astype(np.int32)
     cv2.polylines(
         output,
         [points_i32.reshape((-1, 1, 2))],
         isClosed=False,
-        color=color,
+        color=color[::-1], # RGB -> BGR
         thickness=thickness,
     )
     if marker_step is not None:
         for idx in range(0, len(points_i32), marker_step):
             x, y = points_i32[idx]
-            cv2.circle(output, (int(x), int(y)), 4, (255, 255, 0), -1)
+            cv2.circle(output, (int(x), int(y)), 4, (255, 255, 0)[::-1], -1) # RGB -> BGR
             cv2.putText(
                 output,
                 str(idx),
@@ -174,42 +176,42 @@ def draw_polyline(
                 (int(x) + 6, int(y) - 6),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.45,
-                (255, 255, 0),
+                (255, 255, 0)[::-1], # RGB -> BGR
                 1,
                 cv2.LINE_AA,
             )
-    return Image.fromarray(output)
+    return output
 
 
 def crop_to_contour(
-    image: Image.Image,
+    image: BgrImage,
     contour: np.ndarray,
     padding: int = 80,
-) -> tuple[Image.Image, np.ndarray]:
+) -> tuple[BgrImage, np.ndarray]:
     points = contour.astype(np.float32)
     min_x, min_y = np.floor(points.min(axis=0)).astype(int)
     max_x, max_y = np.ceil(points.max(axis=0)).astype(int)
 
     left = max(0, min_x - padding)
     top = max(0, min_y - padding)
-    right = min(image.width, max_x + padding)
-    bottom = min(image.height, max_y + padding)
+    right = min(image.shape[1], max_x + padding)
+    bottom = min(image.shape[0], max_y + padding)
 
-    cropped = image.crop((left, top, right, bottom))
+    cropped = image[top:bottom, left:right].copy()
     shifted = points - np.array([left, top], dtype=np.float32)
     return cropped, shifted
 
 
 def draw_radius_scale(
-    image: Image.Image,
+    image: BgrImage,
     radii: np.ndarray,
     scales: np.ndarray,
     colors: tuple[tuple[int, int, int], ...],
-) -> Image.Image:
-    output = np.array(image.convert("RGB")).copy()
+    ) -> BgrImage:
+    output = image.copy()
     max_radius = int(np.ceil(float(np.max(radii))))
-    x = image.width - max_radius - 64
-    y = image.height - max_radius - 24
+    x = image.shape[1] - max_radius - 64
+    y = image.shape[0] - max_radius - 24
 
     for radius, color in zip(radii, colors, strict=False):
         radius_int = round(radius)
@@ -217,14 +219,14 @@ def draw_radius_scale(
             output,
             (x, y),
             radius_int,
-            color,
+            color[::-1], # RGB -> BGR
             2,
             cv2.LINE_AA,
         )
 
     cv2.circle(output, (x, y), 2, (0, 0, 0), -1, cv2.LINE_AA)
 
-    return Image.fromarray(output)
+    return output
 
 
 def _closed_path(points: np.ndarray, start_idx: int, end_idx: int) -> np.ndarray:
@@ -337,11 +339,10 @@ if __name__ == "__main__":
     image = dataset.read_image(photo)
 
     sam3 = Sam3Service(
-        api_key=os.getenv("ROBOFLOW_API_KEY"),
         dataset=dataset,
     )
 
-    segmentation = sam3.run(photo, "features")["predictions"]
+    segmentation = sam3.run(photo, "features")
     ear, contour = select_ear_by_anchors(segmentation, start_point, end_point)
     ears = [ear]
     print(ear)
@@ -365,9 +366,13 @@ if __name__ == "__main__":
         marker_step=MARKER_STEP,
     )
     contour_image = draw_radius_scale(contour_image, radii, SCALES, MATPLOTLIB_COLORS)
-    contour_image.show()
+    cv2.imshow("Contour Image", contour_image)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
 
-    weights = np.exp(-0.5 * ((SCALES - WEIGHT_MEAN_SCALE) / WEIGHT_STD_DEV) ** 2)
+    weights = np.array([0.6, 0.9, 1.0, 0.9, 0.6])
+
+    print(weights)
     mean_curvature = np.average(curvature, axis=0, weights=weights)
     plot_integral_curvature(
         curvature,
