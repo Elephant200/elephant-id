@@ -41,11 +41,22 @@ class PhotoAnalyzer:
         body_detections = self.sam3.run(photo, "body")
         feature_detections = self.sam3.run(photo, "features")
 
-        if not body_detections: # Nothing visible in the photo
+        # If nothing visible in the photo, return None; it's useless to analyze.
+        if not body_detections or not feature_detections or len(body_detections) == 0 or len(feature_detections) == 0:
             return None
 
-        body = body_detections[0] # TODO: Choose by size; if two are similar size, flag for manual review
+        if len(body_detections) == 1:
+            body = body_detections[0]
+        else:
+            body_detections.sort(key=lambda d: d.area(), reverse=True)
+            # If largest elephant body is more than double the area of the second largest, use the largest; otherwise, flag.
+            if body_detections[0].area() / body_detections[1].area() > 2:
+                body = body_detections[0]
+            else:
+                # FLAG FOR REVIEW
+                return None # for now; later, implement manual review process
 
+        # Filter for features on the body itself
         features_on_body: list[Detection] = []
         for feature in feature_detections:
             feature_area = feature.area()
@@ -56,7 +67,11 @@ class PhotoAnalyzer:
             if overlap > MIN_FEATURE_BODY_OVERLAP:
                 features_on_body.append(feature)
 
-        trunks, ears, tusks, tails = [], [], [], []
+        # Categorize features
+        trunks: list[Detection] = []
+        ears: list[Detection] = []
+        tusks: list[Detection] = []
+        tails: list[Detection] = []
         for feature in features_on_body:
             if feature.class_name == "elephant trunk":
                 trunks.append(feature)
@@ -76,7 +91,12 @@ class PhotoAnalyzer:
 
         if len(ears) == 2:
             # Compare sizes; if one is much larger than the other, ignore the smaller one
-            pass
+            if ears[0].area() / ears[1].area() > 3:
+                ears = [ears[0]] # If one ear is much smaller, it's essentially not there.
+            elif ears[1].area() / ears[0].area() > 3:
+                ears = [ears[1]] # If one ear is much smaller, it's essentially not there.
+            # Leave both ears if they are similar size.
+
 
         anchor_predictions = []
         for ear in ears:
@@ -92,15 +112,6 @@ class PhotoAnalyzer:
         gender_results = self.gender_model.run(photo, body_rle_mask=body.rle_mask)
         bull_prob = gender_results["predictions"]["bull"]
         cow_prob = gender_results["predictions"]["cow"]
-        if bull_prob > 0.6:
-            gender_code = "B"
-            gender_conf = bull_prob
-        elif cow_prob > 0.6:
-            gender_code = "C"
-            gender_conf = cow_prob
-        else:
-            gender_code = "_"
-            gender_conf = 0.5
 
         # Run age model on body with background removed
         age_results = self.age_model.run(photo, body_rle_mask=body.rle_mask)
@@ -109,48 +120,4 @@ class PhotoAnalyzer:
 
         # Return dict should include confidence scores and make clear when results are invalid or uncertain
         # It should also include all raw model outputs for traceability
-        return {
-            "view": ...,
-            "left_ear": {
-                "x1": ...,
-                "y1": ...,
-                "x2": ...,
-                "y2": ...,
-                "rle_mask": ...,
-                "contour": ...,
-                "confidence": ...,
-            },
-            "right_ear": {
-                "x1": ...,
-                "y1": ...,
-                "x2": ...,
-                "y2": ...,
-                "rle_mask": ...,
-                "contour": ...,
-                "confidence": ...,
-            },
-            "left_tusk": {
-                "x1": ...,
-                "y1": ...,
-                "x2": ...,
-                "y2": ...,
-                "rle_mask": ...,
-                "confidence": ...,
-            },
-            "right_tusk": {
-                "x1": ...,
-                "y1": ...,
-                "x2": ...,
-                "y2": ...,
-                "rle_mask": ...,
-                "confidence": ...,
-            },
-            "gender": {
-                "confidence": gender_conf,
-                "gender": gender_code,
-            },
-            "age": {
-                "confidence": age_confidence,
-                "age": age_code,
-            },
-        }
+        return {} # Placeholder
