@@ -8,6 +8,11 @@ from dotenv import load_dotenv
 from PIL import Image
 
 from elephant_id.ai.sam3 import Sam3Service
+from elephant_id.coding.curvature import (
+    contour_max_dimension,
+    oriented_curvature,
+    resample2d,
+)
 from elephant_id.dataset import Dataset
 from elephant_id.image.masks import decode_rle_mask
 from elephant_id.log import configure_logging
@@ -267,68 +272,6 @@ def remove_head_connection(
     return kept_points
 
 
-def resample2d(points: np.ndarray, num_points: int) -> np.ndarray:
-    distances = np.sqrt(np.sum(np.diff(points, axis=0) ** 2, axis=1))
-    arc_lengths = np.concatenate([[0], np.cumsum(distances)])
-    if arc_lengths[-1] == 0:
-        raise ValueError("Cannot resample a zero-length contour")
-
-    sample_lengths = np.linspace(0, arc_lengths[-1], num_points)
-    x = np.interp(sample_lengths, arc_lengths, points[:, 0])
-    y = np.interp(sample_lengths, arc_lengths, points[:, 1])
-    return np.column_stack([x, y])
-
-
-def rotate(radians: float) -> np.ndarray:
-    rotation = np.eye(3)
-    rotation[0, 0] = np.cos(radians)
-    rotation[1, 1] = np.cos(radians)
-    rotation[0, 1] = np.sin(radians)
-    rotation[1, 0] = -np.sin(radians)
-    return rotation
-
-
-def reorient(points: np.ndarray, theta: float, center: np.ndarray) -> np.ndarray:
-    matrix = rotate(theta)
-    points_translated = points - center
-    points_augmented = np.hstack(
-        (points_translated, np.ones((points.shape[0], 1)))
-    )
-    points_transformed = np.dot(matrix, points_augmented.T).T[:, :2]
-    return points_transformed + center
-
-
-def oriented_curvature(contour: np.ndarray, radii: np.ndarray) -> np.ndarray:
-    curvature = np.zeros((len(radii), contour.shape[0]), dtype=np.float32)
-
-    for i, (x, y) in enumerate(contour):
-        center = np.array([x, y])
-        distances = ((contour - center) ** 2).sum(axis=1)
-        inside = distances[:, np.newaxis] <= radii * radii
-
-        for j, radius in enumerate(radii):
-            curve = contour[inside[:, j]]
-            if curve.shape[0] == 1:
-                curv = 0.5
-            else:
-                normal = curve[-1] - curve[0]
-                theta = np.arctan2(normal[1], normal[0])
-
-                curve_p = reorient(curve, theta, center)
-                center_p = np.squeeze(reorient(center[None], theta, center))
-
-                lower = center_p - radius
-                upper = center_p + radius
-                curve_p = np.clip(curve_p, lower, upper)
-
-                area = np.trapezoid(curve_p[:, 1] - lower[1], curve_p[:, 0], axis=0)
-                curv = area / ((2 * radius) ** 2)
-
-            curvature[j, i] = curv
-
-    return curvature
-
-
 def plot_integral_curvature(
     curvature: np.ndarray,
     mean_curvature: np.ndarray,
@@ -380,12 +323,6 @@ def plot_integral_curvature(
     plt.legend()
     plt.tight_layout()
     plt.show()
-
-
-def contour_max_dimension(contour: np.ndarray) -> float:
-    minimum = contour.min(axis=0)
-    maximum = contour.max(axis=0)
-    return float(np.max(maximum - minimum))
 
 
 if __name__ == "__main__":
