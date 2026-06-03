@@ -26,7 +26,7 @@ class Detection:
     class_id: int
     confidence: float
     rle_mask: RleMask | None = None
-    keypoints: tuple[tuple[float, float], ...] = ()
+    keypoints: tuple[tuple[float, float], ...] | None = None
 
     # --- geometry ---
     @property
@@ -96,7 +96,11 @@ class Detection:
         return dataclasses.replace(
             self,
             xyxy=(self.x1 + dx, self.y1 + dy, self.x2 + dx, self.y2 + dy),
-            keypoints=tuple((kx + dx, ky + dy) for kx, ky in self.keypoints),
+            keypoints=(
+                None
+                if self.keypoints is None
+                else tuple((kx + dx, ky + dy) for kx, ky in self.keypoints)
+            ),
         )
 
     def clip(self, image_width: int, image_height: int) -> "Detection":
@@ -120,7 +124,11 @@ class Detection:
             "class_id": self.class_id,
             "confidence": self.confidence,
             "rle_mask": self.rle_mask,
-            "keypoints": [list(keypoint) for keypoint in self.keypoints],
+            "keypoints": (
+                None
+                if self.keypoints is None
+                else [list(keypoint) for keypoint in self.keypoints]
+            ),
         }
 
     @classmethod
@@ -132,5 +140,9 @@ class Detection:
             class_id=data["class_id"],
             confidence=data["confidence"],
             rle_mask=data.get("rle_mask"),
-            keypoints=tuple(tuple(kp) for kp in data.get("keypoints", ()))
+            keypoints=(
+                None
+                if not data.get("keypoints")
+                else tuple(tuple(kp) for kp in data["keypoints"])
+            ),
         )

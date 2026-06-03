@@ -29,7 +29,7 @@ def test_detection_from_prediction_converts_center_box_and_strips_class():
     assert detection.class_id == 2
     assert detection.confidence == 0.75
     assert detection.rle_mask == {"size": [4, 4], "counts": "abc"}
-    assert detection.keypoints == ()
+    assert detection.keypoints is None
 
 
 class _RecordingDataset:
