@@ -3,8 +3,11 @@
 import json
 import os
 import tempfile
+import time
 from collections.abc import Callable
 from pathlib import Path
+
+from loguru import logger
 
 from elephant_id.constants import DEFAULT_CACHE_ROOT
 
@@ -85,7 +88,11 @@ class CacheManager:
             The results for the given key
         """
         if self.exists(key):
+            logger.debug(f"Cache hit: {self.namespace}/{key}")
             return self.load(key)
+        start = time.perf_counter()
         results = compute_fn()
+        elapsed_ms = (time.perf_counter() - start) * 1000
+        logger.debug(f"Cache miss: {self.namespace}/{key} computed in {elapsed_ms:.0f}ms")
         self.save(key, results)
         return results

@@ -7,10 +7,12 @@ from dotenv import load_dotenv
 
 from elephant_id.ai import Sam3Service
 from elephant_id.dataset import Dataset
+from elephant_id.log import configure_logging
 from elephant_id.visualize import visualize_predictions
 
 if __name__ == "__main__":
     load_dotenv()
+    configure_logging()
 
     dataset = Dataset(
         dataset_root=Path("dataset/elephants-alive/coded"),

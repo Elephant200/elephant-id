@@ -1,4 +1,5 @@
 import pytest
+from loguru import logger
 
 from elephant_id.cache import CacheManager
 
@@ -20,6 +21,21 @@ def test_get_or_compute_writes_json_and_reuses_cached_result(tmp_path):
         "predictions": [{"class": "elephant", "confidence": 0.75}]
     }
     assert cache.path_for(key).exists()
+
+
+def test_get_or_compute_logs_miss_then_hit(tmp_path):
+    cache = CacheManager("sam3/body", cache_root=tmp_path)
+    messages: list[str] = []
+    sink_id = logger.add(messages.append, level="DEBUG", format="{message}")
+    try:
+        cache.get_or_compute("k", lambda: {"v": 1})
+        cache.get_or_compute("k", lambda: {"v": 1})
+    finally:
+        logger.remove(sink_id)
+
+    text = "\n".join(messages)
+    assert "cache miss: sam3/body/k" in text.lower()
+    assert "cache hit: sam3/body/k" in text.lower()
 
 
 def test_path_for_preserves_decimal_cache_key_segments(tmp_path):

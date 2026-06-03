@@ -5,9 +5,11 @@ from dotenv import load_dotenv
 
 from elephant_id.ai import AnchorService, Sam3Service
 from elephant_id.dataset import Dataset
+from elephant_id.log import configure_logging
 
 if __name__ == "__main__":
     load_dotenv()
+    configure_logging()
     dataset = Dataset(
         dataset_root=Path("dataset/elephants-alive/coded"),
         metadata_path=Path("dataset/elephants-alive/images.csv"),

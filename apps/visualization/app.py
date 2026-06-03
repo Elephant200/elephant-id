@@ -8,6 +8,7 @@ import os
 from flask import Flask
 
 from elephant_id.dataset import Dataset
+from elephant_id.log import configure_logging
 
 from .config import CODED_ROOT, CSV_PATH
 from .routes import create_blueprint
@@ -32,7 +33,7 @@ def _build_sam3_service(dataset: Dataset):
 
     api_key = os.environ.get("ROBOFLOW_API_KEY", "").strip()
     if not api_key:
-        logger.info("ROBOFLOW_API_KEY not set; SAM3 endpoint disabled.")
+        logger.warning("ROBOFLOW_API_KEY not set; SAM3 endpoint disabled.")
         return None
 
     try:
@@ -53,7 +54,8 @@ def create_app() -> Flask:
     Performs startup work so the returned app is ready to serve. Raises
     if the dataset CSV is missing.
     """
-    logging.basicConfig(
+    configure_logging()  # loguru, for elephant_id library logs
+    logging.basicConfig(  # stdlib, for this dev app's own logs
         level=os.environ.get("LOG_LEVEL", "INFO"),
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )

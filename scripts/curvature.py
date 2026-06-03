@@ -10,6 +10,7 @@ from PIL import Image
 from elephant_id.ai.sam3 import Sam3Service
 from elephant_id.dataset import Dataset
 from elephant_id.image.masks import decode_rle_mask
+from elephant_id.log import configure_logging
 from elephant_id.visualize import visualize_predictions
 
 PHOTO_ID = "Adam_2011-03-31_03"
@@ -389,6 +390,7 @@ def contour_max_dimension(contour: np.ndarray) -> float:
 
 if __name__ == "__main__":
     load_dotenv()
+    configure_logging()
     dataset = Dataset(
         dataset_root=Path("dataset/elephants-alive/coded"),
         metadata_path=Path("dataset/elephants-alive/images.csv"),

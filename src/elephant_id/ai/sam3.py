@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from inference_sdk import InferenceHTTPClient
+from loguru import logger
 
 from elephant_id.ai.detection import Detection
 from elephant_id.cache import CacheManager
@@ -66,6 +67,7 @@ class Sam3Runner:
     ) -> None:
         api_key = os.getenv("ROBOFLOW_API_KEY")
         if not api_key:
+            logger.warning("ROBOFLOW_API_KEY is not set; SAM3 unavailable")
             raise ValueError("ROBOFLOW_API_KEY is not set")
         self.client = InferenceHTTPClient(
             api_url=ROBOFLOW_API_URL,
@@ -103,6 +105,7 @@ class Sam3Runner:
         )
 
         if not response or not response[0] or not response[0].get("predictions") or not response[0]["predictions"].get("predictions"):
+            logger.warning(f"SAM3 returned no predictions for preset {query_preset!r}")
             raise ValueError(f"Unexpected response from SAM3: {response}")
 
         return [
@@ -155,7 +158,9 @@ class Sam3Service:
             key=key,
             compute_fn=lambda: self._compute(photo, query_preset),
         )
-        return [Detection.from_dict(d) for d in envelope["detections"]]
+        detections = [Detection.from_dict(d) for d in envelope["detections"]]
+        logger.info(f"Ran SAM3 {query_preset} for {photo.identifier}: {len(detections)} detections")
+        return detections
 
     def _compute(self, photo: Photo, query_preset: str) -> dict:
         """Run the model and build the cache envelope."""

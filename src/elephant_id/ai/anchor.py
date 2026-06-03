@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from loguru import logger
 from ultralytics import YOLO
 
 from elephant_id.ai.detection import Detection
@@ -94,12 +95,13 @@ class AnchorService:
             key=key,
             compute_fn=lambda: self._compute(photo, crop_xyxy),
         )
-
         # Cached detections are crop-relative; translate to absolute image coords.
-        return [
+        detections = [
             Detection.from_dict(d).translate(float(ox1), float(oy1))
             for d in envelope["detections"]
         ]
+        logger.info(f"Ran Anchor for {photo.identifier}: {len(detections)} keypoint detections")
+        return detections
 
     def _compute(
         self, photo: Photo, crop_xyxy: tuple[float, float, float, float]
