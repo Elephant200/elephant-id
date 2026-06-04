@@ -49,7 +49,7 @@ class PhotoAnalyzer:
         feature_detections = self.sam3.run(photo, "features")
 
         # If nothing visible in the photo, return None; it's useless to analyze.
-        if not body_detections or not feature_detections or len(body_detections) == 0 or len(feature_detections) == 0:
+        if not body_detections or not feature_detections:
             return None
 
         if len(body_detections) == 1:
@@ -95,7 +95,8 @@ class PhotoAnalyzer:
         if len(ears) > 2:
             # TODO: flag for manual review
             logger.warning(f"Multiple ears found in photo {photo}: {len(ears)}")
-            ears = ears.sort(key=lambda d: d.area(), reverse=True)[:1] # placeholder for now
+            ears.sort(key=lambda d: d.area(), reverse=True)
+            ears = ears[:2] # placeholder for now
 
         if len(ears) == 2:
             # Compare sizes; if one is much larger than the other, ignore the smaller one
