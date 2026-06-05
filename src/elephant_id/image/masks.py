@@ -11,7 +11,7 @@ class RleMask(TypedDict):
     counts: str | bytes # COCO RLE, utf-8 encoded
 
 def decode_rle_mask(rle_mask: RleMask) -> np.ndarray:
-    """Decode a COCO-style RLE mask into a 2D boolean array.
+    """Decode a COCO-style RLE mask into a contiguous 2D boolean array.
 
     Raises:
         ValueError: If ``size``/``counts`` is missing, or a field
@@ -33,7 +33,7 @@ def decode_rle_mask(rle_mask: RleMask) -> np.ndarray:
     decoded = coco_mask.decode(rle_mask)
     if decoded.ndim == 3:
         decoded = decoded[:, :, 0]
-    return decoded.astype(bool)
+    return np.ascontiguousarray(decoded.astype(bool))
 
 
 def mask_bounds(mask: np.ndarray) -> tuple[int, int, int, int]:
