@@ -17,27 +17,6 @@ def _closed_path(points: np.ndarray, start_idx: int, end_idx: int) -> np.ndarray
     return np.concatenate([points[start_idx:], points[: end_idx + 1]])
 
 
-def _cut_contour_by_anchors(
-    contour: np.ndarray,
-    start_point: tuple[float, float],
-    end_point: tuple[float, float],
-) -> np.ndarray:
-    """Return the longer open path between two anchors on a closed contour."""
-    points = contour[:, 0, :]
-    start = np.array(start_point)
-    end = np.array(end_point)
-
-    start_idx = int(np.argmin(np.sum((points - start) ** 2, axis=1)))
-    end_idx = int(np.argmin(np.sum((points - end) ** 2, axis=1)))
-
-    forward_path = _closed_path(points, start_idx, end_idx)
-    backward_path = _closed_path(points, end_idx, start_idx)[::-1]
-
-    if len(forward_path) >= len(backward_path):
-        return forward_path
-    return backward_path
-
-
 class Ear:
     """A single ear of an elephant."""
     def __init__(self, ear_detection: Detection, anchor_prediction: Detection) -> None:
@@ -58,37 +37,50 @@ class Ear:
         self.rle_mask = ear_detection.rle_mask
         self.anchor_points = anchor_prediction.keypoints
 
-        # Lazy properties
-        self._mask = None
-        self._contour = None
+    def _cut_contour_by_anchors(
+        self,
+        contour: np.ndarray,
+        start_point: tuple[float, float],
+        end_point: tuple[float, float],
+    ) -> np.ndarray:
+        """Return the longer open path between two anchors on a closed contour."""
+        points = contour[:, 0, :]
+        start = np.array(start_point)
+        end = np.array(end_point)
 
-    def mask(self) -> RleMask:
-        if self._mask is None:
-            self._mask = decode_rle_mask(self.rle_mask)
-        return self._mask
+        start_idx = int(np.argmin(np.sum((points - start) ** 2, axis=1)))
+        end_idx = int(np.argmin(np.sum((points - end) ** 2, axis=1)))
 
-    def contour(self) -> np.ndarray:
-        if self._contour is None:
-            mask_u8 = np.ascontiguousarray(self.mask().astype(np.uint8) * 255)
-            contours, _ = cv2.findContours(
-                mask_u8,
-                cv2.RETR_EXTERNAL,
-                cv2.CHAIN_APPROX_NONE,
-            )
-            if not contours:
-                raise ValueError("No contour found for ear mask")
-            closed_contour = max(contours, key=cv2.contourArea)
-            start_point, end_point = self.anchor_points
-            self._contour = _cut_contour_by_anchors(
-                closed_contour,
-                start_point,
-                end_point,
-            )
-        return self._contour
+        forward_path = _closed_path(points, start_idx, end_idx)
+        backward_path = _closed_path(points, end_idx, start_idx)[::-1]
 
-    def curvature(self) -> np.ndarray:
+        if len(forward_path) >= len(backward_path):
+            return forward_path
+        return backward_path
+
+    def get_mask(self) -> RleMask:
+        return decode_rle_mask(self.rle_mask)
+
+    def get_contour(self) -> np.ndarray:
+        mask_u8 = np.ascontiguousarray(self.get_mask().astype(np.uint8) * 255)
+        contours, _ = cv2.findContours(
+            mask_u8,
+            cv2.RETR_EXTERNAL,
+            cv2.CHAIN_APPROX_NONE,
+        )
+        if not contours:
+            raise ValueError("No contour found for ear mask")
+        closed_contour = max(contours, key=cv2.contourArea)
+        start_point, end_point = self.anchor_points
+        return self._cut_contour_by_anchors(
+            closed_contour,
+            start_point,
+            end_point,
+        )
+
+    def get_curvature(self) -> np.ndarray:
         return oriented_curvature(
-            self.contour(),
+            self.get_contour(),
             radii=DEFAULT_CURVATURE_RADII,
             weights=DEFAULT_CURVATURE_WEIGHTS,
         )

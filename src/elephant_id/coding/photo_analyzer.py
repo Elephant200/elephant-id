@@ -97,41 +97,6 @@ class PhotoAnalyzer:
                 tails.append(feature)
             else:
                 logger.warning(f"Unknown feature found in photo {photo}: {feature.class_name}")
-        
-        # TODO: Move this to the ear analyzer
-        if len(ears) > 2:
-            # TODO: flag for manual review
-            logger.warning(f"Multiple ears found in photo {photo}: {len(ears)}")
-            ears.sort(key=lambda d: d.area(), reverse=True)
-            ears = ears[:2] # placeholder for now
-
-        if len(ears) == 2:
-            # Compare sizes; if one is much larger than the other, ignore the smaller one
-            if ears[0].area() / ears[1].area() > MIN_MULTIPLE_EAR_AREA_RATIO:
-                ears = [ears[0]] # If one ear is much smaller, it's essentially not there.
-            elif ears[1].area() / ears[0].area() > MIN_MULTIPLE_EAR_AREA_RATIO:
-                ears = [ears[1]] # If one ear is much smaller, it's essentially not there.
-            # Leave both ears if they are similar size.
-
-        anchored_ears: list[Ear] = []
-        for ear in ears:
-            anchor_dets = self.anchor_model.run(photo, crop_xyxy=ear.xyxy)
-            if len(anchor_dets) == 0:
-                logger.warning(f"No anchor detections found for ear on {photo} (ear coords: {ear.xyxy})")
-                continue
-            elif len(anchor_dets) > 1:
-                logger.warning(f"Multiple anchor detections found for ear on {photo} (ear coords: {ear.xyxy}): {len(anchor_dets)}")
-                anchor_dets = sorted(anchor_dets, key=lambda d: d.confidence, reverse=True)[0]
-            anchored_ears.append(Ear(ear, anchor_dets[0]))
-        ears = anchored_ears
-
-        if len(ears) == 0:
-            logger.warning(f"No good ears found in photo {photo}")
-            # Don't run ear analysis, but continue with other analyses
-
-        # TODO: Label each ear as left or right. If invalid, flag for manual review.
-
-        # TODO: Convert mask to contour and cut using anchor points
 
         # Run gender model on body with background removed
         gender_results = self.gender_model.run(photo, body_rle_mask=body.rle_mask)
