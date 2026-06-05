@@ -5,8 +5,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 from dotenv import load_dotenv
 
-from elephant_id.ai import Detection
-from elephant_id.ai.sam3 import Sam3Service
+from elephant_id.ai import AnchorService, Sam3Service
+from elephant_id.coding.analyzers.ears import Ear
 from elephant_id.coding.curvature import (
     contour_max_dimension,
     oriented_curvature,
@@ -14,25 +14,8 @@ from elephant_id.coding.curvature import (
 )
 from elephant_id.dataset import Dataset
 from elephant_id.image.bgr import BgrImage
-from elephant_id.image.masks import decode_rle_mask
+from elephant_id.image.transforms import apply_crop, apply_mask
 from elephant_id.log import configure_logging
-from elephant_id.visualize import visualize_predictions
-
-PHOTO_ID = "Adam_2011-03-31_03"
-ANCHOR_PRESETS = {
-    "Adam_2011-03-31_03": {
-        "start": (917, 258),
-        "end": (1078, 953),
-    },
-    "Adam_2021-11-18_05": {
-        "start": (2414, 1011),
-        "end": (2516, 2485),
-    },
-    "Ripley_2008-06-25_06": {
-        "start": (1448, 372),
-        "end": (1481, 751),
-    }
-}
 
 CURVATURE_POINTS = 1024
 MARKER_STEP = 32
@@ -47,82 +30,6 @@ MATPLOTLIB_COLORS = (
     (128, 128, 128),
     (211, 211, 211),
 )
-
-
-def get_largest_external_contour(prediction: Detection) -> np.ndarray:
-    mask = decode_rle_mask(prediction.rle_mask)
-    mask_u8 = np.ascontiguousarray(mask.astype(np.uint8) * 255)
-
-    contours, _ = cv2.findContours(
-        mask_u8,
-        cv2.RETR_EXTERNAL,
-        cv2.CHAIN_APPROX_NONE,
-    )
-    if not contours:
-        raise ValueError("No contour found for prediction mask")
-
-    return max(contours, key=cv2.contourArea)
-
-
-def squared_distance_to_contour(
-    contour: np.ndarray,
-    point: tuple[int, int],
-) -> float:
-    points = contour[:, 0, :]
-    target = np.array(point)
-    return float(np.min(np.sum((points - target) ** 2, axis=1)))
-
-
-def score_contour_for_anchors(
-    contour: np.ndarray,
-    start_point: tuple[int, int],
-    end_point: tuple[int, int],
-) -> float:
-    return squared_distance_to_contour(
-        contour,
-        start_point,
-    ) + squared_distance_to_contour(
-        contour,
-        end_point,
-    )
-
-
-def select_ear_by_anchors(
-    predictions: list[Detection],
-    start_point: tuple[int, int],
-    end_point: tuple[int, int],
-) -> tuple[Detection, np.ndarray]:
-    ears = [prediction for prediction in predictions if prediction.class_name == "ear"]
-    if not ears:
-        raise ValueError("No ear predictions found")
-
-    candidates: list[tuple[float, Detection, np.ndarray]] = []
-    for ear in ears:
-        contour = get_largest_external_contour(ear)
-        score = score_contour_for_anchors(contour, start_point, end_point)
-        candidates.append((score, ear, contour))
-
-    candidates.sort(key=lambda item: item[0])
-    print(f"Ear candidates: {len(candidates)}")
-    for i, (score, ear, _) in enumerate(candidates):
-        print(
-            f"  {i}: score={score:.1f}, confidence={ear.confidence:.3f}, "
-        )
-
-    _, selected_ear, selected_contour = candidates[0]
-    return selected_ear, selected_contour
-
-
-def anchors_for_photo(photo_id: str) -> tuple[tuple[int, int], tuple[int, int]]:
-    if photo_id not in ANCHOR_PRESETS:
-        available = ", ".join(sorted(ANCHOR_PRESETS))
-        raise KeyError(
-            f"No anchor preset for {photo_id!r}. "
-            f"Add one to ANCHOR_PRESETS. Available presets: {available}"
-        )
-
-    preset = ANCHOR_PRESETS[photo_id]
-    return preset["start"], preset["end"]
 
 
 def draw_contour(
@@ -228,51 +135,6 @@ def draw_radius_scale(
     return output
 
 
-def _closed_path(points: np.ndarray, start_idx: int, end_idx: int) -> np.ndarray:
-    if start_idx <= end_idx:
-        return points[start_idx : end_idx + 1]
-    return np.concatenate([points[start_idx:], points[: end_idx + 1]])
-
-
-def remove_head_connection(
-    contour: np.ndarray,
-    start_point: tuple[int, int],
-    end_point: tuple[int, int],
-) -> np.ndarray:
-    points = contour[:, 0, :]
-    start = np.array(start_point)
-    end = np.array(end_point)
-
-    start_idx = int(np.argmin(np.sum((points - start) ** 2, axis=1)))
-    end_idx = int(np.argmin(np.sum((points - end) ** 2, axis=1)))
-
-    forward_path = _closed_path(points, start_idx, end_idx)
-    backward_path = _closed_path(points, end_idx, start_idx)[::-1]
-
-    # The manually selected head/ear attachment is guaranteed to be the shorter
-    # anchor-to-anchor path.
-    if len(forward_path) >= len(backward_path):
-        kept_points = forward_path
-        removed_points = backward_path
-    else:
-        kept_points = backward_path
-        removed_points = forward_path
-
-    # CurvRank treats left/right ear contours as consistently ordered
-    # top-to-bottom before curvature is computed.
-    if kept_points[0, 1] > kept_points[-1, 1]:
-        kept_points = kept_points[::-1]
-
-    print(f"Start snapped to contour[{start_idx}]: {tuple(points[start_idx])}")
-    print(f"End snapped to contour[{end_idx}]: {tuple(points[end_idx])}")
-    print(f"Forward path points: {len(forward_path)}")
-    print(f"Backward path points: {len(backward_path)}")
-    print(f"Removed head connection points: {len(removed_points)}")
-    print(f"Kept contour points: {len(kept_points)}")
-
-    return kept_points
-
-
 def plot_integral_curvature(
     curvature: np.ndarray,
     marker_step: int,
@@ -316,39 +178,54 @@ if __name__ == "__main__":
         dataset_root=Path("dataset/elephants-alive/coded"),
         metadata_path=Path("dataset/elephants-alive/images.csv"),
     )
-    photo = dataset.get_photo(PHOTO_ID)
-    start_point, end_point = anchors_for_photo(PHOTO_ID)
+    photo = dataset.get_photo("Bloom_2016-06-06_08")
     image = dataset.read_image(photo)
 
     sam3 = Sam3Service(
         dataset=dataset,
     )
-
-    segmentation = sam3.run(photo, "features")
-    ear, contour = select_ear_by_anchors(segmentation, start_point, end_point)
-    ears = [ear]
-    print(ear)
-
-    ear_contour = remove_head_connection(
-        contour,
-        start_point,
-        end_point,
+    anchor_model = AnchorService(
+        dataset=dataset,
     )
-    resampled_contour = resample2d(ear_contour, num_points=CURVATURE_POINTS)
 
-    radii = SCALES * contour_max_dimension(resampled_contour)
-    curvature = oriented_curvature(resampled_contour, radii, weights=WEIGHTS)
+    detections = sam3.run(photo, "features")
+    ear_detections = [detection for detection in detections if detection.class_name == "ear"]
+    ears: list[Ear] = []
+    for ear_detection in ear_detections:
+        anchor_dets = anchor_model.run(photo, crop_xyxy=ear_detection.xyxy)
+        if len(anchor_dets) == 0:
+            print(f"No anchor detections found for ear {ear_detection.xyxy}")
+            continue
+        elif len(anchor_dets) > 1:
+            print(f"Multiple anchor detections found for ear {ear_detection.xyxy}: {len(anchor_dets)}")
+            anchor_dets = sorted(anchor_dets, key=lambda d: d.confidence, reverse=True)[0]
+        ears.append(Ear(ear_detection, anchor_dets[0]))
+
+    ear = max(ears, key=lambda e: e.area)
+    # Display the ear image and anchor points
+    ear_image = apply_mask(image, ear.get_mask(), crop=False)
+
+    # Display the anchor points
+    for anchor_point in ear.anchor_points:
+        cv2.circle(ear_image, (int(anchor_point[0]), int(anchor_point[1])), 25, (0, 0, 255), -1)
+
+    cv2.imshow("Ear Image with Anchor Points", apply_crop(ear_image, ear.xyxy))
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
+
+    ear_contour = resample2d(ear.get_contour(), num_points=CURVATURE_POINTS)
+
+    ear_image = draw_polyline(ear_image, ear_contour, color=(0, 255, 0), thickness=2, marker_step=MARKER_STEP)
+    cv2.imshow("Ear Image with Contour", apply_crop(ear_image, ear.xyxy))
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
+
+    radii = SCALES * contour_max_dimension(ear_contour)
+    curvature = oriented_curvature(ear_contour, radii, weights=WEIGHTS)
     print(f"Curvature min/max: {curvature.min():.4f}, {curvature.max():.4f}")
 
-    visualized_image = visualize_predictions(image, ears)
-    cropped_image, cropped_contour = crop_to_contour(visualized_image, resampled_contour)
-    contour_image = draw_polyline(
-        cropped_image,
-        cropped_contour,
-        marker_step=MARKER_STEP,
-    )
-    contour_image = draw_radius_scale(contour_image, radii, SCALES, MATPLOTLIB_COLORS)
-    cv2.imshow("Contour Image", contour_image)
+    ear_image = draw_radius_scale(apply_crop(ear_image, ear.xyxy), radii, SCALES, MATPLOTLIB_COLORS)
+    cv2.imshow("Contour Image", ear_image)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 
