@@ -14,30 +14,25 @@ class SeekCoder:
         self.dataset = dataset
         self.photo_analyzer = PhotoAnalyzer(dataset)
 
-    def code(self, sighting: Sighting) -> SeekCode:
+    def code(self, sighting: Sighting) -> dict:
+        """Analyze every photo and aggregate into one sighting result.
+
+        Returns a loose dict holding the per-photo analyses and a preview SEEK
+        code. Aggregation is currently a stub.
+        """
         logger.info(f"Coding sighting {sighting.sighting_id} ({len(sighting.photos)} photos)")
+        photo_analyses: list[dict] = []
         for photo in sighting.photos:
             photo_analysis = self.photo_analyzer.analyze(photo)
             if photo_analysis is None:
                 continue
+            photo_analyses.append(photo_analysis)
 
-        # Use photo analysis to generate SEEK codes
-        return SeekCode(
-            g=...,
-            a=...,
-            tr=...,
-            tl=...,
-            ert1=...,
-            erh1=...,
-            ert2=...,
-            erh2=...,
-            elt1=...,
-            elh1=...,
-            elt2=...,
-            elh2=...,
-            xr=...,
-            xl=...,
-            sr=...,
-            sl=...,
-            sb=...,
-        )
+        return {
+            "sighting_id": sighting.sighting_id,
+            "photos": photo_analyses,
+            "preview_seek": ...,
+            # TODO: combine age/gender, infer tusk presence and side, choose the
+            # best left/right ear, select representative images, and build the
+            # preview SEEK code from the combined fields.
+        }

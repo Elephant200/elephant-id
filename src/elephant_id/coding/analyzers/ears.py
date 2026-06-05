@@ -1,9 +1,13 @@
+"""Ear field analyzer."""
+
+from loguru import logger
 import cv2
 import numpy as np
 
 from elephant_id.ai import Detection
 from elephant_id.coding.curvature import oriented_curvature
 from elephant_id.constants import DEFAULT_CURVATURE_RADII, DEFAULT_CURVATURE_WEIGHTS
+from elephant_id.domain import Photo
 from elephant_id.image.masks import RleMask, decode_rle_mask
 
 
@@ -45,6 +49,8 @@ class Ear:
             ear_detection: The detection of the ear.
             anchor_prediction: The anchor detection of the ear; must have keypoints
         """
+        if ear_detection.class_name != "ear":
+            raise ValueError("Ear detection must be an ear")
         if anchor_prediction.keypoints is None or len(anchor_prediction.keypoints) != 2:
             raise ValueError("Anchor prediction must have exactly two keypoints")
 
@@ -86,3 +92,13 @@ class Ear:
             radii=DEFAULT_CURVATURE_RADII,
             weights=DEFAULT_CURVATURE_WEIGHTS,
         )
+
+
+class EarAnalyzer:
+    """Analyze each anchored ear: geometry plus stubbed tear/hole evidence."""
+
+    def __init__(self) -> None:
+        ...
+
+    def analyze(self, photo: Photo, prep: dict) -> dict:
+        ...

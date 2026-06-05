@@ -12,6 +12,12 @@ from elephant_id.ai import (
     GenderService,
     Sam3Service,
 )
+from elephant_id.coding.analyzers import (
+    AgeAnalyzer,
+    EarAnalyzer,
+    GenderAnalyzer,
+    TuskAnalyzer,
+)
 from elephant_id.constants import (
     DEFAULT_CACHE_ROOT,
     MIN_FEATURE_BODY_OVERLAP,
@@ -90,8 +96,9 @@ class PhotoAnalyzer:
             elif feature.class_name == "tail":
                 tails.append(feature)
             else:
-                raise ValueError(f"Unknown class: {feature.class_name}")
-
+                logger.warning(f"Unknown feature found in photo {photo}: {feature.class_name}")
+        
+        # TODO: Move this to the ear analyzer
         if len(ears) > 2:
             # TODO: flag for manual review
             logger.warning(f"Multiple ears found in photo {photo}: {len(ears)}")
@@ -106,8 +113,7 @@ class PhotoAnalyzer:
                 ears = [ears[1]] # If one ear is much smaller, it's essentially not there.
             # Leave both ears if they are similar size.
 
-        anchored_ears: list[Detection] = []
-        anchor_predictions: dict[Detection, Detection] = {}
+        anchored_ears: list[Ear] = []
         for ear in ears:
             anchor_dets = self.anchor_model.run(photo, crop_xyxy=ear.xyxy)
             if len(anchor_dets) == 0:
@@ -116,8 +122,7 @@ class PhotoAnalyzer:
             elif len(anchor_dets) > 1:
                 logger.warning(f"Multiple anchor detections found for ear on {photo} (ear coords: {ear.xyxy}): {len(anchor_dets)}")
                 anchor_dets = sorted(anchor_dets, key=lambda d: d.confidence, reverse=True)[0]
-            anchored_ears.append(ear)
-            anchor_predictions[ear] = anchor_dets[0]
+            anchored_ears.append(Ear(ear, anchor_dets[0]))
         ears = anchored_ears
 
         if len(ears) == 0:
