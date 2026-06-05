@@ -1,8 +1,8 @@
 """Ear field analyzer."""
 
-from loguru import logger
 import cv2
 import numpy as np
+from loguru import logger
 
 from elephant_id.ai import Detection
 from elephant_id.coding.curvature import oriented_curvature
@@ -15,7 +15,6 @@ def _closed_path(points: np.ndarray, start_idx: int, end_idx: int) -> np.ndarray
     if start_idx <= end_idx:
         return points[start_idx : end_idx + 1]
     return np.concatenate([points[start_idx:], points[: end_idx + 1]])
-
 
 class Ear:
     """A single ear of an elephant."""
