@@ -3,7 +3,8 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from elephant_id.ai import Sam3Service
+from elephant_id.ai import AnchorService, Sam3Service
+from elephant_id.coding.analyzers.ears import Ear
 from elephant_id.dataset import Dataset
 from elephant_id.image.transforms import apply_mask
 
@@ -38,16 +39,27 @@ if __name__ == "__main__":
     )
 
     sam3 = Sam3Service(dataset=dataset)
+    anchor_model = AnchorService(dataset=dataset)
 
     photo = dataset.get_photo("Bloom_2016-06-06_08")
 
     detections = sam3.run(photo, "features")
-    ear = max(detections, key=lambda d: d.area() if d.class_name == "ear" else 0)
-    if ear is None:
-        raise ValueError("No ear found")
+    ear_detections = [detection for detection in detections if detection.class_name == "ear"]
+    ears: list[Ear] = []
+    for ear_detection in ear_detections:
+        anchor_dets = anchor_model.run(photo, crop_xyxy=ear_detection.xyxy)
+        if len(anchor_dets) == 0:
+            print(f"No anchor detections found for ear {ear_detection.xyxy}")
+            continue
+        elif len(anchor_dets) > 1:
+            print(f"Multiple anchor detections found for ear {ear_detection.xyxy}: {len(anchor_dets)}")
+            anchor_dets = sorted(anchor_dets, key=lambda d: d.confidence, reverse=True)[0]
+        ears.append(Ear(ear_detection, anchor_dets[0]))
+
+    ear = max(ears, key=lambda e: e.area)
 
     # crop to ear
-    ear_only = apply_mask(dataset.read_image(photo), ear.mask(), crop=True)
+    ear_only = apply_mask(dataset.read_image(photo), ear.get_mask(), crop=True)
     cv2.imshow("Ear only", ear_only)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
