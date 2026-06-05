@@ -55,7 +55,7 @@ class Detection:
             return float(coco_mask.area([self.rle_mask])[0])
         return (self.x2 - self.x1) * (self.y2 - self.y1)
 
-    def mask(self) -> np.ndarray:
+    def get_mask(self) -> np.ndarray:
         """Decoded boolean mask. Recomputed on each call."""
         if self.rle_mask is None:
             raise ValueError("Detection has no mask")
@@ -72,7 +72,7 @@ class Detection:
             return width * height
 
         mask_detection, box_detection = (self, other) if self.rle_mask is not None else (other, self)
-        mask = mask_detection.mask()
+        mask = mask_detection.get_mask()
         x1, y1, x2, y2 = clip_xyxy(*box_detection.xyxy, mask.shape[1], mask.shape[0])
         return float(np.sum(mask[y1:y2, x1:x2]))
 
