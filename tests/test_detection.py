@@ -46,7 +46,7 @@ def test_area_uses_mask_pixel_count_when_masked(rle_from_mask):
 def test_mask_decodes_rle(rle_from_mask):
     mask = np.array([[True, False], [False, True]])
 
-    decoded = _masked(mask, rle_from_mask).mask()
+    decoded = _masked(mask, rle_from_mask).get_mask()
 
     assert decoded.dtype == bool
     assert decoded.tolist() == mask.tolist()
@@ -58,7 +58,7 @@ def test_mask_without_rle_raises():
     )
 
     with pytest.raises(ValueError, match="no mask"):
-        detection.mask()
+        detection.get_mask()
 
 
 def test_intersection_union_and_iou(rle_from_mask):
