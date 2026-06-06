@@ -10,7 +10,6 @@ from elephant_id.coding.analyzers.ears import Ear
 from elephant_id.coding.curvature import (
     contour_max_dimension,
     oriented_curvature,
-    resample2d,
 )
 from elephant_id.dataset import Dataset
 from elephant_id.image.bgr import BgrImage
@@ -203,7 +202,7 @@ if __name__ == "__main__":
 
     ear = max(ears, key=lambda e: e.area)
     # Display the ear image and anchor points
-    ear_image = apply_mask(image, ear.get_mask(), crop=False)
+    ear_image = apply_mask(image, ear.mask, crop=False)
 
     # Display the anchor points
     for anchor_point in ear.anchor_points:
@@ -213,7 +212,7 @@ if __name__ == "__main__":
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 
-    ear_contour = resample2d(ear.get_contour(), num_points=CURVATURE_POINTS)
+    ear_contour = ear.resampled_contour(CURVATURE_POINTS)
 
     ear_image = draw_polyline(ear_image, ear_contour, color=(0, 255, 0), thickness=2, marker_step=MARKER_STEP)
     cv2.imshow("Ear Image with Contour", apply_crop(ear_image, ear.xyxy))
