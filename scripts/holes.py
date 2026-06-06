@@ -76,8 +76,10 @@ if __name__ == "__main__":
         "Centaures": "Centaures_2018-11-24_10",
         "Bloom": "Bloom_2016-06-06_08",
         "Intwandamela": "Intwandamela_2021-05-27_03",
+        "Nguyen": "Nguyen_2012-08-02_07",
+        "Scar": "Scar_2010-11-30_08",
     }
-    photo = dataset.get_photo(photos["Gap"])
+    photo = dataset.get_photo(photos["Centaures"])
 
     detections = sam3.run(photo, "features")
     ear_detections = [detection for detection in detections if detection.class_name == "ear"]
@@ -92,7 +94,7 @@ if __name__ == "__main__":
             anchor_dets = sorted(anchor_dets, key=lambda d: d.confidence, reverse=True)[0]
         ears.append(Ear(ear_detection, anchor_dets[0]))
 
-    ear = max(ears, key=lambda e: e.area)
+    ear = min(ears, key=lambda e: e.area)
 
     # crop to ear
     image = apply_crop(dataset.read_image(photo), ear.xyxy)
@@ -107,7 +109,6 @@ if __name__ == "__main__":
     cv2.imshow("Ear grayscale", ear_grayscale)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
-
 
     interior_mask = trim_binary_mask(ear_mask, margin_fraction=EDGE_MARGIN_FRACTION)
     edge_exclusion = ear_mask & ~interior_mask
@@ -181,20 +182,20 @@ if __name__ == "__main__":
     # cv2.destroyAllWindows()
 
     # Preprocess by subtracting the background
-    # sigma = 15
-    # local_mean = cv2.GaussianBlur(ear_grayscale, (0, 0), sigmaX=sigma, sigmaY=sigma)
-    # local_mean[~ear_mask] = 0 # Delete area outside mask
-    # cv2.imshow(f"Local mean ({sigma*6+1}, {sigma*6+1})", local_mean)
-    # cv2.waitKey(0)
-    # cv2.destroyAllWindows()
+    sigma = 15
+    local_mean = cv2.GaussianBlur(ear_grayscale, (0, 0), sigmaX=sigma, sigmaY=sigma)
+    local_mean[~ear_mask] = 0 # Delete area outside mask
+    cv2.imshow(f"Local mean ({sigma*6+1}, {sigma*6+1})", local_mean)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
 
-    # normalized_grayscale = cv2.absdiff(ear_grayscale, local_mean)
-    # cv2.imshow("Normalized grayscale", normalized_grayscale)
-    # cv2.waitKey(0)
-    # cv2.destroyAllWindows()
-    normalized_grayscale = ear_grayscale
+    normalized_grayscale = cv2.absdiff(ear_grayscale, local_mean)
+    cv2.imshow("Normalized grayscale", normalized_grayscale)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
+    # normalized_grayscale = ear_grayscale
 
-    edges = cv2.Canny(normalized_grayscale, 50, 100)
+    edges = cv2.Canny(normalized_grayscale, 50, 150)
     cv2.imshow("Edges", edges)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
@@ -225,45 +226,124 @@ if __name__ == "__main__":
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 
-    min_area = 50.0
+    # Filter by area / circularity composite and color difference
+    lab_float = cv2.cvtColor(ear_only.astype(np.float32) / 255.0, cv2.COLOR_BGR2LAB)
+
+    min_area = 0.000065 * ear.area
     min_circularity = 0.3
+    min_composite = min_area * 0.3
+    print(f"Min area: {min_area:.5f}, Min circularity: {min_circularity:.4f}, Min composite: {min_composite:.5f}")
 
     filtered_contours = []
     rejected_by_area = []
     rejected_by_circularity = []
-    rejected_by_weird_score = []
+    rejected_by_composite = []
+    rejected_by_color_difference = []
     for contour in contours:
+        done = False
         area = cv2.contourArea(contour)
+
+        if area < min_area:
+            verdict = "Rejected by area"
+            rejected_by_area.append(contour)
+            done = True
+
         perimeter = cv2.arcLength(contour, closed=True)
         if perimeter == 0: # This should never happen, but just in case of divide by zero errors.
             continue
 
         circularity = (4.0 * np.pi * area) / (perimeter * perimeter)
-
-        if area < min_area:
-            verdict = "Rejected by area"
-            rejected_by_area.append(contour)
-        elif circularity < min_circularity:
+        if not done and circularity < min_circularity:
             verdict = "Rejected by circularity"
             rejected_by_circularity.append(contour)
-        else:
+            done = True
+
+        composite = circularity ** 2 * area
+        if not done and composite < min_composite:
+            verdict = "Rejected by composite"
+            rejected_by_composite.append(contour)
+            done = True
+
+        # Compute color difference from immediate surrounding area
+        hole_mask = np.zeros(ear_mask.shape, dtype=np.uint8)
+        cv2.drawContours(hole_mask, [contour], -1, 1, cv2.FILLED)
+
+        hole_radius = np.sqrt(area / np.pi)
+
+        surrounding_radius = max(3, round(hole_radius * 3.0))
+        surrounding_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (surrounding_radius * 2 + 1, surrounding_radius * 2 + 1))
+
+        outer_buffer_radius = max(1, round(hole_radius * 1.0))
+        outer_buffer_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (outer_buffer_radius * 2 + 1, outer_buffer_radius * 2 + 1))
+        inner_buffer_radius = max(1, round(hole_radius * 0.5))
+        inner_buffer_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (inner_buffer_radius * 2 + 1, inner_buffer_radius * 2 + 1))
+
+        area_mask = cv2.dilate(hole_mask, surrounding_kernel, iterations=1)
+        exclusion_mask = cv2.dilate(hole_mask, outer_buffer_kernel, iterations=1)
+        surrounding_mask = area_mask.astype(bool) & ~exclusion_mask.astype(bool) & ear_mask.astype(bool)
+
+        hole_core = cv2.erode(hole_mask, inner_buffer_kernel, iterations=1).astype(bool)
+
+        hole_color = np.mean(lab_float[hole_core], axis=0)
+        surrounding_color = np.mean(lab_float[surrounding_mask], axis=0)
+        color_difference = np.linalg.norm(hole_color - surrounding_color)
+
+        if not done and color_difference < 15:
+            verdict = "Rejected by color"
+            rejected_by_color_difference.append(contour)
+            done = True
+
+        if not done:
             verdict = "Accepted"
             filtered_contours.append(contour)
-        weird_score = circularity ** 2 * area
-        if weird_score < 15:
-            rejected_by_weird_score.append(contour)
-        print(f"{verdict:<25s}| Circularity: {circularity:<10.4f}| Area: {area:<10.3f}| Perimeter: {perimeter:<10.3f}| Weird Score: {weird_score:<10.5}")
+
+        print(f"{verdict:<25s}| Circularity: {circularity:<10.4f}| Area: {area:<5.1f} ({area/ear.area:.4%})| Perimeter: {perimeter:<10.3f}| Composite: {composite:<10.5}| Color difference: {color_difference:<10.5}")
 
     print(f"Filtered contours: {len(filtered_contours)}")
     print(f"Rejected by area: {len(rejected_by_area)}")
     print(f"Rejected by circularity: {len(rejected_by_circularity)}")
-    print(f"Rejected by weird score: {len(rejected_by_weird_score)}")
+    print(f"Rejected by composite: {len(rejected_by_composite)}")
+    print(f"Rejected by color difference: {len(rejected_by_color_difference)}")
+
+    for contour in filtered_contours:
+        hole_mask = np.zeros(ear_mask.shape, dtype=np.uint8)
+        cv2.drawContours(hole_mask, [contour], -1, 1, cv2.FILLED)
+
+        hole_radius = np.sqrt(area / np.pi)
+
+        surrounding_radius = max(3, round(hole_radius * 3.0))
+        surrounding_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (surrounding_radius * 2 + 1, surrounding_radius * 2 + 1))
+
+        outer_buffer_radius = max(1, round(hole_radius * 1.0))
+        outer_buffer_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (outer_buffer_radius * 2 + 1, outer_buffer_radius * 2 + 1))
+        inner_buffer_radius = max(1, round(hole_radius * 0.5))
+        inner_buffer_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (inner_buffer_radius * 2 + 1, inner_buffer_radius * 2 + 1))
+
+        area_mask = cv2.dilate(hole_mask, surrounding_kernel, iterations=1)
+        exclusion_mask = cv2.dilate(hole_mask, outer_buffer_kernel, iterations=1)
+        surrounding_mask = area_mask.astype(bool) & ~exclusion_mask.astype(bool) & ear_mask.astype(bool)
+
+        hole_core = cv2.erode(hole_mask, inner_buffer_kernel, iterations=1).astype(bool)
+
+        hole_color = np.mean(lab_float[hole_core], axis=0)
+        surrounding_color = np.mean(lab_float[surrounding_mask], axis=0)
+        color_difference = np.linalg.norm(hole_color - surrounding_color)
+        print(f"Color difference: {color_difference} | Inner color: {hole_color} | Surrounding color: {surrounding_color}")
+
+        # Show the surrounding area in red and the hole core in green
+        color_difference_copy = ear_only.copy()
+        color_difference_copy[surrounding_mask] = (0, 0, 255)
+        color_difference_copy[hole_core] = (0, 255, 0)
+        cv2.imshow("Color difference", color_difference_copy)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
 
     binary_copy = cv2.cvtColor(normalized_grayscale, cv2.COLOR_GRAY2BGR)
     cv2.drawContours(binary_copy, filtered_contours, -1, (255, 255, 255), 1)
-    cv2.drawContours(binary_copy, rejected_by_weird_score, -1, (255, 255, 0), 1)
+    cv2.drawContours(binary_copy, rejected_by_composite, -1, (255, 255, 0), 1)
     cv2.drawContours(binary_copy, rejected_by_area, -1, (0, 0, 255), 1)
     cv2.drawContours(binary_copy, rejected_by_circularity, -1, (0, 255, 0), 1)
+    cv2.drawContours(binary_copy, rejected_by_color_difference, -1, (255, 0, 255), 1)
 
     cv2.imshow("Contours", binary_copy)
     cv2.waitKey(0)
