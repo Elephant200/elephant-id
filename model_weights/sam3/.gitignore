@@ -1,0 +1,2 @@
+# SAM3 is a gated model, so we don't commit the weights
+sam3.pt
