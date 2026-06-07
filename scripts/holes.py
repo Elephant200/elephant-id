@@ -79,7 +79,7 @@ if __name__ == "__main__":
         "Nguyen": "Nguyen_2012-08-02_07",
         "Scar": "Scar_2010-11-30_08",
     }
-    photo = dataset.get_photo(photos["Centaures"])
+    photo = dataset.get_photo(photos["Nguyen"])
 
     detections = sam3.run(photo, "features")
     ear_detections = [detection for detection in detections if detection.class_name == "ear"]
@@ -94,7 +94,7 @@ if __name__ == "__main__":
             anchor_dets = sorted(anchor_dets, key=lambda d: d.confidence, reverse=True)[0]
         ears.append(Ear(ear_detection, anchor_dets[0]))
 
-    ear = min(ears, key=lambda e: e.area)
+    ear = max(ears, key=lambda e: e.area)
 
     # crop to ear
     image = apply_crop(dataset.read_image(photo), ear.xyxy)
@@ -195,7 +195,7 @@ if __name__ == "__main__":
     cv2.destroyAllWindows()
     # normalized_grayscale = ear_grayscale
 
-    edges = cv2.Canny(normalized_grayscale, 50, 150)
+    edges = cv2.Canny(normalized_grayscale, 50, 125)
     cv2.imshow("Edges", edges)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
@@ -207,9 +207,21 @@ if __name__ == "__main__":
     cv2.destroyAllWindows()
 
     # Apply morpholgical closing to canny edges
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
-    closed_edges = cv2.morphologyEx(interior_edges, cv2.MORPH_CLOSE, kernel, iterations=2)
+    # Determine kernel size based on ear area
+    close_kernel_size = round(np.sqrt(ear.area) * 0.0025) * 2 + 1
+    print(f"Close kernel size: {close_kernel_size}")
+    close_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (close_kernel_size, close_kernel_size))
+    closed_edges = cv2.morphologyEx(interior_edges, cv2.MORPH_CLOSE, close_kernel, iterations=2)
     cv2.imshow("Closed edges", closed_edges)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
+
+    # Re-open with smaller kernel to denoise
+    open_kernel_size = round(np.sqrt(ear.area) * 0.00125) * 2 + 1
+    print(f"Open kernel size: {open_kernel_size}")
+    open_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (open_kernel_size, open_kernel_size))
+    closed_edges = cv2.morphologyEx(closed_edges, cv2.MORPH_OPEN, open_kernel, iterations=1)
+    cv2.imshow("Denoised edges", closed_edges)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 
@@ -229,9 +241,9 @@ if __name__ == "__main__":
     # Filter by area / circularity composite and color difference
     lab_float = cv2.cvtColor(ear_only.astype(np.float32) / 255.0, cv2.COLOR_BGR2LAB)
 
-    min_area = 0.000065 * ear.area
-    min_circularity = 0.3
-    min_composite = min_area * 0.3
+    min_area = 0.00003 * ear.area
+    min_circularity = 0.4
+    min_composite = min_area * 0.75
     print(f"Min area: {min_area:.5f}, Min circularity: {min_circularity:.4f}, Min composite: {min_composite:.5f}")
 
     filtered_contours = []
@@ -297,7 +309,7 @@ if __name__ == "__main__":
             verdict = "Accepted"
             filtered_contours.append(contour)
 
-        print(f"{verdict:<25s}| Circularity: {circularity:<10.4f}| Area: {area:<5.1f} ({area/ear.area:.4%})| Perimeter: {perimeter:<10.3f}| Composite: {composite:<10.5}| Color difference: {color_difference:<10.5}")
+        print(f"{verdict:<25s}| Circularity: {circularity:<13.4f}| Area: {area:<8.1f}({area/ear.area:.4%})| Perimeter: {perimeter:<10.3f}| Composite: {composite:<10.5}| Color difference: {color_difference:<10.5}")
 
     print(f"Filtered contours: {len(filtered_contours)}")
     print(f"Rejected by area: {len(rejected_by_area)}")
