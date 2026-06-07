@@ -44,7 +44,7 @@ if __name__ == "__main__":
         "Wallow_front": "Wallow_2005-12-17_08",
         "Wallow_left": "Wallow_2005-12-17_07",
     }
-    identifier = photos.get(photo_preset, default=photo_preset)
+    identifier = photos.get(photo_preset, photo_preset)
 
     photo = dataset.get_photo(identifier)
     image = dataset.read_image(photo)
@@ -141,15 +141,16 @@ if __name__ == "__main__":
         logger.warning(f"No good ears found in photo {photo}")
         # Cancel ear analysis ONLY; continue with other analyses.
 
-    print(f"Body Corodinates: \t({body.xyxy[0]:>7.2f}, {body.xyxy[1]:>7.2f}), ({body.xyxy[2]:>7.2f}, {body.xyxy[3]:>7.2f})")
+    print(f"Body Coordinates: \t({body.xyxy[0]:>7.2f}, {body.xyxy[1]:>7.2f}), ({body.xyxy[2]:>7.2f}, {body.xyxy[3]:>7.2f})")
     for trunk in trunks:
-        print(f"Trunk Corodinates: \t({trunk.xyxy[0]:>7.2f}, {trunk.xyxy[1]:>7.2f}), ({trunk.xyxy[2]:>7.2f}, {trunk.xyxy[3]:>7.2f})")
+        print(f"Trunk Coordinates: \t({trunk.xyxy[0]:>7.2f}, {trunk.xyxy[1]:>7.2f}), ({trunk.xyxy[2]:>7.2f}, {trunk.xyxy[3]:>7.2f})")
     for tusk in tusks:
-        print(f"Tusk Corodinates: \t({tusk.xyxy[0]:>7.2f}, {tusk.xyxy[1]:>7.2f}), ({tusk.xyxy[2]:>7.2f}, {tusk.xyxy[3]:>7.2f})")
+        print(f"Tusk Coordinates: \t({tusk.xyxy[0]:>7.2f}, {tusk.xyxy[1]:>7.2f}), ({tusk.xyxy[2]:>7.2f}, {tusk.xyxy[3]:>7.2f})")
     for ear in ears:
-        print(f"Ear Corodinates: \t({ear.xyxy[0]:>7.2f}, {ear.xyxy[1]:>7.2f}), ({ear.xyxy[2]:>7.2f}, {ear.xyxy[3]:>7.2f})")
+        print(f"Ear Coordinates: \t({ear.xyxy[0]:>7.2f}, {ear.xyxy[1]:>7.2f}), ({ear.xyxy[2]:>7.2f}, {ear.xyxy[3]:>7.2f})")
+        print(f"Aspect ratio: \t{(ear.xyxy[2] - ear.xyxy[0]) / (ear.xyxy[3] - ear.xyxy[1])}")
     for tail in tails:
-        print(f"Tail Corodinates: \t({tail.xyxy[0]:>7.2f}, {tail.xyxy[1]:>7.2f}), ({tail.xyxy[2]:>7.2f}, {tail.xyxy[3]:>7.2f})")
+        print(f"Tail Coordinates: \t({tail.xyxy[0]:>7.2f}, {tail.xyxy[1]:>7.2f}), ({tail.xyxy[2]:>7.2f}, {tail.xyxy[3]:>7.2f})")
 
     view = "Unknown"
     reason = "Unknown"
