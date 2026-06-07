@@ -1,5 +1,7 @@
 """Ear field analyzer."""
 
+from typing import Literal
+
 import cv2
 import numpy as np
 from loguru import logger
@@ -77,7 +79,11 @@ def largest_contour_from_rle(rle_mask: RleMask) -> np.ndarray:
 
 def encode_rle_mask(mask: np.ndarray) -> RleMask:
     """Encode a boolean mask as COCO RLE."""
-    return coco_mask.encode(np.asfortranarray(mask.astype(np.uint8)))
+    rle_mask = coco_mask.encode(np.asfortranarray(mask.astype(np.uint8)))
+    return {
+        "size": list(mask.shape),
+        "counts": rle_mask["counts"].decode("utf-8") if isinstance(rle_mask["counts"], bytes) else rle_mask["counts"],
+    }
 
 
 class Ear:
@@ -113,6 +119,7 @@ class Ear:
         self._mask = self._build_mask()
         self._rle_mask = encode_rle_mask(self._mask)
         self.area = float(coco_mask.area([self.rle_mask])[0])
+        self.side: Literal["left", "right"] = "left" if (self.anchor_points[0][0] + self.anchor_points[1][0]) / 2 < (self.xyxy[0] + self.xyxy[2]) / 2 else "right"
 
     @property
     def rle_mask(self) -> RleMask:
@@ -152,6 +159,9 @@ class Ear:
     def resampled_contour(self, num_points: int = 1024) -> np.ndarray:
         """Return the cleaned ear contour resampled to a fixed point count."""
         return resample2d(self._cut_contour, num_points=num_points)
+
+    def __str__(self) -> str:
+        return f"Ear(side={self.side}, area={self.area:.2f}, xyxy={self.xyxy}, anchor_points={self.anchor_points})"
 
 
 class EarAnalyzer:
