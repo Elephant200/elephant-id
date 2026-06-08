@@ -18,17 +18,10 @@ from elephant_id.log import configure_logging
 
 CURVATURE_POINTS = 1024
 MARKER_STEP = 32
+CONTOUR_ENDPOINT_MARGIN = 96
+CURVATURE_THRESHOLD = 0.44
 SCALES = np.array([0.02, 0.04, 0.06, 0.08, 0.10], dtype=np.float32)
 WEIGHTS = np.array([0.6, 0.9, 1.0, 0.9, 0.6], dtype=np.float32)
-MATPLOTLIB_COLORS = (
-    (31, 119, 180),
-    (255, 127, 14),
-    (44, 160, 44),
-    (214, 39, 40),
-    (148, 103, 189),
-    (128, 128, 128),
-    (211, 211, 211),
-)
 
 
 def draw_contour(
@@ -107,67 +100,94 @@ def crop_to_contour(
     return cropped, shifted
 
 
-def draw_radius_scale(
-    image: BgrImage,
-    radii: np.ndarray,
-    scales: np.ndarray,
-    colors: tuple[tuple[int, int, int], ...],
-    ) -> BgrImage:
-    output = image.copy()
-    max_radius = int(np.ceil(float(np.max(radii))))
-    x = image.shape[1] - max_radius - 64
-    y = image.shape[0] - max_radius - 24
+def low_curvature_mask(
+    curvature: np.ndarray,
+    *,
+    threshold: float,
+    endpoint_margin: int,
+) -> np.ndarray:
+    """Return indices where curvature is at or below the threshold, excluding contour ends."""
+    mask = curvature <= threshold
+    mask[:endpoint_margin] = False
+    mask[-endpoint_margin:] = False
+    return mask
 
-    for radius, color in zip(radii, colors, strict=False):
-        radius_int = round(radius)
-        cv2.circle(
-            output,
-            (x, y),
-            radius_int,
-            color[::-1], # RGB -> BGR
-            2,
-            cv2.LINE_AA,
+
+def shade_low_curvature_contour(
+    image: BgrImage,
+    contour: np.ndarray,
+    low_curvature: np.ndarray,
+    *,
+    color: tuple[int, int, int] = (255, 0, 255),
+    thickness: int = 10,
+    alpha: float = 0.45,
+) -> BgrImage:
+    """Highlight contour segments whose curvature is at or below the threshold."""
+    if len(contour) != len(low_curvature):
+        raise ValueError(
+            f"Contour and mask length mismatch: {len(contour)} vs {len(low_curvature)}"
         )
 
-    cv2.circle(output, (x, y), 2, (0, 0, 0), -1, cv2.LINE_AA)
+    output = image.copy()
+    overlay = image.copy()
+    points_i32 = contour.astype(np.int32)
 
-    return output
+    start: int | None = None
+    for idx, is_low in enumerate(low_curvature):
+        if is_low and start is None:
+            start = idx
+        elif not is_low and start is not None:
+            segment = points_i32[start:idx]
+            if len(segment) >= 2:
+                cv2.polylines(
+                    overlay,
+                    [segment.reshape((-1, 1, 2))],
+                    isClosed=False,
+                    color=color[::-1],
+                    thickness=thickness,
+                    lineType=cv2.LINE_AA,
+                )
+            start = None
+
+    if start is not None:
+        segment = points_i32[start:]
+        if len(segment) >= 2:
+            cv2.polylines(
+                overlay,
+                [segment.reshape((-1, 1, 2))],
+                isClosed=False,
+                color=color[::-1],
+                thickness=thickness,
+                lineType=cv2.LINE_AA,
+            )
+
+    return cv2.addWeighted(overlay, alpha, output, 1.0 - alpha, 0.0)
 
 
 def plot_integral_curvature(
+    ax: plt.Axes,
     curvature: np.ndarray,
-    marker_step: int,
+    *,
+    low_curvature: np.ndarray,
+    threshold: float,
+    ymin: float,
+    ymax: float,
 ) -> None:
-    """Plot curvature.
+    """Draw curvature and low-curvature shading on an axes."""
+    x = np.arange(curvature.shape[0])
 
-    Args:
-        curvature: Curvature values, shaped ``(num_points,)``.
-        marker_step: Subsample markers along the contour index.
-
-    Returns:
-        None.
-    """
-    plt.figure(figsize=(19.2, 4.8))
-
-    plt.plot(
-        curvature,
-        color="black",
-        label="Curvature",
+    ax.fill_between(
+        x,
+        ymin,
+        ymax,
+        where=low_curvature,
+        color=(1.0, 0.75, 0.85),
+        alpha=0.55,
+        zorder=0,
+        label=f"Curvature <= {threshold:g}",
     )
-
-    plt.axhline(0.5, color="0.65", linewidth=1, alpha=0.75, zorder=1)
-    plt.title("Elephant ear")
-    plt.xlabel("Contour point")
-    plt.ylabel("Curvature")
-    ymin = 0.1
-    ymax = 0.7
-    plt.ylim(ymin, ymax)
-    plt.xticks(np.arange(0, curvature.shape[0], marker_step), rotation=90)
-    plt.yticks(np.arange(ymin, ymax, 0.025))
-    plt.grid(alpha=0.25)
-    plt.legend()
-    plt.tight_layout()
-    plt.show()
+    ax.plot(curvature, color="black", label="Curvature")
+    ax.axhline(threshold, color="0.65", linewidth=1, alpha=0.75, zorder=1)
 
 
 if __name__ == "__main__":
@@ -177,7 +197,7 @@ if __name__ == "__main__":
         dataset_root=Path("dataset/elephants-alive/coded"),
         metadata_path=Path("dataset/elephants-alive/images.csv"),
     )
-    photo = dataset.get_photo("Bloom_2016-06-06_08")
+    photo = dataset.get_photo("Ripley_2008-06-25_06")
     image = dataset.read_image(photo)
 
     sam3 = Sam3Service(
@@ -221,15 +241,47 @@ if __name__ == "__main__":
 
     radii = SCALES * contour_max_dimension(ear_contour)
     curvature = oriented_curvature(ear_contour, radii, weights=WEIGHTS)
+    low_curvature = low_curvature_mask(
+        curvature,
+        threshold=CURVATURE_THRESHOLD,
+        endpoint_margin=CONTOUR_ENDPOINT_MARGIN,
+    )
     print(f"Curvature min/max: {curvature.min():.4f}, {curvature.max():.4f}")
+    print(
+        "Low-curvature points: "
+        f"{int(low_curvature.sum())} / {len(curvature) - 2 * CONTOUR_ENDPOINT_MARGIN} "
+        f"(threshold {CURVATURE_THRESHOLD}, margin {CONTOUR_ENDPOINT_MARGIN})"
+    )
 
-    ear_image = draw_radius_scale(apply_crop(ear_image, ear.xyxy), radii, SCALES, MATPLOTLIB_COLORS)
-    cv2.imshow("Contour Image", ear_image)
+    ear_image = shade_low_curvature_contour(
+        ear_image,
+        ear_contour,
+        low_curvature,
+    )
+    cv2.imshow("Ear Image with Low-Curvature Segments", apply_crop(ear_image, ear.xyxy))
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 
+    curvature_ymin = 0.1
+    curvature_ymax = 0.7
+    _, ax = plt.subplots(figsize=(19.2, 4.8))
     plot_integral_curvature(
+        ax,
         curvature,
-        marker_step=MARKER_STEP,
+        low_curvature=low_curvature,
+        threshold=CURVATURE_THRESHOLD,
+        ymin=curvature_ymin,
+        ymax=curvature_ymax,
     )
+    ax.set_title("Elephant ear")
+    ax.set_xlabel("Contour point")
+    ax.set_ylabel("Curvature")
+    ax.set_ylim(curvature_ymin, curvature_ymax)
+    ax.set_xticks(np.arange(0, curvature.shape[0], MARKER_STEP))
+    ax.tick_params(axis="x", rotation=90)
+    ax.set_yticks(np.arange(curvature_ymin, curvature_ymax, 0.025))
+    ax.grid(alpha=0.25)
+    ax.legend()
+    plt.tight_layout()
+    plt.show()
     print(curvature.shape)
