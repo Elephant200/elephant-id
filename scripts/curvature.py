@@ -13,7 +13,7 @@ from elephant_id.coding.curvature import (
 )
 from elephant_id.dataset import Dataset
 from elephant_id.image.bgr import BgrImage
-from elephant_id.image.transforms import apply_crop, apply_mask
+from elephant_id.image.transforms import apply_crop
 from elephant_id.log import configure_logging
 
 CURVATURE_POINTS = 1024
@@ -197,7 +197,7 @@ if __name__ == "__main__":
         dataset_root=Path("dataset/elephants-alive/coded"),
         metadata_path=Path("dataset/elephants-alive/images.csv"),
     )
-    photo = dataset.get_photo("Classic_2017-01-24_10")
+    photo = dataset.get_photo("Adam_2011-03-31_03")
     image = dataset.read_image(photo)
 
     sam3 = Sam3Service(
@@ -220,13 +220,14 @@ if __name__ == "__main__":
             anchor_dets = sorted(anchor_dets, key=lambda d: d.confidence, reverse=True)[0]
         ears.append(Ear(ear_detection, anchor_dets[0]))
 
-    ear = max(ears, key=lambda e: e.area)
+    ear = min(ears, key=lambda e: e.area)
     # Display the ear image and anchor points
-    ear_image = apply_mask(image, ear.mask, crop=False)
+    #ear_image = apply_mask(image, ear.mask, crop=False)
+    ear_image = image.copy()
 
     # Display the anchor points
     for anchor_point in ear.anchor_points:
-        cv2.circle(ear_image, (int(anchor_point[0]), int(anchor_point[1])), 25, (0, 0, 255), -1)
+        cv2.circle(ear_image, (int(anchor_point[0]), int(anchor_point[1])), 5, (0, 0, 255), -1)
 
     cv2.imshow("Ear Image with Anchor Points", apply_crop(ear_image, ear.xyxy))
     cv2.waitKey(0)
@@ -259,7 +260,8 @@ if __name__ == "__main__":
         low_curvature,
     )
     cv2.imshow("Ear Image with Low-Curvature Segments", apply_crop(ear_image, ear.xyxy))
-    cv2.imwrite("ear_image_with_low_curvature_segments.png", apply_crop(ear_image, ear.xyxy))
+    cv2.imwrite("original.png", apply_crop(image, ear.xyxy))
+    cv2.imwrite("tears.png", apply_crop(ear_image, ear.xyxy))
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 
