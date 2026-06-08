@@ -2,6 +2,8 @@
 Module that computes integral curvature for an elephant ear.
 """
 
+from typing import Literal
+
 import numpy as np
 
 
@@ -71,6 +73,8 @@ def oriented_curvature(
     contour: np.ndarray,
     radii: np.ndarray,
     weights: np.ndarray,
+    *,
+    side: Literal["left", "right"] = "left",
 ) -> np.ndarray:
     """
     Compute weighted mean multi-scale integral curvature along a
@@ -84,12 +88,27 @@ def oriented_curvature(
         contour: Ordered ``(n, 2)`` contour coordinates.
         radii: Physical radii defining the integration scales.
         weights: Weights for each radius.
+        side: Ear side. This is used to determine which side is the
+            interior side of the contour.
 
     Returns:
         A ``(n,)`` array of curvature values in ``[0, 1]``.
+
+    Raises:
+        ValueError: If ``side`` is not ``"left"`` or ``"right"``.
     """
     if len(weights) != len(radii):
         raise ValueError("Number of radii weights must match number of radii")
+    if side not in {"left", "right"}:
+        raise ValueError(f"side must be 'left' or 'right', got {side!r}")
+
+    if side == "right":
+        return oriented_curvature(
+            contour[::-1],
+            radii,
+            weights,
+            side="left",
+        )[::-1]
 
     curvatures = np.zeros((len(radii), contour.shape[0]), dtype=np.float32)
 

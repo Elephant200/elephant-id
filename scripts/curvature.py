@@ -197,7 +197,7 @@ if __name__ == "__main__":
         dataset_root=Path("dataset/elephants-alive/coded"),
         metadata_path=Path("dataset/elephants-alive/images.csv"),
     )
-    photo = dataset.get_photo("Ripley_2008-06-25_06")
+    photo = dataset.get_photo("Classic_2017-01-24_10")
     image = dataset.read_image(photo)
 
     sam3 = Sam3Service(
@@ -240,7 +240,7 @@ if __name__ == "__main__":
     cv2.destroyAllWindows()
 
     radii = SCALES * contour_max_dimension(ear_contour)
-    curvature = oriented_curvature(ear_contour, radii, weights=WEIGHTS)
+    curvature = oriented_curvature(ear_contour, radii, weights=WEIGHTS, side=ear.side)
     low_curvature = low_curvature_mask(
         curvature,
         threshold=CURVATURE_THRESHOLD,
@@ -259,6 +259,7 @@ if __name__ == "__main__":
         low_curvature,
     )
     cv2.imshow("Ear Image with Low-Curvature Segments", apply_crop(ear_image, ear.xyxy))
+    cv2.imwrite("ear_image_with_low_curvature_segments.png", apply_crop(ear_image, ear.xyxy))
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 
