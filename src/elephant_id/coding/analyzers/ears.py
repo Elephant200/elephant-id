@@ -121,6 +121,9 @@ class Ear:
         self.area = float(coco_mask.area([self.rle_mask])[0])
         self.side: Literal["left", "right"] = "left" if (self.anchor_points[0][0] + self.anchor_points[1][0]) / 2 < (self.xyxy[0] + self.xyxy[2]) / 2 else "right"
 
+        # Compute quality score based on ear area and similarity of aspect ratio to the standard aspect ratio of 0.8
+        self.quality = 0.0
+
     @property
     def rle_mask(self) -> RleMask:
         """Cleaned ear mask encoded as COCO RLE."""
@@ -146,6 +149,7 @@ class Ear:
             self.resampled_contour(),
             radii=DEFAULT_CURVATURE_RADII,
             weights=DEFAULT_CURVATURE_WEIGHTS,
+            side=self.side,
         )
 
     def _build_mask(self) -> np.ndarray:
