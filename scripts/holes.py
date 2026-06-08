@@ -300,7 +300,7 @@ if __name__ == "__main__":
         surrounding_color = np.mean(lab_float[surrounding_mask], axis=0)
         color_difference = np.linalg.norm(hole_color - surrounding_color)
 
-        if not done and color_difference < 15:
+        if not done and color_difference < 10:
             verdict = "Rejected by color"
             rejected_by_color_difference.append(contour)
             done = True
@@ -362,7 +362,11 @@ if __name__ == "__main__":
     cv2.destroyAllWindows()
 
     original_copy = image.copy()
-    cv2.drawContours(original_copy, filtered_contours, -1, (0, 0, 255), 1)
+    cv2.drawContours(original_copy, filtered_contours, -1, (255, 255, 255), 1)
+    cv2.drawContours(original_copy, rejected_by_composite, -1, (255, 255, 0), 1)
+    cv2.drawContours(original_copy, rejected_by_area, -1, (0, 0, 255), 1)
+    cv2.drawContours(original_copy, rejected_by_circularity, -1, (0, 255, 0), 1)
+    cv2.drawContours(original_copy, rejected_by_color_difference, -1, (255, 0, 255), 1)
     cv2.imshow("Contours on Original", original_copy)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
