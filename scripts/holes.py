@@ -78,6 +78,7 @@ if __name__ == "__main__":
         "Intwandamela": "Intwandamela_2021-05-27_03",
         "Nguyen": "Nguyen_2012-08-02_07",
         "Scar": "Scar_2010-11-30_08",
+        "Delani": "Delani_2017-10-09_06",
     }
     photo = dataset.get_photo(photos["Nguyen"])
 
@@ -195,7 +196,7 @@ if __name__ == "__main__":
     cv2.destroyAllWindows()
     # normalized_grayscale = ear_grayscale
 
-    edges = cv2.Canny(normalized_grayscale, 50, 125)
+    edges = cv2.Canny(normalized_grayscale, 75, 150)
     cv2.imshow("Edges", edges)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
@@ -362,12 +363,16 @@ if __name__ == "__main__":
     cv2.destroyAllWindows()
 
     original_copy = image.copy()
-    cv2.drawContours(original_copy, filtered_contours, -1, (255, 255, 255), 1)
-    cv2.drawContours(original_copy, rejected_by_composite, -1, (255, 255, 0), 1)
-    cv2.drawContours(original_copy, rejected_by_area, -1, (0, 0, 255), 1)
-    cv2.drawContours(original_copy, rejected_by_circularity, -1, (0, 255, 0), 1)
-    cv2.drawContours(original_copy, rejected_by_color_difference, -1, (255, 0, 255), 1)
+    cv2.imwrite("original.png", original_copy)
+    cv2.drawContours(original_copy, filtered_contours, -1, (0, 0, 255), 2)
+    # circle the area around the contour in green
+    for contour in filtered_contours:
+        area = cv2.contourArea(contour)
+        radius = np.sqrt(area / np.pi) * 3.0
+        center = np.mean(contour, axis=0)[0]
+        cv2.circle(original_copy, (int(center[0]), int(center[1])), int(radius), (0, 255, 0), 1)
     cv2.imshow("Contours on Original", original_copy)
+    cv2.imwrite("contours_on_original.png", original_copy)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 
