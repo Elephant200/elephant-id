@@ -80,7 +80,7 @@ if __name__ == "__main__":
         "Scar": "Scar_2010-11-30_08",
         "Delani": "Delani_2017-10-09_06",
     }
-    photo = dataset.get_photo(photos["Nguyen"])
+    photo = dataset.get_photo(photos["Gap"])
 
     detections = sam3.run(photo, "features")
     ear_detections = [detection for detection in detections if detection.class_name == "ear"]
@@ -196,7 +196,7 @@ if __name__ == "__main__":
     cv2.destroyAllWindows()
     # normalized_grayscale = ear_grayscale
 
-    edges = cv2.Canny(normalized_grayscale, 75, 150)
+    edges = cv2.Canny(normalized_grayscale, 50, 125)
     cv2.imshow("Edges", edges)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
@@ -363,7 +363,6 @@ if __name__ == "__main__":
     cv2.destroyAllWindows()
 
     original_copy = image.copy()
-    cv2.imwrite("original.png", original_copy)
     cv2.drawContours(original_copy, filtered_contours, -1, (0, 0, 255), 2)
     # circle the area around the contour in green
     for contour in filtered_contours:
@@ -372,7 +371,6 @@ if __name__ == "__main__":
         center = np.mean(contour, axis=0)[0]
         cv2.circle(original_copy, (int(center[0]), int(center[1])), int(radius), (0, 255, 0), 1)
     cv2.imshow("Contours on Original", original_copy)
-    cv2.imwrite("contours_on_original.png", original_copy)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 
