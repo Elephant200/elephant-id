@@ -4,15 +4,13 @@ from typing import Literal
 
 import cv2
 import numpy as np
-from loguru import logger
 from pycocotools import mask as coco_mask
 
-from elephant_id.ai import AnchorService, Detection
+from elephant_id.ai import Detection
 from elephant_id.coding.curvature import oriented_curvature, resample2d
 from elephant_id.constants import (
     DEFAULT_CURVATURE_RADII,
     DEFAULT_CURVATURE_WEIGHTS,
-    MIN_MULTIPLE_EAR_AREA_RATIO,
 )
 from elephant_id.domain import Photo
 from elephant_id.image.masks import RleMask, decode_rle_mask
@@ -171,45 +169,12 @@ class Ear:
 class EarAnalyzer:
     """Analyze each anchored ear: geometry plus stubbed tear/hole evidence."""
 
-    def __init__(self, anchor_model: AnchorService) -> None:
-        self.anchor_model = anchor_model
+    def __init__(self) -> None:
+        ...
 
-    def analyze(self, photo: Photo, prep: dict) -> dict:
-        ear_detections: list[Detection] = prep["ears"]
+    def analyze(self, photo: Photo, shared_data: dict) -> dict:
+        ears: list[Ear] = shared_data["ears"]
 
-        if len(ear_detections) > 2:
-            # TODO: flag for manual review
-            logger.warning(f"Multiple ears found in photo {photo}: {len(ear_detections)}")
-            ear_detections.sort(key=lambda d: d.area(), reverse=True)
-            ear_detections = ear_detections[:2] # placeholder for now
-
-        if len(ear_detections) == 2:
-            # Compare sizes; if one is much larger than the other, ignore the smaller one
-            if ear_detections[0].area() / ear_detections[1].area() > MIN_MULTIPLE_EAR_AREA_RATIO:
-                ear_detections = [ear_detections[0]] # If one ear is much smaller, it's essentially not there.
-            elif ear_detections[1].area() / ear_detections[0].area() > MIN_MULTIPLE_EAR_AREA_RATIO:
-                ear_detections = [ear_detections[1]] # If one ear is much smaller, it's essentially not there.
-            # Leave both ears if they are similar size.
-
-        ears: list[Ear] = []
-        for ear in ear_detections:
-            anchor_dets = self.anchor_model.run(photo, crop_xyxy=ear.xyxy)
-            if len(anchor_dets) == 0:
-                logger.warning(f"No anchor detections found for ear on {photo} (ear coords: {ear.xyxy})")
-                continue
-            elif len(anchor_dets) > 1:
-                logger.warning(f"Multiple anchor detections found for ear on {photo} (ear coords: {ear.xyxy}): {len(anchor_dets)}")
-                anchor_dets = sorted(anchor_dets, key=lambda d: d.confidence, reverse=True)[0]
-            ears.append(Ear(ear, anchor_dets[0]))
-
-        if len(ears) == 0:
-            logger.warning(f"No good ears found in photo {photo}")
-            # Cancel ear analysis ONLY; continue with other analyses.
-            return { # Placeholder for now
-                "success": False,
-            }
-
-
-        # TODO: Label each ear as left or right. If invalid, flag for manual review.
-
-        # TODO: Convert mask to contour and cut using anchor points
+        return {
+            "ears": ears
+        }

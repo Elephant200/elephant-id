@@ -34,6 +34,8 @@ class PhotoAnalyzer:
 
     def __init__(self, dataset: Dataset, cache_root: Path = Path(DEFAULT_CACHE_ROOT)) -> None:
         self.dataset = dataset
+
+        # AI model services
         self.sam3: Sam3Service = Sam3Service(
             dataset=dataset,
             cache_root=cache_root,
@@ -50,6 +52,12 @@ class PhotoAnalyzer:
             dataset=dataset,
             cache_root=cache_root,
         )
+
+        # Field analyzers
+        self.age_analyzer = AgeAnalyzer(self.age_model)
+        self.gender_analyzer = GenderAnalyzer(self.gender_model)
+        self.ear_analyzer = EarAnalyzer()
+        self.tusk_analyzer = TuskAnalyzer()
 
     def analyze(self, photo: Photo) -> dict | None:
         body_detections = self.sam3.run(photo, "body")
@@ -127,21 +135,34 @@ class PhotoAnalyzer:
         if len(anchored_ears) == 0:
             logger.warning(f"No good ears found in photo {photo}")
             # Cancel ear analysis ONLY; continue with other analyses.
-        
+
         # Now, compute the view
-        
+        view = self.compute_view(
+            body=body,
+            ears=anchored_ears,
+            trunks=trunks,
+            tusks=tusks,
+        )
+
+        shared_data = {
+            "view": view,
+            "body": body,
+            "trunks": trunks,
+            "ears": anchored_ears,
+            "tusks": tusks,
+        }
 
 
-        # Run gender model on body with background removed
-        gender_results = self.gender_model.run(photo, body_rle_mask=body.rle_mask)
-        bull_prob = gender_results["predictions"]["bull"]
-        cow_prob = gender_results["predictions"]["cow"]
 
-        # Run age model on body with background removed
-        age_results = self.age_model.run(photo, body_rle_mask=body.rle_mask)
-        age_confidence = age_results["predictions"]["confidence"]
-        age_code = age_results["predictions"]["age"]
 
         # Return dict should include confidence scores and make clear when results are invalid or uncertain
         # It should also include all raw model outputs for traceability
         return {} # Placeholder
+
+    def compute_view(self,
+        body: Detection,
+        ears: list[Ear],
+        trunks: list[Detection],
+        tusks: list[Detection],
+    ) -> str:
+        ...

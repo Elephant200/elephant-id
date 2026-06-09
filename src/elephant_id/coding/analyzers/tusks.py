@@ -9,5 +9,5 @@ class TuskAnalyzer:
     def __init__(self) -> None:
         ...
 
-    def analyze(self, photo: Photo, prep: dict) -> dict:
+    def analyze(self, photo: Photo, shared_data: dict) -> dict:
         """Return tusk evidence for the prepared photo."""

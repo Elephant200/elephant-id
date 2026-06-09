@@ -10,5 +10,5 @@ class AgeAnalyzer:
     def __init__(self, age_service: AgeService) -> None:
         self.age_service = age_service
 
-    def analyze(self, photo: Photo, prep: dict) -> dict:
+    def analyze(self, photo: Photo, shared_data: dict) -> dict:
         ...

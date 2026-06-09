@@ -10,5 +10,5 @@ class GenderAnalyzer:
     def __init__(self, gender_service: GenderService) -> None:
         self.gender_service = gender_service
 
-    def analyze(self, photo: Photo, prep: dict) -> dict:
+    def analyze(self, photo: Photo, shared_data: dict) -> dict:
         ...
