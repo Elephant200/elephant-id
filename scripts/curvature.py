@@ -197,7 +197,10 @@ if __name__ == "__main__":
         dataset_root=Path("dataset/elephants-alive/coded"),
         metadata_path=Path("dataset/elephants-alive/images.csv"),
     )
-    photo = dataset.get_photo("Adam_2011-03-31_03")
+    ripley = "Ripley_2008-06-25_06"
+    adam = "Adam_2011-03-31_03"
+    les = "Les_2007-05-03_08"
+    photo = dataset.get_photo(les)
     image = dataset.read_image(photo)
 
     sam3 = Sam3Service(
@@ -220,7 +223,7 @@ if __name__ == "__main__":
             anchor_dets = sorted(anchor_dets, key=lambda d: d.confidence, reverse=True)[0]
         ears.append(Ear(ear_detection, anchor_dets[0]))
 
-    ear = min(ears, key=lambda e: e.area)
+    ear = max(ears, key=lambda e: e.area)
     # Display the ear image and anchor points
     #ear_image = apply_mask(image, ear.mask, crop=False)
     ear_image = image.copy()
@@ -234,6 +237,25 @@ if __name__ == "__main__":
     cv2.destroyAllWindows()
 
     ear_contour = ear.resampled_contour(CURVATURE_POINTS)
+
+    # Use smoothing to massively smooth the contour to see what it would have looked like without tears
+    # ear_mask = np.zeros_like(image, dtype=np.uint8)
+    # cv2.drawContours(ear_mask, [ear_contour.astype(np.int32)], -1, (255, 255, 255), cv2.FILLED)
+    # cv2.imshow("Ear Mask", apply_crop(ear_mask, ear.xyxy))
+    # cv2.waitKey(0)
+    # cv2.destroyAllWindows()
+    # close_kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (25, 25))
+    # ear_mask = cv2.morphologyEx(ear_mask, cv2.MORPH_CLOSE, close_kernel, iterations=10)
+    # cv2.imshow("Ear Mask", apply_crop(ear_mask, ear.xyxy))
+    # cv2.waitKey(0)
+    # cv2.destroyAllWindows()
+
+    # Save contour as array to file
+    with open("contour.json", "w") as f:
+        import json
+        # round to 2 decimal places
+        ear_contour = np.round(ear_contour, 2)
+        json.dump(ear_contour.tolist(), f)
 
     ear_image = draw_polyline(ear_image, ear_contour, color=(0, 255, 0), thickness=2, marker_step=MARKER_STEP)
     cv2.imshow("Ear Image with Contour", apply_crop(ear_image, ear.xyxy))
