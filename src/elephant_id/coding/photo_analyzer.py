@@ -129,7 +129,7 @@ class PhotoAnalyzer:
                 continue
             elif len(anchor_dets) > 1:
                 logger.warning(f"Multiple anchor detections found for ear on {photo} (ear coords: {ear.xyxy}): {len(anchor_dets)}")
-                anchor_dets = sorted(anchor_dets, key=lambda d: d.confidence, reverse=True)[0]
+                anchor_dets = sorted(anchor_dets, key=lambda d: d.confidence, reverse=True)
             anchored_ears.append(Ear(ear, anchor_dets[0]))
 
         if len(anchored_ears) == 0:
