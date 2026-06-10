@@ -16,6 +16,8 @@ elephant-id/
 │   └── Pre-commit hooks (`ruff --fix`).
 ├── .python-version
 │   └── Interpreter pin (~matches `pyproject.toml` `>=3.12,<3.14`).
+├── AGENTS.md
+│   └── Agent and contributor guidelines (commands, boundaries, code style, logging).
 ├── LICENSE · README.md
 │   └── License and project intro.
 ├── pyproject.toml · uv.lock
@@ -101,6 +103,8 @@ elephant-id/
 │   │   └── Product and research goals for the Elephant ID system, referenced by architecture and implementation planning.
 │   ├── papers/ [summarized]
 │   │   └── Curvrank and SEEK reference PDFs plus `curvrank 1.tex`.
+│   ├── pipeline.md
+│   │   └── Intended production pipeline: import, per-photo analysis, human-in-the-loop review, SEEK coding, and matching.
 │   ├── sam3_sample_response.json
 │   │   └── Example SAM3 response payload used to understand prediction schema and support visualization work.
 │   ├── seek.md
@@ -122,6 +126,8 @@ elephant-id/
 │   │   │   └── Shared constants for SAM3 query presets, cache paths, thresholds, and Roboflow workflow identifiers.
 │   │   ├── dataset.py
 │   │   │   └── Dataset abstraction that loads `images.csv`, resolves `Photo` paths, groups `Sighting`s, and reads images with caching.
+│   │   ├── log.py
+│   │   │   └── Entry-point loguru configuration (`configure_logging()`); library code logs via `logger` only.
 │   │   ├── visualize.py
 │   │   │   └── Mask decoding and drawing utilities that convert model predictions into annotated `BgrImage`s.
 │   │   ├── ai/
@@ -141,11 +147,22 @@ elephant-id/
 │   │   │   ├── __init__.py
 │   │   │   │   └── Public coding exports (`SeekCoder`).
 │   │   │   ├── coder.py
-│   │   │   │   └── `SeekCoder` orchestrates per-photo analysis into a sighting-level `SeekCode`.
+│   │   │   │   └── `SeekCoder` orchestrates per-photo analysis into a sighting-level result dict (preview SEEK aggregation is still a stub).
 │   │   │   ├── curvature.py
 │   │   │   │   └── Integral curvature computation for elephant ear contours (Curvrank port).
-│   │   │   └── photo_analyzer.py
-│   │   │       └── Runs SAM3, anchor, gender, and age models on a photo and combines detections into analysis features.
+│   │   │   ├── photo_analyzer.py
+│   │   │   │   └── Runs SAM3, anchor, gender, and age models on a photo and delegates field evidence to per-field analyzers.
+│   │   │   └── analyzers/
+│   │   │       ├── __init__.py
+│   │   │       │   └── Public analyzer exports: `AgeAnalyzer`, `EarAnalyzer`, `GenderAnalyzer`, `TuskAnalyzer`.
+│   │   │       ├── age.py
+│   │   │       │   └── Age field analyzer; runs `AgeService` on the masked body crop.
+│   │   │       ├── ears.py
+│   │   │       │   └── Ear field analyzer; extracts ear contours, oriented curvature, and side from SAM3/anchor detections.
+│   │   │       ├── gender.py
+│   │   │       │   └── Gender field analyzer; runs `GenderService` on the masked body crop.
+│   │   │       └── tusks.py
+│   │   │           └── Tusk field analyzer; infers tusk presence and side from tusk detections.
 │   │   ├── domain/
 │   │   │   ├── __init__.py
 │   │   │   │   └── Public data-model exports for `SeekCode`, `Photo`, and `Sighting`.
@@ -158,7 +175,7 @@ elephant-id/
 │   │   └── image/
 │   │       ├── __init__.py
 │   │       │   └── Re-exports canonical `BgrImage` type alias.
-│   │       ├── bgr.pye
+│   │       ├── bgr.py
 │   │       │   └── `BgrImage` type alias (OpenCV HWC BGR uint8 convention).
 │   │       ├── boxes.py
 │   │       │   └── Bounding-box coordinate utilities (center/xyxy conversion, clipping; half-open float boxes).
@@ -188,13 +205,20 @@ elephant-id/
 │   ├── anchor_extraction_yolo26/ · anchor_extraction_yolov11/
 │   ├── ear_detection_yolo26/ · ear_segmentation_yolo26/
 │   ├── face_detection_yolov11/
+│   ├── sam3/
 │   ├── tail_detection_yolo26/ · tusk_detection_yolo26/
-│   └── Each folder: `weights.pt` + `info.txt`.
+│   └── Each folder: `weights.pt` (or `sam3.pt`) + `info.txt`.
 ├── scripts/
 │   ├── anchor.py
 │   │   └── Local script exercising `Sam3Service` and `AnchorService` on a dataset photo.
 │   ├── curvature.py
 │   │   └── Curvrank/ear-contour exploration script using SAM3 masks and matplotlib.
+│   ├── holes.py
+│   │   └── Ear-notch/hole contour exploration on masked ear crops via Laplacian-of-Gaussian filtering.
+│   ├── sam3_local.py
+│   │   └── Local ultralytics SAM smoke test on a dataset photo using `model_weights/sam3/sam3.pt`.
+│   ├── view.py
+│   │   └── Local script that runs SAM3, anchor, and ear analyzers across named preset photos with OpenCV display.
 │   └── visualize_sam3.py
 │       └── Local script that loads a dataset sighting, runs cached SAM3 predictions, and displays annotated images via `visualize_predictions`.
 └── tests/
@@ -208,6 +232,8 @@ elephant-id/
     │   └── Unit tests for `CacheManager` get-or-compute behavior.
     ├── test_coder.py
     │   └── Unit tests for `SeekCoder` and coding pipeline integration.
+    ├── test_curvature.py
+    │   └── Unit tests for `oriented_curvature` point order and side handling.
     ├── test_dataset.py
     │   └── Unit tests for `Dataset` loading, lookup, sighting grouping, ground-truth SEEK codes, and image caching.
     ├── test_detection.py
