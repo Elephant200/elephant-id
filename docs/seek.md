@@ -3,6 +3,14 @@
 ## Purpose
 SEEK = **System for Elephant Ear-pattern Knowledge**. It is a fixed-format code used to identify individual African elephants.
 
+In this project, SEEK is treated as a structured review output and interoperability format. The current field team does not rely heavily on manual SEEK coding, and there is no existing SEEK-code matching algorithm to plug into. The product should therefore assist reviewers in producing SEEK-compatible records rather than requiring users to manually code SEEK first.
+
+Classic SEEK should be implemented as-is for v1. It is the first coding target and should stay faithful to the fixed-format grammar below.
+
+The broader system should still leave room for later features. Future matching records may include additional structured fields, Curvrank contours and curvature signatures, reviewable curvature plots, learned vector embeddings, and other descriptors that help matching but do not fit into the original character grammar.
+
+When implementing `SeekCode`, preserve the grammar in this document exactly. When implementing storage or matching, avoid assumptions that would make future non-SEEK descriptors impossible.
+
 ## Full code format
 ```
 [Gender][Age]T[RightTusk][LeftTusk]E[R1][R2][R3][R4]-[L1][L2][L3][L4]X[RightExtreme][LeftExtreme]S[RightSpecial][LeftSpecial][BodySpecial]
@@ -94,6 +102,11 @@ Tie-breaking:
 - tears: deepest first
 - holes: largest diameter first
 - if still tied, code the feature that is higher on the ear according to the figure's position mapping
+
+### Implementation notes
+Curvrank-style contour features must be computed in a deterministic coordinate system. Ear contours should use stable side-aware orientation and deterministic start/end anchor points so the same ear produces comparable contour coordinates across runs.
+
+Observed tear locations roughly around SEEK sectors 3 / 9, 4 / 8, and half of 5 / 7. This is an implementation hint for contour analysis only; valid left-ear position codes remain `0`, and `_` for both sides, `3`, `4`, `5` for left, and `9`, `8`, `7` for right.
 
 ## 5. Extreme block
 Format: `X[RightExtreme][LeftExtreme]`

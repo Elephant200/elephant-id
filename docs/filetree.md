@@ -99,6 +99,8 @@ elephant-id/
 ├── docs/
 │   ├── filetree.md
 │   │   └── This repository map, generated from the local checkout and intended to guide contributors through source, data, caches, and generated files.
+│   ├── field-context.md
+│   │   └── Refined field workflow, deployment, SEEK-use, adaptive-record, and v1-scope context from field conversations.
 │   ├── goals.md
 │   │   └── Product and research goals for the Elephant ID system, referenced by architecture and implementation planning.
 │   ├── papers/ [summarized]

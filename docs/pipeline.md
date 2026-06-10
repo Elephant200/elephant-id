@@ -2,9 +2,9 @@
 
 ## Purpose
 
-This document describes the intended production pipeline for Elephant ID: how a folder of sighting photos becomes an analysis package, how human questions fit into the job, what the reviewer sees, when the final SEEK code is generated, and how the sighting moves into matching and filing.
+This document describes the intended production pipeline for Elephant ID: how a folder of sighting photos becomes an analysis package, how human questions fit into the job, what the reviewer sees, when the final reviewed SEEK record is generated, and how the sighting moves into matching and filing.
 
-The pipeline is sighting-centered. The system may analyze photos individually, but the product result is one reviewed identification record for one elephant sighting.
+The pipeline is sighting-centered. The system may analyze photos individually, but the product result is one reviewed identification record for one elephant sighting. For v1, the expected input is an office-grouped local folder, not a raw unsorted camera card.
 
 ## Pipeline Summary
 
@@ -17,15 +17,15 @@ The end-to-end workflow is:
 5. Aggregate photo evidence into one sighting-level analysis package.
 6. Build a review package with representative images, photo drill-down, field suggestions, and a preview SEEK code.
 7. Let the reviewer correct fields, images, crops, and photo-level evidence.
-8. Generate the final SEEK code from reviewed structured fields.
+8. Generate the final reviewed SEEK record while preserving room for future descriptors.
 9. Move the reviewed sighting into matching.
 10. File the final identity decision.
 
 ## 1. Intake
 
-A signed-in user selects a Dropbox folder for import. The platform copies the folder into system-controlled storage, creates a sighting record, and starts a top-level sighting analysis job.
+A user selects a local folder for import in the desktop app. The app copies or indexes the folder into system-controlled storage, creates a sighting record, and starts a top-level sighting analysis job.
 
-The imported folder becomes the system of record for the sighting. Dropbox is an intake source, not the long-term storage layer.
+The imported folder becomes the system of record for the sighting. V1 should work without bulk internet upload, but the design should not assume all storage, inference, or sync must always be local.
 
 Core requirements:
 
@@ -79,6 +79,10 @@ Field analyzers should generally not ask questions themselves. They should analy
 
 Ear analyzers should fully analyze every usable ear candidate, including masks, contours, curvature, tears, and holes, even if that ear may never become the final selected evidence for the sighting. The question of which ear photo should be trusted belongs later, after the system has compared all ear candidates at the sighting level.
 
+Curvrank-style ear analysis must use a deterministic, side-aware contour coordinate system. Contour traversal should start and end at stable anchor points so repeated runs on the same mask produce comparable point positions and feature sectors.
+
+For v1, analyzer output should prioritize the fields needed to produce classic SEEK. The implementation should still avoid throwing away reusable evidence, because later versions may preserve a Curvrank curvature series, contour plot, keypoints, learned embedding, or other matching descriptor alongside the SEEK-compatible tear and hole sectors.
+
 ### 2.3 Analysis questions
 
 Human input during analysis should be targeted. A question should be asked when the system finds potentially useful evidence but cannot safely use it without a human answer.
@@ -124,7 +128,8 @@ At minimum, the backend should preserve:
 - view and visibility evidence,
 - age and gender raw model outputs,
 - tusk observations and inferred sides,
-- ear masks, crops, anchors, contours, tears, and holes,
+- ear masks, crops, anchors, contours, curvature signatures, plots, tears, and holes,
+- optional visual descriptors when available,
 - thresholds and heuristic decisions,
 - questions asked and answered.
 
@@ -143,6 +148,7 @@ The aggregation layer should:
 - choose the best left ear evidence,
 - choose representative views for review,
 - produce suggested structured fields,
+- preserve reusable evidence for matching and future review,
 - produce a clearly labeled preview SEEK code.
 
 The aggregation layer should not erase conflicting evidence. If photos disagree, the review package should preserve that disagreement when it is useful for the reviewer to inspect.
@@ -212,11 +218,11 @@ Best-ear representative images should additionally show:
 
 The visual goal is to let the reviewer quickly verify whether the system's ear coding evidence is plausible without exposing every technical intermediate.
 
-### 4.4 Preview SEEK code
+### 4.4 Preview SEEK code and future descriptors
 
 The preview SEEK code is a convenience for review. It should be visibly labeled as provisional and should be editable through the underlying structured fields.
 
-The preview code should not be treated as the canonical code for the sighting. The final SEEK code is generated only after review.
+The preview code should not be treated as the canonical record for the sighting. For v1, the review UI should expose the classic SEEK-compatible fields clearly. The underlying storage should leave room for future descriptors such as contours, curvature plots, embeddings, and special markings, but those are not required v1 review fields.
 
 ## 5. Human Review
 
@@ -244,11 +250,20 @@ Example: if the representative tusk image is labeled as showing a left tusk but 
 
 Age and gender should be separately editable structured fields. They should not be attached to one representative image, even if the underlying model evidence came from multiple images.
 
-## 6. Final SEEK Code
+## 6. Final Reviewed SEEK Record
 
-The final SEEK code should be generated only after the reviewer finalizes the reviewed structured record.
+The final reviewed SEEK record should be generated only after the reviewer finalizes the reviewed structured fields.
 
-The final code should be stored with enough provenance to distinguish:
+For v1, the final record should focus on the classic SEEK code and the reviewed fields behind it. The record shape should still be able to grow later to include evidence that does not fit the fixed-width SEEK grammar, such as:
+
+- additional structured features,
+- Curvrank contours and curvature signatures,
+- reviewable curvature plots or other visual descriptors,
+- learned vector embeddings,
+- field-specific confidence and provenance,
+- links to representative crops and source photos.
+
+The final record should be stored with enough provenance to distinguish:
 
 - raw model outputs,
 - system suggestions,
@@ -256,15 +271,18 @@ The final code should be stored with enough provenance to distinguish:
 - reviewer corrections,
 - reviewed structured fields,
 - preview SEEK code,
-- final SEEK code.
+- final SEEK code,
+- future extended descriptors.
 
-Raw model output should never directly become the final SEEK code without the reviewer having the opportunity to correct it.
+Raw model output should never directly become final reviewed evidence without the reviewer having the opportunity to inspect or correct the relevant field or artifact.
 
 ## 7. Matching and Filing
 
 Matching begins after review and final SEEK generation. Coding and matching are separate workflows.
 
 The matching workflow should compare the reviewed sighting against the elephant database and present ranked candidates. The reviewer then chooses an existing elephant, creates a new elephant identity, or leaves the match unresolved.
+
+There is no existing SEEK-code matching algorithm to depend on. V1 matching should start from reviewed structured fields and final SEEK codes. The design should leave room to add visual evidence, Curvrank descriptors, vector embeddings, and human expert review signals later.
 
 Only after this final human decision should the reviewed sighting be filed into the long-term database.
 
@@ -284,9 +302,13 @@ For any final field, it should be possible to answer:
 The first version should remain intentionally constrained:
 
 - one folder represents one sighting of one elephant,
+- imported folders are local and already grouped
+- older bulls are the primary initial target because they are easier to match and often have distinctive ear markings,
 - questions may be asked independently for each high-uncertainty case,
 - final filing always requires human review,
 - matching remains separate from coding,
+- bulk cloud upload is not required for normal operation,
+- connected teams should not be blocked from using remote services where practical,
 - user-facing workflow should stay simple even if backend orchestration is complex.
 
-Future versions may cluster similar questions, support collaborative review, handle multi-elephant sightings, use stronger visual matching models, and learn from reviewer corrections.
+Future versions may cluster similar questions, support collaborative review, handle multi-elephant sightings, add field-time sufficiency feedback, improve cow and young-bull coding, use stronger visual matching models, and learn from reviewer corrections.

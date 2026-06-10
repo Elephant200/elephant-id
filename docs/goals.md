@@ -7,13 +7,15 @@ Elephant ID is a human-in-the-loop platform for identifying individual African e
 Elephant identification is valuable for conservation, population monitoring, conflict mitigation, and longitudinal research, but the current process is labor-intensive, subjective, and difficult to scale. Identification often depends on multiple images from a single sighting, because no one photo is guaranteed to show all relevant features.
 
 ## Goal
-Build a practical production web app that takes a folder of images of a single elephant sighting and turns it into:
+Build a practical desktop-first product that takes a folder of images of a single elephant sighting and turns it into:
 1. a draft structured identification record,
 2. a human-in-the-loop analysis workflow,
 3. a review-ready evidence package with a preview SEEK code,
-4. a final reviewed SEEK code,
+4. a final reviewed SEEK record,
 5. a ranked matching workflow against the existing elephant database,
 6. a final filed identity decision.
+
+The primary user experience should be a desktop workflow that can run locally for teams without usable internet. The design should not prevent connected teams from using remote services where practical.
 
 ## Core Principle
 The system’s atomic unit is:
@@ -26,7 +28,7 @@ Every image in the folder is treated as evidence about the same individual. The 
 
 ### In Scope
 - One-elephant sightings only for the first version
-- Dropbox-based ingestion
+- Importing already grouped one-elephant photo folders from local storage
 - Folder-level AI analysis
 - Human questions during analysis when useful evidence is ambiguous
 - Review-ready evidence package generation
@@ -41,10 +43,11 @@ Every image in the folder is treated as evidence about the same individual. The 
 - Fully automatic filing without human review
 - Purely image-based matching without structured coding
 - Mobile-first field collection software
-- Offline-first operation
+- Requiring bulk cloud upload from field internet
+- Young-bull and cow optimization as the primary model target
 
 ## Identification Framework
-The project uses SEEK as the structured identification language. SEEK encodes:
+The project uses SEEK as the initial structured identification language. SEEK encodes:
 - sex
 - age
 - tusks
@@ -53,7 +56,33 @@ The project uses SEEK as the structured identification language. SEEK encodes:
 - extreme features
 - special features
 
-The final reviewed result should be stored both as a structured record and as a final SEEK code string. Before review, the system may show a clearly labeled preview SEEK code, but the canonical final SEEK code is computed only after the reviewer has accepted or corrected the structured fields.
+The v1 reviewed result should focus on the classic SEEK fields and final SEEK code. Before review, the system may show a clearly labeled preview SEEK code, but any final SEEK string is computed only after the reviewer has accepted or corrected the underlying structured fields.
+
+SEEK is not heavily used in the current manual workflow because it is unpleasant to code. The system should therefore make SEEK feel like an output of assisted review, not a manual prerequisite.
+
+The data model should still be extensible so future versions can add evidence beyond classic SEEK without redesigning the whole system. Future records may include:
+- classic SEEK-compatible fields,
+- additional structured features that do not fit the fixed SEEK string,
+- Curvrank ear contours and curvature signatures,
+- reviewable curvature plots or other visual descriptors,
+- learned vector embeddings for visual matching,
+- provenance for which photo, crop, model, or reviewer action produced each feature.
+
+This keeps the first version grounded in SEEK as-is while avoiding a design that prevents later expansion. The fixed-width SEEK string remains the v1 compatibility and review target, but matching should not be architecturally limited forever to character-by-character SEEK comparison.
+
+## Current Field Workflow
+
+The team currently records multiple sightings during each field outing. During a sighting, they use a data sheet to track which photos belong to which elephant. They may photograph one elephant, photograph the sky as a separator, photograph another elephant, and continue in that pattern.
+
+After returning to the office, the data sheet is used to group images into folders, one folder per elephant. This grouped folder is the practical v1 input.
+
+The team may wait a long time at a sighting for an elephant to turn and show its other side. A future field tool could help decide whether enough evidence has already been collected, but the first version should focus on office processing and review.
+
+## Initial Target
+
+Older bulls are the best initial identification target because they are easier to match and often have distinctive ear markings. Young bulls and cows are still important for future studies, but they are harder and should not drive the first pipeline unless the scope changes.
+
+Useful field cues include squared-off foreheads for cows and more hourglass-shaped heads for bulls as tusk sockets spread apart.
 
 ## Human-in-the-Loop Philosophy
 The platform is not meant to replace expert judgment. It is meant to:
@@ -73,13 +102,13 @@ Questions should not be treated as failures. A job should continue running every
 ## End-to-End Workflow
 
 ### 1. Field collection
-Conservationists photograph a single elephant during a sighting. The photos are uploaded to Dropbox in one folder, where each image belongs to the same elephant.
+Conservationists photograph elephants during a field outing and use data sheets, sky separators, or similar field conventions to preserve which images belong to which elephant.
 
 ### 2. Intake
-A signed-in user opens the platform and sees newly available Dropbox folders.
+A user opens the local app and selects one-elephant folders.
 
 ### 3. Import
-The user selects a folder and starts the workflow. The platform copies the folder into its own cloud storage, creates a sighting record, and starts analysis.
+The user selects a folder and starts the workflow. The app copies or indexes the folder into its own storage, creates a sighting record, and starts analysis.
 
 ### 4. AI analysis
 The system processes the folder as a whole, using parallel per-image analysis and folder-level aggregation.
@@ -129,15 +158,16 @@ The reviewer chooses an existing elephant or creates a new one. The final review
 The project is successful if it:
 - makes SEEK-based coding faster and more consistent,
 - works with real field photo folders rather than idealized lab inputs,
+- reduces dependence on one expert's memory without removing expert oversight,
 - uses human input during analysis without blocking unrelated work,
 - preserves a strong final human review step,
 - supports scalable matching against a growing database,
 - remains usable under low-bandwidth conditions.
 
 ## Real-World Constraints
-- Field and office internet speeds may be slow
+- Field and office internet speeds may make bulk upload impractical
 - Reviewers should not need full-resolution images by default
-- Upload and review bandwidth matter more than cloud-internal transfer speed
+- Local inference should be possible for low-connectivity teams, without ruling out remote services for connected teams
 - Different images in a sighting may reveal different critical features
 - The system should tolerate incomplete views and uncertain fields
 - User questions may be answered asynchronously and at the user's leisure
@@ -147,13 +177,15 @@ The project is successful if it:
 - Simple user-facing workflow
 - Clear separation between coding and matching
 - Full traceability from input images to final decision
-- Clear separation between raw model output, system suggestions, human answers, review corrections, preview SEEK code, and final SEEK code
+- Clear separation between raw model output, system suggestions, human answers, review corrections, preview SEEK code, final SEEK code, and future extended descriptors
 - Strong compatibility with conservation workflows
 - Backend complexity is acceptable; user-facing complexity is not
 
 ## Long-Term Direction
 After the first version is working well, the project can expand to:
+- field-time feedback about whether enough evidence has been collected,
 - sightings with multiple elephants,
+- better cow and young-bull coding for broader research studies,
 - stronger visual matching models,
 - more automated candidate ranking,
 - broader NGO deployment,

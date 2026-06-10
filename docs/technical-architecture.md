@@ -1,272 +1,138 @@
 # Elephant ID Technical Architecture
 
-## Overview
-Elephant ID is a web platform that ingests a folder of images of a single elephant sighting, runs folder-level AI analysis, produces a draft SEEK-based identification record, supports human review, and then helps match the reviewed sighting against an elephant identity database.
+## Purpose
 
-The architecture is split into:
-- a frontend web application,
-- an authentication layer,
-- a backend API and orchestration layer,
-- a storage layer,
-- a database layer,
-- an inference layer,
-- a matching layer.
+This document describes the high-level technical shape of Elephant ID. It should guide implementation without locking the project into a specific vendor, framework, desktop shell, hosting platform, or database before those decisions are ready.
 
-## Tech Stack
+The current product direction is desktop-first and local-capable. Local execution should work for teams without usable internet, but the architecture should not assume the backend must always be local.
 
-Note that this is highly subject to change.
+## Architecture Goals
 
-### Domain and DNS
-- Domain managed through Cloudflare
-- Cloudflare used for DNS only
-- No Cloudflare proxy in front of the frontend by default
-- No Cloudflare proxy required in front of the backend by default
+The system should:
 
-### Frontend
-- Next.js
-- Hosted on Vercel
-- Main site: `elephant-id.org`
+- ingest one already grouped photo folder as one elephant sighting,
+- run AI and geometry analysis across the folder,
+- produce a reviewable SEEK record for v1,
+- preserve the option to add richer evidence later, such as contours, curvature signatures, plots, embeddings, crops, and model outputs,
+- support human review before matching or filing,
+- rank candidate identities without depending on an existing SEEK matcher,
+- remain usable with limited or no internet during normal office workflows,
+- leave room for connected teams to use remote storage, inference, sync, or matching services where practical.
 
-### Authentication
-- Firebase Auth
-- Used for user identity and session management
+## Deployment Posture
 
-### Backend API
-- FastAPI
-- Hosted on Google Cloud Run
-- Region: Johannesburg
+### Desktop-first posture
 
-### API Exposure
-- Public API hostname: `api.elephant-id.org`
-- Cloud Run should sit behind a GCP HTTPS load balancer
-- Use a serverless NEG
-- Do not rely on Cloud Run domain mapping
+The first serious product should feel like a desktop app for office review of local photo folders. The exact shell is an open decision, but the user experience should not depend on a browser-only cloud workflow.
 
-### Database
-- PostgreSQL on Cloud SQL
-- Region: Johannesburg
+### Backend flexibility
 
-### Storage
-- Google Cloud Storage
-- Region: Johannesburg
-- Stores:
-  - raw imported images,
-  - derived crops and masks,
-  - review-ready derivatives,
-  - supporting artifacts
+The first version can assume local folders and local-capable analysis, but component boundaries should not make local-only operation a permanent lock. Some teams may later use remote storage, inference, sync, matching, backup, or collaboration services.
 
-### Inference
-- Vertex AI
-- Region: Johannesburg
-- Used for heavier custom-model inference
+## Core Components
 
-### Job Orchestration
-- Async orchestration service
-- Current design assumes a queue-based job model
-- One top-level analysis job per folder
+The implementation should keep these responsibilities separate even if they initially run in one local process. The main reason is clarity and testability; future remote or hybrid backing is a useful secondary benefit.
 
-### Ingest Source
-- Dropbox
-- Used as the intake source only
-- Not the system of record after import
+### User interface
 
-## Regional Placement
+The UI lets a reviewer import folders, inspect analysis results, answer targeted questions, correct fields and evidence, compare candidate matches, and file the final decision.
 
-### Frontend
-- Vercel should be configured with an appropriate region for server-side compute
-- Static asset delivery is handled globally by Vercel’s network
+The UI should hide backend complexity. It should present the reviewer with concrete evidence, not raw orchestration state.
 
-### Backend
-The following should all remain colocated in Johannesburg:
-- Cloud Run
-- Cloud SQL
-- Cloud Storage
-- Vertex AI
+### Sighting store
 
-This minimizes latency for dynamic backend traffic and reduces unnecessary cross-region movement of hot data.
+The sighting store tracks imported folders, photos, derived assets, analysis status, questions, review decisions, matching decisions, and provenance.
 
-## Folder-Centric Design
-The system is intentionally folder-centric.
+It should preserve the difference between raw model output, system suggestions, human answers, reviewer corrections, final SEEK codes, and future extended descriptors.
 
-### Rule
-**One folder represents one sighting of one elephant.**
+### Analysis services
 
-### Reason
-Each image may provide different evidence:
-- left ear
-- right ear
-- frontal view
-- caudal view
-- body shape
-- tusk visibility
+Analysis services run per-photo and sighting-level work. They may include detection, segmentation, view classification, age and sex estimation, tusk analysis, ear analysis, contour extraction, curvature computation, embedding generation, and feature aggregation.
 
-The AI should analyze the folder as a unit and produce one sighting-level draft.
+Services should emit structured evidence and provenance, not only final labels.
 
-## Request and Processing Flow
+Analysis services may eventually be backed by local model runners or remote inference, depending on connectivity and hardware.
 
-### 1. Dropbox discovery
-The platform lists available Dropbox folders that have not yet been imported.
+### Review workflow
 
-### 2. Import request
-The user chooses a folder and clicks import.
+The review workflow turns a draft analysis package into an authoritative reviewed SEEK record. Review is where automated evidence becomes accepted, corrected, or rejected.
 
-### 3. Folder analysis
-The orchestration layer runs the full analysis workflow on the folder.
+The final record should be generated from reviewed fields and artifacts, not directly from raw model output.
 
-Internally this may include:
-- per-image analysis
-- derived asset generation
-- folder-level aggregation
-- draft SEEK generation
+### Matching workflow
 
-### 4. Folder completion
-Only after the full AI analysis finishes is the sighting marked:
-- `Ready for Review`
+Matching is separate from coding. It compares a reviewed sighting against known elephants and presents ranked candidates for human decision.
 
-### 5. Review
-The reviewer opens the sighting and sees:
-- the images,
-- the predicted fields,
-- the draft SEEK code,
-- supporting crops/overlays where useful.
+V1 matching should start with classic SEEK fields and reviewed structured evidence. The design should not prevent later use of added structured features, Curvrank descriptors, vector embeddings, visual evidence, and reviewer-approved metadata.
 
-The reviewer edits or confirms the fields and finalizes the reviewed record.
+## Data Model Principles
 
-### 6. Matching
-After review, the sighting enters the matching workflow.
+The v1 identification object should center on classic SEEK, but it should not be modeled as only an opaque character code.
 
-The system generates likely candidates from the database and ranks them for human inspection.
+For v1, it should contain:
 
-### 7. Filing
-The reviewer either:
-- links the sighting to an existing elephant,
-- creates a new elephant identity,
-- or leaves the match unresolved.
+- classic SEEK-compatible fields,
+- reviewed special markings and body features already represented by SEEK,
+- references to representative photos and crops,
+- confidence, source, and reviewer provenance for each field.
 
-## AI Pipeline
+Future versions may add:
 
-### Per-image stages
-Possible stages include:
-- elephant localization
-- detection or segmentation
-- crop generation
-- view classification
-- ear localization
-- tusk inference
-- sex inference
-- age inference
-- ear-feature inference
-- special-feature inference
+- added structured fields,
+- ear contours and deterministic contour coordinates,
+- Curvrank curvature signatures or plots,
+- learned visual embeddings,
+- additional confidence, source, and reviewer provenance for each new feature.
 
-### Folder-level aggregation
-After all images are analyzed, the system combines evidence across the folder to produce one draft sighting record.
+A classic SEEK code should be generated from reviewed fields for compatibility, communication, and review. The reviewed fields should remain available separately so future descriptors can be added without redesigning storage.
 
-This includes:
-- sex
-- age
-- right/left tusk presence
-- right ear fields
-- left ear fields
-- extreme flags
-- special feature flags
-- draft SEEK code
+## Processing Shape
 
-## Review Architecture
+The pipeline should remain folder-centered:
 
-### User-facing rule
-Folders are **not reviewable until full AI analysis is finished**.
+1. Import or index a local one-elephant folder.
+2. Analyze photos independently where possible.
+3. Preserve per-photo evidence and derived artifacts.
+4. Aggregate evidence into a sighting-level draft.
+5. Ask targeted questions only when a useful workflow decision cannot be made safely.
+6. Build a review package.
+7. Let the reviewer correct fields, representative images, and evidence.
+8. Store the final reviewed SEEK record.
+9. Run matching as a separate reviewed workflow.
+10. File the identity decision.
 
-### Review UI goals
-- show all images from the sighting
-- show the draft SEEK code
-- show structured fields behind the code
-- allow edits at the field level
-- make review clear without exposing unnecessary backend complexity
+The orchestration mechanism can change. The important rule is that blocked or ambiguous work should not stop unrelated analysis from continuing.
 
-### Stored outputs
-The platform should keep these layers distinct:
-- raw model outputs
-- system draft
-- human-approved final
+## Connectivity Constraints
 
-## Matching Architecture
+Architecture decisions should assume:
 
-### Matching is separate from coding
-The coding UI and matching UI should remain distinct.
+- internet may be too slow for bulk image upload,
+- local storage may hold the main image corpus,
+- local compute may be the normal inference path,
+- connected teams may prefer hosted inference, shared storage, collaboration, or backup later,
+- model size and hardware requirements matter,
+- review assets should be compact,
+- implementation choices should not unnecessarily rule out remote services.
 
-### Matching inputs
-- reviewed structured fields
-- final reviewed SEEK code
-- optional learned visual features later
+## Open Decisions
 
-### Matching outputs
-- ranked candidates
-- comparison metadata
-- final human match decision
+The following should remain open until product and implementation constraints are clearer:
 
-## Performance and Bandwidth Strategy
+- desktop shell,
+- local service packaging,
+- database choice,
+- cloud provider or hosting stack,
+- sync strategy,
+- model packaging and update mechanism,
+- whether and how to store embeddings or descriptor search indexes,
+- exact job orchestration framework,
+- authentication and permissions model for multi-user deployments.
 
-### Main bottlenecks
-1. Upload from the organization into Dropbox
-2. Download from cloud storage to the reviewer during review
+## Main Risks
 
-### Usually not the bottleneck
-Cloud-internal transfer between colocated backend services
-
-### Design implications
-- avoid loading original full-resolution images by default
-- generate compressed review images
-- generate targeted crops for ears and other features
-- serve originals only on demand
-
-## Image Delivery Strategy
-Because the review UI runs in the browser, client-side image delivery is required.
-
-### Recommended pattern
-- keep GCS as the canonical storage layer
-- serve review assets using short-lived signed URLs
-- serve compressed derivatives first
-- reserve originals for drill-down only
-
-## Security Model
-
-### Frontend auth
-- Firebase Auth signs users in
-- frontend sends authenticated requests to the API
-
-### Backend auth
-- FastAPI verifies Firebase identity information
-- backend enforces organization and workflow permissions
-
-### Storage access
-- backend controls which assets are exposed to the browser
-- browser receives signed URLs only for allowed assets
-
-## Operational Simplicity Principles
-- keep the user-facing workflow simple
-- use one top-level job per folder
-- hide internal fan-out/fan-in complexity from users
-- keep the backend modular but not overengineered
-- optimize for maintainability and traceability
-
-## Main Risks and Constraints
-
-### Technical risks
-- poor quality or incomplete field imagery
-- ambiguous ear views
-- bandwidth constraints during review
-- queueing/orchestration complexity
-- model performance variability across populations and views
-
-### Product risks
-- overcomplicating the review experience
-- overtrusting model output
-- trying to automate final identity decisions too early
-
-## Long-Term Extensions
-- multi-elephant folders
-- stronger visual re-identification models
-- richer candidate ranking
-- broader deployment to additional organizations
-- active learning from reviewer corrections
-- more automation for candidate generation without removing review
+- The product may become too complex for reviewers if all internal evidence is exposed.
+- Local model requirements may exceed available hardware.
+- Ear geometry may become inconsistent unless contour orientation and anchors are deterministic.
+- Future matching quality may suffer if the system treats classic SEEK as the only possible feature representation forever.
+- Cloud-first assumptions may fail under real field bandwidth.

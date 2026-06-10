@@ -34,7 +34,14 @@ After Python code changes, run `uv run ruff check .` and fix reported issues. `l
 - `apps/web/`: a next.js landing page; do not touch.
 - `scripts/`: local exploration and model/demo scripts.
 - `legacy/` and `.curvrank_ref/`: historical/reference material; do not modernize unless asked.
-- `docs/`: SEEK, architecture, file tree, and reference papers.
+- `docs/`: SEEK, field context, pipeline, architecture, file tree, and reference papers.
+
+## Documentation Context
+
+- Refer to `docs/goals.md` and `docs/pipeline.md` to understand the purpose of the project; refer to `docs/field-context.md` to understand constraints in the field; refer to `docs/seek.md` to understand the structure of a SEEK code.
+- The current product direction is desktop-first and local-capable. Do not assume the backend must always be local; connected teams may use remote services where practical.
+- v1 should optimize for office review of grouped one-elephant folders and older bull identification unless the user explicitly changes the scope.
+- For v1, focus on implementing classic SEEK as-is. Do not design storage, review, or matching in a way that prevents later adaptive features such as Curvrank signatures, contour plots, vector embeddings, or other provenance-tracked descriptors.
 
 ## Boundaries
 
