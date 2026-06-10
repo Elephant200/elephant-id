@@ -2,6 +2,7 @@
 
 
 from pathlib import Path
+from typing import Literal
 
 from loguru import logger
 
@@ -164,5 +165,45 @@ class PhotoAnalyzer:
         ears: list[Ear],
         trunks: list[Detection],
         tusks: list[Detection],
-    ) -> str:
-        ...
+    ) -> Literal["left", "right", "front", "unknown"]:
+        view = "unknown"
+        if len(ears) > 0:
+            for ear in ears:
+                print(ear)
+
+            if len(ears) == 1:
+                if ears[0].side == "left":
+                    view = "left"
+                else:
+                    view = "right"
+            elif len(ears) == 2:
+                if ears[0].side == ears[1].side:
+                    logger.warning("Both ears are on the same side")
+                    return "unknown"
+                else:
+                    view = "front"
+
+        elif len(trunks) > 0: # Fallback to trunk positioning
+            relative_trunk_x = (trunks[0].xyxy[0] + trunks[0].xyxy[2]) / 2 - body.xyxy[0] # Center of trunk relative to body
+            body_width = body.xyxy[2] - body.xyxy[0]
+            ratio = relative_trunk_x / body_width
+            if ratio > 0.667:
+                view = "right"
+            elif ratio < 0.333:
+                view = "left"
+            else:
+                view = "front"
+
+        elif len(tusks) > 0: # Fallback to tusk positioning
+            relative_tusk_x = sum((tusk.xyxy[0] + tusk.xyxy[2]) / 2 for tusk in tusks) / len(tusks) - body.xyxy[0]
+            # Center of tusks relative to body
+            body_width = body.xyxy[2] - body.xyxy[0]
+            ratio = relative_tusk_x / body_width
+            if ratio > 0.667:
+                view = "right"
+            elif ratio < 0.333:
+                view = "left"
+            else:
+                view = "front"
+
+        return view
