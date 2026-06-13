@@ -6,7 +6,7 @@ from loguru import logger
 
 from elephant_id.coding.photo_analyzer import PhotoAnalyzer
 from elephant_id.dataset import Dataset
-from elephant_id.domain import SeekCode, Sighting
+from elephant_id.domain import Sighting
 
 
 class SeekCoder:
