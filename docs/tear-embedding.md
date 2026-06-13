@@ -1,6 +1,6 @@
 # The Tear Embedding: Goals and Key Decisions
 
-This document records the design of the tear-embedding stage (`src/elephant_id/coding/tears.py`) and the reasoning behind each major choice, in roughly the order the decisions were made. It is written to support an ablation study: every rejected alternative described here was implemented and tested before being set aside, and frozen snapshots of that code are preserved in `legacy/margin_exploration/`. The companion figures referenced below live in `docs/assets/` and can be regenerated with `uv run python -m scripts.doc_figures`.
+This document records the design of the tear-embedding stage (`src/elephant_id/coding/ears/tear_profile.py`) and the reasoning behind each major choice, in roughly the order the decisions were made. It is written to support an ablation study: every rejected alternative described here was implemented and tested before being set aside, and frozen snapshots of that code are preserved in `legacy/tear_algorithm/`. The companion figures referenced below live in `docs/assets/` and can be regenerated with `uv run python -m scripts.tear_doc_figures`.
 
 ## Goal
 
@@ -46,7 +46,7 @@ Any envelope-based reference inherits a vulnerability: it must contain every con
 
 ## Decision 6: Resolution, smoothing, and the coded region
 
-Three smaller choices complete the pipeline. The profile is sampled at 1,024 positions — about 0.1% of margin length per bin, several pixels at typical photo resolution, with the smallest coded tears spanning roughly ten bins; anything within a factor of two behaves identically, and the number matches the contour resampling used elsewhere. The profile receives a very light Gaussian smoothing, which an ablation showed to measurably help, while a tangent-smoothing step inherited from an earlier formulation showed no effect at all and was removed. Finally, the first 20% and last 10% of the coordinate are zeroed: these anchor-adjacent regions are outside the coverage of the SEEK coding scheme, and on every ear examined, anything appearing there was segmentation noise rather than anatomy.
+Three smaller choices complete the pipeline. The profile is sampled at 1,024 positions — about 0.1% of margin length per bin, several pixels at typical photo resolution, with the smallest coded tears spanning roughly ten bins; anything within a factor of two behaves identically, and the number matches the contour resampling used elsewhere. The profile receives a very light Gaussian smoothing, which an ablation showed to measurably help. Finally, the first 20% and last 10% of the coordinate are zeroed: these anchor-adjacent regions are outside the coverage of the SEEK coding scheme, and on every ear examined, anything appearing there was segmentation noise rather than anatomy.
 
 ## Validation and the ablation set
 
@@ -64,5 +64,3 @@ The pilot set was chosen so that each individual stresses a different decision, 
 | delani | 1 | an intact but gently bowed margin with two small nicks; the false-positive control for the reference choice |
 | adam | 2 (same day) | small tears near the noise floor, one photo nearly edge-on; probes the lower limits (pose and tear size) |
 | snap | 3–4 (2007–2008) | a nearly intact ear; the negative control — its profile should stay near zero |
-
-All quantitative observations above come from this seventeen-photograph, eight-individual pilot; they guided design choices and are hypothesis-generating rather than confirmatory. The constants recorded in `elephant_id/constants.py` should be re-validated on held-out individuals as the dataset grows, and the known remaining weaknesses — anchor-placement variability, which shifts the coordinate by up to a tenth of its range, and strongly out-of-plane poses, which no contour method can fully recover — are upstream problems rather than properties of the embedding itself.
