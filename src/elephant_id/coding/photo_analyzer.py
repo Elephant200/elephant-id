@@ -13,13 +13,10 @@ from elephant_id.ai import (
     GenderService,
     Sam3Service,
 )
-from elephant_id.coding.analyzers import (
-    AgeAnalyzer,
-    EarAnalyzer,
-    GenderAnalyzer,
-    TuskAnalyzer,
-)
-from elephant_id.coding.analyzers.ears import Ear
+from elephant_id.coding.age import AgeFieldAnalyzer
+from elephant_id.coding.ears import AnchoredEar, EarFieldAnalyzer
+from elephant_id.coding.gender import GenderFieldAnalyzer
+from elephant_id.coding.tusks import TuskFieldAnalyzer
 from elephant_id.constants import (
     DEFAULT_CACHE_ROOT,
     MIN_FEATURE_BODY_OVERLAP,
@@ -55,10 +52,10 @@ class PhotoAnalyzer:
         )
 
         # Field analyzers
-        self.age_analyzer = AgeAnalyzer(self.age_model)
-        self.gender_analyzer = GenderAnalyzer(self.gender_model)
-        self.ear_analyzer = EarAnalyzer()
-        self.tusk_analyzer = TuskAnalyzer()
+        self.age_analyzer = AgeFieldAnalyzer(self.age_model)
+        self.gender_analyzer = GenderFieldAnalyzer(self.gender_model)
+        self.ear_analyzer = EarFieldAnalyzer()
+        self.tusk_analyzer = TuskFieldAnalyzer()
 
     def analyze(self, photo: Photo) -> dict | None:
         body_detections = self.sam3.run(photo, "body")
@@ -122,7 +119,7 @@ class PhotoAnalyzer:
                 ears = [ears[1]] # If one ear is much smaller, it's essentially not there.
             # Leave both ears if they are similar size.
 
-        anchored_ears: list[Ear] = []
+        anchored_ears: list[AnchoredEar] = []
         for ear in ears:
             anchor_dets = self.anchor_model.run(photo, crop_xyxy=ear.xyxy)
             if len(anchor_dets) == 0:
@@ -131,7 +128,7 @@ class PhotoAnalyzer:
             elif len(anchor_dets) > 1:
                 logger.warning(f"Multiple anchor detections found for ear on {photo} (ear coords: {ear.xyxy}): {len(anchor_dets)}")
                 anchor_dets = sorted(anchor_dets, key=lambda d: d.confidence, reverse=True)
-            anchored_ears.append(Ear(ear, anchor_dets[0]))
+            anchored_ears.append(AnchoredEar(ear, anchor_dets[0]))
 
         if len(anchored_ears) == 0:
             logger.warning(f"No good ears found in photo {photo}")
@@ -145,6 +142,7 @@ class PhotoAnalyzer:
             tusks=tusks,
         )
 
+        # Prepare shared data for field analyzers
         shared_data = {
             "view": view,
             "body": body,
@@ -153,22 +151,29 @@ class PhotoAnalyzer:
             "tusks": tusks,
         }
 
+        # Run specific field analyzers
+        age_evidence = self.age_analyzer.analyze(photo, shared_data)
+        gender_evidence = self.gender_analyzer.analyze(photo, shared_data)
         ear_evidence = self.ear_analyzer.analyze(photo, shared_data)
+        tusk_evidence = self.tusk_analyzer.analyze(photo, shared_data)
 
-        # TODO: wire tusk/gender/age analyzers as they land; include
-        # confidence scores, review flags, and all raw model outputs for
-        # traceability, and make clear when results are invalid or uncertain.
         return {
             "view": view,
-            "body": body,
-            "trunks": trunks,
-            "tusks": tusks,
+            "shared_data": { # note: this is not json serializable
+                "body": body,
+                "trunks": trunks,
+                "ears": anchored_ears,
+                "tusks": tusks,
+            },
+            "age": age_evidence,
+            "gender": gender_evidence,
             "ears": ear_evidence,
+            "tusks": tusk_evidence,
         }
 
     def compute_view(self,
         body: Detection,
-        ears: list[Ear],
+        ears: list[AnchoredEar],
         trunks: list[Detection],
         tusks: list[Detection],
     ) -> Literal["left", "right", "front", "unknown"]:

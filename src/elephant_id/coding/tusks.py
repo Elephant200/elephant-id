@@ -3,7 +3,7 @@
 from elephant_id.domain import Photo
 
 
-class TuskAnalyzer:
+class TuskFieldAnalyzer:
     """Infer tusk presence and side from tusk detections."""
 
     def __init__(self) -> None:

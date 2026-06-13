@@ -4,7 +4,7 @@ from elephant_id.ai import GenderService
 from elephant_id.domain import Photo
 
 
-class GenderAnalyzer:
+class GenderFieldAnalyzer:
     """Run the gender model on the masked body and shape its output."""
 
     def __init__(self, gender_service: GenderService) -> None:
