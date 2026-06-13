@@ -7,12 +7,9 @@ import numpy as np
 from pycocotools import mask as coco_mask
 
 from elephant_id.ai import Detection
-from elephant_id.coding.curvature import oriented_curvature, resample2d
-from elephant_id.constants import (
-    DEFAULT_CURVATURE_RADII,
-    DEFAULT_CURVATURE_WEIGHTS,
-)
+from elephant_id.coding.tears import tear_profile
 from elephant_id.domain import Photo
+from elephant_id.geometry import resample2d
 from elephant_id.image.masks import RleMask, decode_rle_mask
 
 
@@ -140,16 +137,6 @@ class Ear:
         """Cleaned ear contour cut between the snapped anchor points."""
         return self._cut_contour.copy()
 
-    @property
-    def curvature(self) -> np.ndarray:
-        """Curvature of the cleaned ear contour."""
-        return oriented_curvature(
-            self.resampled_contour(),
-            radii=DEFAULT_CURVATURE_RADII,
-            weights=DEFAULT_CURVATURE_WEIGHTS,
-            side=self.side,
-        )
-
     def _build_mask(self) -> np.ndarray:
         """Build the cleaned ear mask from the cut contour."""
         height, width = self._mask_size
@@ -167,14 +154,25 @@ class Ear:
 
 
 class EarAnalyzer:
-    """Analyze each anchored ear: geometry plus stubbed tear/hole evidence."""
+    """Per-ear evidence from the anchored ears PhotoAnalyzer prepares.
+
+    The analyzer states what the ear field contains; the algorithms live in
+    flat coding modules (coding/tears.py today; coding/holes.py will slot in
+    beside it, consuming ``ear.mask``).
+    """
 
     def __init__(self) -> None:
         ...
 
-    def analyze(self, photo: Photo, shared_data: dict) -> dict:
-        ears: list[Ear] = shared_data["ears"]
-
-        return {
-            "ears": ears
-        }
+    def analyze(self, photo: Photo, shared_data: dict) -> list[dict]:
+        evidence: list[dict] = []
+        for ear in shared_data["ears"]:
+            tears = tear_profile(ear.resampled_contour())
+            evidence.append({
+                "ear": ear,                        # geometry: side, area, mask, anchors
+                "side": ear.side,
+                "tear_profile": tears.profile,     # the 1-D tear embedding
+                "scale": tears.scale,              # px per profile unit (traceability)
+                # "holes": ...                     # coding/holes.py goes here
+            })
+        return evidence

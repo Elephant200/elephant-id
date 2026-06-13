@@ -153,12 +153,18 @@ class PhotoAnalyzer:
             "tusks": tusks,
         }
 
+        ear_evidence = self.ear_analyzer.analyze(photo, shared_data)
 
-
-
-        # Return dict should include confidence scores and make clear when results are invalid or uncertain
-        # It should also include all raw model outputs for traceability
-        return {} # Placeholder
+        # TODO: wire tusk/gender/age analyzers as they land; include
+        # confidence scores, review flags, and all raw model outputs for
+        # traceability, and make clear when results are invalid or uncertain.
+        return {
+            "view": view,
+            "body": body,
+            "trunks": trunks,
+            "tusks": tusks,
+            "ears": ear_evidence,
+        }
 
     def compute_view(self,
         body: Detection,
@@ -168,14 +174,8 @@ class PhotoAnalyzer:
     ) -> Literal["left", "right", "front", "unknown"]:
         view = "unknown"
         if len(ears) > 0:
-            for ear in ears:
-                print(ear)
-
             if len(ears) == 1:
-                if ears[0].side == "left":
-                    view = "left"
-                else:
-                    view = "right"
+                view = ears[0].side
             elif len(ears) == 2:
                 if ears[0].side == ears[1].side:
                     logger.warning("Both ears are on the same side")
