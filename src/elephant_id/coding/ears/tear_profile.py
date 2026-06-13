@@ -25,7 +25,7 @@ Pipeline (tunables in elephant_id.constants; lengths in units of S):
              (TEAR_TRIM_LO / TEAR_TRIM_HI)
 
 The reasoning behind every choice: docs/tear-embedding.md. Production
-entry point: EarAnalyzer calls tear_profile() per anchored ear; the
+entry point: EarFieldAnalyzer calls compute_tear_profile() per anchored ear; the
 standalone research path lives in scripts/evaluate.py. Constants are
 calibrated on a 17-photo pilot set; re-validate at scale.
 """
@@ -35,6 +35,14 @@ import numpy as np
 import shapely
 from scipy.ndimage import gaussian_filter1d
 
+from elephant_id.coding.ears.geometry import (
+    alpha_shape,
+    densify,
+    ear_side_path,
+    inward_normals,
+    nearest_crossing,
+    opened_contour,
+)
 from elephant_id.constants import (
     TEAR_ALPHA_FRAC,
     TEAR_OPEN_FRAC,
@@ -42,14 +50,6 @@ from elephant_id.constants import (
     TEAR_SMOOTH_SIGMA,
     TEAR_TRIM_HI,
     TEAR_TRIM_LO,
-)
-from elephant_id.geometry import (
-    alpha_shape,
-    densify,
-    ear_side_path,
-    inward_normals,
-    nearest_crossing,
-    opened_contour,
 )
 
 # Tunables live in elephant_id.constants (TEAR_*); derived values here.
@@ -76,15 +76,16 @@ def hull_arclength(P: np.ndarray) -> float:
     return float(np.linalg.norm(np.diff(path, axis=0), axis=1).sum())
 
 
-def tear_profile(P: np.ndarray) -> TearProfile:
+def compute_tear_profile(P: np.ndarray) -> TearProfile:
     """The pipeline, returning the profile with its scan geometry."""
-    S = hull_arclength(P)                                   # 1. scale
-    src = opened_contour(P, TEAR_OPEN_FRAC * S)                   # 2. opening
-    shape = alpha_shape(src, TEAR_ALPHA_FRAC * S)                # 3. reference
+    S = hull_arclength(P)  # 1. scale
+    # TODO: Consider using the alpha shape length instead of the hull arclength for the scale
+    src = opened_contour(P, TEAR_OPEN_FRAC * S)  # 2. opening
+    shape = alpha_shape(src, TEAR_ALPHA_FRAC * S)  # 3. reference
     path = densify(ear_side_path(
         np.asarray(shape.exterior.coords)[:-1], src[0], src[-1]))
     origins, normals = inward_normals(path, shape, PROFILE_GRID)
-    depth = nearest_crossing(origins, normals, P) / S       # 4. depth scan
+    depth = nearest_crossing(origins, normals, P) / S  # 4. signed depth scan
     profile = gaussian_filter1d(depth, sigma=TEAR_SMOOTH_SIGMA)  # 5. cleanup
     profile[:_LO] = 0
     profile[-_HI:] = 0
@@ -92,6 +93,11 @@ def tear_profile(P: np.ndarray) -> TearProfile:
                        origins=origins, normals=normals)
 
 
+def tear_profile(P: np.ndarray) -> TearProfile:
+    """Return the 1-D tear-depth profile for an anchored ear margin."""
+    return compute_tear_profile(P)
+
+
 def embed(P: np.ndarray) -> np.ndarray:
     """Margin polyline -> 1-D tear-depth profile (TEAR_PROFILE_BINS,)."""
-    return tear_profile(P).profile
+    return compute_tear_profile(P).profile
