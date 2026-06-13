@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 from loguru import logger
 
 from elephant_id.ai import AnchorService, Detection, Sam3Service
-from elephant_id.coding.analyzers.ears import Ear
+from elephant_id.coding.ears import AnchoredEar
 from elephant_id.constants import (
     MIN_FEATURE_BODY_OVERLAP,
     MIN_MULTIPLE_BODY_AREA_RATIO,
@@ -126,7 +126,7 @@ if __name__ == "__main__":
             ears = [ears[1]] # If one ear is much smaller, it's essentially not there.
         # Leave both ears if they are similar size.
 
-    anchored_ears: list[Ear] = []
+    anchored_ears: list[AnchoredEar] = []
     for ear in ears:
         anchor_dets = anchor_model.run(photo, crop_xyxy=ear.xyxy)
         if len(anchor_dets) == 0:
@@ -135,7 +135,7 @@ if __name__ == "__main__":
         elif len(anchor_dets) > 1:
             logger.warning(f"Multiple anchor detections found for ear on {photo} (ear coords: {ear.xyxy}): {len(anchor_dets)}")
             anchor_dets = sorted(anchor_dets, key=lambda d: d.confidence, reverse=True)[0]
-        anchored_ears.append(Ear(ear, anchor_dets[0]))
+        anchored_ears.append(AnchoredEar(ear, anchor_dets[0]))
 
     if len(anchored_ears) == 0:
         logger.warning(f"No good ears found in photo {photo}")
