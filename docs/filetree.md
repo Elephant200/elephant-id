@@ -150,21 +150,25 @@ elephant-id/
 │   │   │   │   └── Public coding exports (`SeekCoder`).
 │   │   │   ├── coder.py
 │   │   │   │   └── `SeekCoder` orchestrates per-photo analysis into a sighting-level result dict (preview SEEK aggregation is still a stub).
-│   │   │   ├── tears.py
-│   │   │   │   └── Tear finding (pure algorithm): `tear_profile(P)` / `embed(P)` -> 1-D tear-depth profile, step-by-step docstring. Called per ear by EarAnalyzer; replaces the removed Curvrank port (reference copy in legacy/).
 │   │   │   ├── photo_analyzer.py
 │   │   │   │   └── Runs SAM3, anchor, gender, and age models on a photo and delegates field evidence to per-field analyzers.
-│   │   │   └── analyzers/
+│   │   │   ├── age.py
+│   │   │   │   └── `AgeFieldAnalyzer`; runs `AgeService` on the masked body crop.
+│   │   │   ├── gender.py
+│   │   │   │   └── `GenderFieldAnalyzer`; runs `GenderService` on the masked body crop.
+│   │   │   ├── tusks.py
+│   │   │   │   └── `TuskFieldAnalyzer`; infers tusk presence and side from tusk detections.
+│   │   │   └── ears/
 │   │   │       ├── __init__.py
-│   │   │       │   └── Public analyzer exports: `AgeAnalyzer`, `EarAnalyzer`, `GenderAnalyzer`, `TuskAnalyzer`.
-│   │   │       ├── age.py
-│   │   │       │   └── Age field analyzer; runs `AgeService` on the masked body crop.
-│   │   │       ├── ears.py
-│   │   │       │   └── `Ear` (anchored contour geometry) + `EarAnalyzer`: per-ear evidence incl. the tear profile; future hole evidence slots in here.
-│   │   │       ├── gender.py
-│   │   │       │   └── Gender field analyzer; runs `GenderService` on the masked body crop.
-│   │   │       └── tusks.py
-│   │   │           └── Tusk field analyzer; infers tusk presence and side from tusk detections.
+│   │   │       │   └── Public ear-field exports: `AnchoredEar`, `EarFieldAnalyzer`.
+│   │   │       ├── analyzer.py
+│   │   │       │   └── `EarFieldAnalyzer`: per-ear diagnostics plus tear and hole feature-list placeholders.
+│   │   │       ├── contour.py
+│   │   │       │   └── `AnchoredEar` and mask-to-anchor-contour preparation helpers.
+│   │   │       ├── geometry.py
+│   │   │       │   └── Ear-margin geometry primitives: densify, ring side paths, alpha shape, inward normals, nearest-crossing ray scans.
+│   │   │       └── tear_profile.py
+│   │   │           └── Continuous tear-depth embedding: `compute_tear_profile(P)` / `embed(P)` -> 1-D profile.
 │   │   ├── domain/
 │   │   │   ├── __init__.py
 │   │   │   │   └── Public data-model exports for `SeekCode`, `Photo`, and `Sighting`.
@@ -174,9 +178,6 @@ elephant-id/
 │   │   │   │   └── Immutable SEEK code parser/formatter and validator used by datasets and tests.
 │   │   │   └── sighting.py
 │   │   │       └── Immutable `Sighting` dataclass that groups photos for one elephant/date and validates consistency.
-│   │   ├── geometry.py
-│   │   │   └── Generic planar-curve/envelope primitives shared by the feature finders: densify, ring side-paths, morphological opening, Delaunay alpha shape, inward normals, nearest-crossing ray scans.
-│   │   ├── geometry.py note: see below within this section
 │   │   └── image/
 │   │       ├── __init__.py
 │   │       │   └── Re-exports canonical `BgrImage` type alias.
@@ -215,7 +216,7 @@ elephant-id/
 │   └── Each folder: `weights.pt` (or `sam3.pt`) + `info.txt`.
 ├── outputs/   (gitignored)
 │   └── Regenerable figures and metrics, one subdirectory per script (`outputs/<script>/`).
-├── legacy/margin_exploration/
+├── legacy/tear_algorithm/
 │   └── Frozen exploration snapshots (tear_*.py, arPLS.py) with a README of what each tried and concluded; not maintained.
 ├── scripts/
 │   ├── evaluate.py

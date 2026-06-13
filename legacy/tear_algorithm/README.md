@@ -1,11 +1,11 @@
 # Ear Tear Extraction Testing
 
-Snapshots of the exploration that produced `src/elephant_id/tears.py` (+ `geometry.py`). They are NOT maintained and most no longer run (they import script modules that have since moved); they are kept for the record of what was tried and why it was rejected or adopted.
+Snapshots of the exploration that produced `src/elephant_id/coding/ears/tear_profile.py` and `src/elephant_id/coding/ears/geometry.py`. They are NOT maintained and most no longer run (they import script modules that have since moved); they are kept for the record of what was tried and why it was rejected or adopted.
 
 
 | script              | what it explored                                                                                                                                           | conclusion                                                                                                                                                           |
 | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `curvature.py`      | Implementation of `curvrank` integral curvature on ear contours (with `coding/curvature.py`, now removed; `resample2d` survives in `elephant_id.geometry`) | replaced by the tear-profile pipeline                                                                                                                                |
+| `curvature.py`      | Implementation of `curvrank` integral curvature on ear contours (with `coding/curvature.py`, now removed; `resample2d` survives in `coding/ears/geometry.py`) | replaced by the tear-profile pipeline                                                                                                                                |
 | `arPLS.py`          | asymmetric least-squares smoothing as the intact-margin baseline                                                                                           | rejected: frequency-domain separation bleeds into large tears; tears/bays separate by mouth *width*, not wavelength                                                  |
 | `tear_baseline.py`  | arPLS / asls / airpls baseline comparison on a sample contour                                                                                              | same conclusion; kept the signed-deviation helpers used by tear_envelopes                                                                                            |
 | `tear_shoulder.py`  | convex-hull defect depth + corner sharpness ("shoulder") tear detection                                                                                    | superseded by the envelope/normal-scan formulation                                                                                                                   |
@@ -21,5 +21,5 @@ margin -> light morphological opening -> alpha hull (radius = 0.10 x hull arclen
        -> inward-normal depth scan -> normalized 1-D tear profile
 ```
 
-implemented in `src/elephant_id/tears.py`, validated by
+implemented in `src/elephant_id/coding/ears/tear_profile.py`, validated by
 `scripts/evaluate.py`, visualized by `scripts/ear_embedding.py`.
