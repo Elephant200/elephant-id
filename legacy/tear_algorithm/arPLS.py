@@ -261,7 +261,7 @@ if __name__ == "__main__":
     import matplotlib; matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    P = np.array(json.load(open("contour.json")))
+    P = np.array(json.load(open("data/contour.json")))
     N = len(P)
 
     res = {}
@@ -305,5 +305,5 @@ if __name__ == "__main__":
     axw.plot(w, "b-", lw=1.0); axw.fill_between(np.arange(N), w, 1, color="m", alpha=0.25)
     axw.set_title("arPLS final weights"); axw.set_ylim(-0.05,1.05)
     axw.set_xlabel("index"); axw.set_ylabel("weight")
-    plt.tight_layout(); plt.savefig("ear_open.png", dpi=115)
+    plt.tight_layout(); plt.savefig("outputs/legacy/ear_open.png", dpi=115)
     print("saved")
