@@ -150,8 +150,8 @@ elephant-id/
 │   │   │   │   └── Public coding exports (`SeekCoder`).
 │   │   │   ├── coder.py
 │   │   │   │   └── `SeekCoder` orchestrates per-photo analysis into a sighting-level result dict (preview SEEK aggregation is still a stub).
-│   │   │   ├── curvature.py
-│   │   │   │   └── Integral curvature computation for elephant ear contours (Curvrank port).
+│   │   │   ├── tears.py
+│   │   │   │   └── Tear finding (pure algorithm): `tear_profile(P)` / `embed(P)` -> 1-D tear-depth profile, step-by-step docstring. Called per ear by EarAnalyzer; replaces the removed Curvrank port (reference copy in legacy/).
 │   │   │   ├── photo_analyzer.py
 │   │   │   │   └── Runs SAM3, anchor, gender, and age models on a photo and delegates field evidence to per-field analyzers.
 │   │   │   └── analyzers/
@@ -160,7 +160,7 @@ elephant-id/
 │   │   │       ├── age.py
 │   │   │       │   └── Age field analyzer; runs `AgeService` on the masked body crop.
 │   │   │       ├── ears.py
-│   │   │       │   └── Ear field analyzer; extracts ear contours, oriented curvature, and side from SAM3/anchor detections.
+│   │   │       │   └── `Ear` (anchored contour geometry) + `EarAnalyzer`: per-ear evidence incl. the tear profile; future hole evidence slots in here.
 │   │   │       ├── gender.py
 │   │   │       │   └── Gender field analyzer; runs `GenderService` on the masked body crop.
 │   │   │       └── tusks.py
@@ -174,6 +174,9 @@ elephant-id/
 │   │   │   │   └── Immutable SEEK code parser/formatter and validator used by datasets and tests.
 │   │   │   └── sighting.py
 │   │   │       └── Immutable `Sighting` dataclass that groups photos for one elephant/date and validates consistency.
+│   │   ├── geometry.py
+│   │   │   └── Generic planar-curve/envelope primitives shared by the feature finders: densify, ring side-paths, morphological opening, Delaunay alpha shape, inward normals, nearest-crossing ray scans.
+│   │   ├── geometry.py note: see below within this section
 │   │   └── image/
 │   │       ├── __init__.py
 │   │       │   └── Re-exports canonical `BgrImage` type alias.
@@ -210,11 +213,19 @@ elephant-id/
 │   ├── sam3/
 │   ├── tail_detection_yolo26/ · tusk_detection_yolo26/
 │   └── Each folder: `weights.pt` (or `sam3.pt`) + `info.txt`.
+├── outputs/   (gitignored)
+│   └── Regenerable figures and metrics, one subdirectory per script (`outputs/<script>/`).
+├── legacy/margin_exploration/
+│   └── Frozen exploration snapshots (tear_*.py, arPLS.py) with a README of what each tried and concluded; not maintained.
 ├── scripts/
+│   ├── evaluate.py
+│   │   └── TEST harness for the embedding (gated tear-event matching + profile correlation, retrieval metrics) and home of the shared research scaffolding: photo manifest from data/notable_photos.json, cached `ContourExtractor`.
+│   ├── tear_doc_figures.py
+│   │   └── Regenerates the decision-record diagrams in docs/assets/ (tear_embedding_*.png) for docs/tear-embedding.md.
+│   ├── ear_embedding.py
+│   │   └── Visual QA: per-photo ear image beside its 1-D tear profile with detected events, plus an all-photo overlay.
 │   ├── anchor.py
 │   │   └── Local script exercising `Sam3Service` and `AnchorService` on a dataset photo.
-│   ├── curvature.py
-│   │   └── Curvrank/ear-contour exploration script using SAM3 masks and matplotlib.
 │   ├── holes.py
 │   │   └── Ear-notch/hole contour exploration on masked ear crops via Laplacian-of-Gaussian filtering.
 │   ├── sam3_local.py
@@ -234,8 +245,6 @@ elephant-id/
     │   └── Unit tests for `CacheManager` get-or-compute behavior.
     ├── test_coder.py
     │   └── Unit tests for `SeekCoder` and coding pipeline integration.
-    ├── test_curvature.py
-    │   └── Unit tests for `oriented_curvature` point order and side handling.
     ├── test_dataset.py
     │   └── Unit tests for `Dataset` loading, lookup, sighting grouping, ground-truth SEEK codes, and image caching.
     ├── test_detection.py
