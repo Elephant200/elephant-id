@@ -1,6 +1,5 @@
 """Compute per-photo elephant features from AI model outputs."""
 
-
 from pathlib import Path
 from typing import Literal
 
