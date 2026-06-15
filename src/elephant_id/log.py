@@ -18,4 +18,4 @@ def configure_logging(level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITI
     logger.remove()
     if level is None:
         level = os.environ.get("LOG_LEVEL", "INFO")
-    logger.add(sys.stderr, level=level)
+    logger.add(sys.stderr, level=level.upper())
