@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 
+import elephant_id.ai.sam3 as sam3_module
 from elephant_id.ai.detection import Detection
 from elephant_id.ai.sam3 import Sam3Runner, Sam3Service, detection_from_prediction
 from elephant_id.constants import SAM3_QUERY_PRESETS
@@ -113,6 +114,34 @@ def test_sam3_service_compute_builds_envelope(make_photo):
     assert envelope["detections"] == []
 
 
+def test_sam3_service_passes_api_key_and_workspace_to_runner(monkeypatch):
+    class _CannedRunner:
+        def __init__(
+            self,
+            confidence_threshold,
+            nms,
+            nms_iou_threshold,
+            api_key,
+            workspace_name,
+        ):
+            self.confidence_threshold = confidence_threshold
+            self.nms = nms
+            self.nms_iou_threshold = nms_iou_threshold
+            self.api_key = api_key
+            self.workspace_name = workspace_name
+
+    monkeypatch.setattr(sam3_module, "Sam3Runner", _CannedRunner)
+
+    service = Sam3Service(
+        dataset=object(),
+        api_key="bulk-key",
+        workspace_name="eleid-api-key-3",
+    )
+
+    assert service.runner.api_key == "bulk-key"
+    assert service.runner.workspace_name == "eleid-api-key-3"
+
+
 def test_sam3_service_rejects_unknown_query_preset(make_photo):
     service = Sam3Service.__new__(Sam3Service)
     service.runner = _RecordingRunner()
@@ -142,6 +171,51 @@ def _runner(response) -> Sam3Runner:
     runner.nms = True
     runner.nms_iou_threshold = 0.2
     return runner
+
+
+def test_sam3_runner_uses_explicit_api_key_and_workspace(monkeypatch):
+    clients = []
+
+    class _RecordingHTTPClient:
+        def __init__(self, api_url, api_key):
+            self.api_url = api_url
+            self.api_key = api_key
+            clients.append(self)
+
+    monkeypatch.setattr(sam3_module, "InferenceHTTPClient", _RecordingHTTPClient)
+
+    runner = Sam3Runner(
+        confidence_threshold=0.5,
+        nms=True,
+        nms_iou_threshold=0.2,
+        api_key="bulk-key",
+        workspace_name="eleid-api-key-2",
+    )
+
+    assert clients[0].api_key == "bulk-key"
+    assert runner.workspace_name == "eleid-api-key-2"
+
+
+def test_sam3_runner_defaults_to_env_api_key(monkeypatch):
+    clients = []
+
+    class _RecordingHTTPClient:
+        def __init__(self, api_url, api_key):
+            self.api_url = api_url
+            self.api_key = api_key
+            clients.append(self)
+
+    monkeypatch.setenv("ROBOFLOW_API_KEY", "primary-key")
+    monkeypatch.setattr(sam3_module, "InferenceHTTPClient", _RecordingHTTPClient)
+
+    runner = Sam3Runner(
+        confidence_threshold=0.5,
+        nms=True,
+        nms_iou_threshold=0.2,
+    )
+
+    assert clients[0].api_key == "primary-key"
+    assert runner.workspace_name == "seek-identification"
 
 
 def test_sam3_runner_parses_sample_response_into_detections():

@@ -64,17 +64,19 @@ class Sam3Runner:
         confidence_threshold: float,
         nms: bool,
         nms_iou_threshold: float,
+        api_key: str | None = None,
+        workspace_name: str = ROBOFLOW_WORKSPACE,
     ) -> None:
-        api_key = os.getenv("ROBOFLOW_API_KEY")
-        if not api_key:
+        resolved_api_key = api_key or os.getenv("ROBOFLOW_API_KEY")
+        if not resolved_api_key:
             logger.warning("ROBOFLOW_API_KEY is not set; SAM3 unavailable")
             raise ValueError("ROBOFLOW_API_KEY is not set")
         self.client = InferenceHTTPClient(
             api_url=ROBOFLOW_API_URL,
-            api_key=api_key,
+            api_key=resolved_api_key,
         )
 
-        self.workspace_name: str = ROBOFLOW_WORKSPACE
+        self.workspace_name: str = workspace_name
         self.workflow_id: str = ROBOFLOW_SAM3_WORKFLOW_ID
         self.confidence_threshold: float = confidence_threshold
         self.nms: bool = nms
@@ -121,11 +123,15 @@ class Sam3Service:
         self,
         dataset: Dataset,
         cache_root: Path = Path(DEFAULT_CACHE_ROOT),
+        api_key: str | None = None,
+        workspace_name: str = ROBOFLOW_WORKSPACE,
     ) -> None:
         self.runner = Sam3Runner(
             confidence_threshold=DEFAULT_SAM3_CONFIDENCE_THRESHOLD,
             nms=DEFAULT_SAM3_NMS,
             nms_iou_threshold=DEFAULT_SAM3_NMS_IOU_THRESHOLD,
+            api_key=api_key,
+            workspace_name=workspace_name,
         )
 
         self.dataset: Dataset = dataset
