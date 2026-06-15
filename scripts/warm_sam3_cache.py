@@ -239,3 +239,81 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+"""
+After running for 8 hours:
+=================
+SAM3 cache warmup finished: 83870/83870 photos completed, 167670/167740 runs succeeded, 70 failed
+Failed SAM3 runs (70):
+  Hans_2007-08-18_03 [features]: Could not read image: dataset/elephants-alive/coded/Hans/2007-08-18/Hans_2007-08-18_03.jpg
+  Hans_2007-08-18_03 [body]: Could not read image: dataset/elephants-alive/coded/Hans/2007-08-18/Hans_2007-08-18_03.jpg
+  Johnny_2005-01-08_08 [features]: Could not read image: dataset/elephants-alive/coded/Johnny/2005-01-08/Johnny_2005-01-08_08.jpg
+  Johnny_2005-01-08_08 [body]: Could not read image: dataset/elephants-alive/coded/Johnny/2005-01-08/Johnny_2005-01-08_08.jpg
+  Johnny_2005-01-08_02 [features]: Could not read image: dataset/elephants-alive/coded/Johnny/2005-01-08/Johnny_2005-01-08_02.jpg
+  Johnny_2005-01-08_02 [body]: Could not read image: dataset/elephants-alive/coded/Johnny/2005-01-08/Johnny_2005-01-08_02.jpg
+  Johnny_2005-01-08_01 [features]: Could not read image: dataset/elephants-alive/coded/Johnny/2005-01-08/Johnny_2005-01-08_01.jpg
+  Johnny_2005-01-08_01 [body]: Could not read image: dataset/elephants-alive/coded/Johnny/2005-01-08/Johnny_2005-01-08_01.jpg
+  Johnny_2005-01-08_09 [features]: Could not read image: dataset/elephants-alive/coded/Johnny/2005-01-08/Johnny_2005-01-08_09.jpg
+  Johnny_2005-01-08_09 [body]: Could not read image: dataset/elephants-alive/coded/Johnny/2005-01-08/Johnny_2005-01-08_09.jpg
+  Johnny_2005-01-08_07 [features]: Could not read image: dataset/elephants-alive/coded/Johnny/2005-01-08/Johnny_2005-01-08_07.jpg
+  Johnny_2005-01-08_07 [body]: Could not read image: dataset/elephants-alive/coded/Johnny/2005-01-08/Johnny_2005-01-08_07.jpg
+  Johnny_2005-01-08_05 [features]: Could not read image: dataset/elephants-alive/coded/Johnny/2005-01-08/Johnny_2005-01-08_05.jpg
+  Johnny_2005-01-08_05 [body]: Could not read image: dataset/elephants-alive/coded/Johnny/2005-01-08/Johnny_2005-01-08_05.jpg
+  Johnny_2005-01-08_03 [features]: Could not read image: dataset/elephants-alive/coded/Johnny/2005-01-08/Johnny_2005-01-08_03.jpg
+  Johnny_2005-01-08_03 [body]: Could not read image: dataset/elephants-alive/coded/Johnny/2005-01-08/Johnny_2005-01-08_03.jpg
+  Johnny_2005-01-08_06 [features]: Could not read image: dataset/elephants-alive/coded/Johnny/2005-01-08/Johnny_2005-01-08_06.jpg
+  Johnny_2005-01-08_06 [body]: Could not read image: dataset/elephants-alive/coded/Johnny/2005-01-08/Johnny_2005-01-08_06.jpg
+  Johnny_2005-01-08_04 [features]: Could not read image: dataset/elephants-alive/coded/Johnny/2005-01-08/Johnny_2005-01-08_04.jpg
+  Johnny_2005-01-08_04 [body]: Could not read image: dataset/elephants-alive/coded/Johnny/2005-01-08/Johnny_2005-01-08_04.jpg
+  Rommel_2005-01-07_24 [features]: Could not read image: dataset/elephants-alive/coded/Rommel/2005-01-07/Rommel_2005-01-07_24.jpg
+  Rommel_2005-01-07_24 [body]: Could not read image: dataset/elephants-alive/coded/Rommel/2005-01-07/Rommel_2005-01-07_24.jpg
+  Rommel_2005-01-07_32 [features]: Could not read image: dataset/elephants-alive/coded/Rommel/2005-01-07/Rommel_2005-01-07_32.jpg
+  Rommel_2005-01-07_32 [body]: Could not read image: dataset/elephants-alive/coded/Rommel/2005-01-07/Rommel_2005-01-07_32.jpg
+  Rommel_2005-01-07_18 [features]: Could not read image: dataset/elephants-alive/coded/Rommel/2005-01-07/Rommel_2005-01-07_18.jpg
+  Rommel_2005-01-07_18 [body]: Could not read image: dataset/elephants-alive/coded/Rommel/2005-01-07/Rommel_2005-01-07_18.jpg
+  Rommel_2005-01-07_26 [features]: Could not read image: dataset/elephants-alive/coded/Rommel/2005-01-07/Rommel_2005-01-07_26.jpg
+  Rommel_2005-01-07_26 [body]: Could not read image: dataset/elephants-alive/coded/Rommel/2005-01-07/Rommel_2005-01-07_26.jpg
+  Rommel_2005-01-07_34 [features]: Could not read image: dataset/elephants-alive/coded/Rommel/2005-01-07/Rommel_2005-01-07_34.jpg
+  Rommel_2005-01-07_34 [body]: Could not read image: dataset/elephants-alive/coded/Rommel/2005-01-07/Rommel_2005-01-07_34.jpg
+  Rommel_2005-01-07_23 [features]: Could not read image: dataset/elephants-alive/coded/Rommel/2005-01-07/Rommel_2005-01-07_23.jpg
+  Rommel_2005-01-07_23 [body]: Could not read image: dataset/elephants-alive/coded/Rommel/2005-01-07/Rommel_2005-01-07_23.jpg
+  Rommel_2005-01-07_31 [features]: Could not read image: dataset/elephants-alive/coded/Rommel/2005-01-07/Rommel_2005-01-07_31.jpg
+  Rommel_2005-01-07_31 [body]: Could not read image: dataset/elephants-alive/coded/Rommel/2005-01-07/Rommel_2005-01-07_31.jpg
+  Rommel_2005-01-07_39 [features]: Could not read image: dataset/elephants-alive/coded/Rommel/2005-01-07/Rommel_2005-01-07_39.jpg
+  Rommel_2005-01-07_39 [body]: Could not read image: dataset/elephants-alive/coded/Rommel/2005-01-07/Rommel_2005-01-07_39.jpg
+  Rommel_2005-01-07_25 [features]: Could not read image: dataset/elephants-alive/coded/Rommel/2005-01-07/Rommel_2005-01-07_25.jpg
+  Rommel_2005-01-07_25 [body]: Could not read image: dataset/elephants-alive/coded/Rommel/2005-01-07/Rommel_2005-01-07_25.jpg
+  Rommel_2005-01-07_33 [features]: Could not read image: dataset/elephants-alive/coded/Rommel/2005-01-07/Rommel_2005-01-07_33.jpg
+  Rommel_2005-01-07_33 [body]: Could not read image: dataset/elephants-alive/coded/Rommel/2005-01-07/Rommel_2005-01-07_33.jpg
+  Rommel_2005-01-07_21 [features]: Could not read image: dataset/elephants-alive/coded/Rommel/2005-01-07/Rommel_2005-01-07_21.jpg
+  Rommel_2005-01-07_21 [body]: Could not read image: dataset/elephants-alive/coded/Rommel/2005-01-07/Rommel_2005-01-07_21.jpg
+  Rommel_2005-01-07_29 [features]: Could not read image: dataset/elephants-alive/coded/Rommel/2005-01-07/Rommel_2005-01-07_29.jpg
+  Rommel_2005-01-07_29 [body]: Could not read image: dataset/elephants-alive/coded/Rommel/2005-01-07/Rommel_2005-01-07_29.jpg
+  Rommel_2005-01-07_37 [features]: Could not read image: dataset/elephants-alive/coded/Rommel/2005-01-07/Rommel_2005-01-07_37.jpg
+  Rommel_2005-01-07_37 [body]: Could not read image: dataset/elephants-alive/coded/Rommel/2005-01-07/Rommel_2005-01-07_37.jpg
+  Rommel_2005-01-07_19 [features]: Could not read image: dataset/elephants-alive/coded/Rommel/2005-01-07/Rommel_2005-01-07_19.jpg
+  Rommel_2005-01-07_19 [body]: Could not read image: dataset/elephants-alive/coded/Rommel/2005-01-07/Rommel_2005-01-07_19.jpg
+  Rommel_2005-01-07_27 [features]: Could not read image: dataset/elephants-alive/coded/Rommel/2005-01-07/Rommel_2005-01-07_27.jpg
+  Rommel_2005-01-07_27 [body]: Could not read image: dataset/elephants-alive/coded/Rommel/2005-01-07/Rommel_2005-01-07_27.jpg
+  Rommel_2005-01-07_35 [features]: Could not read image: dataset/elephants-alive/coded/Rommel/2005-01-07/Rommel_2005-01-07_35.jpg
+  Rommel_2005-01-07_35 [body]: Could not read image: dataset/elephants-alive/coded/Rommel/2005-01-07/Rommel_2005-01-07_35.jpg
+  Rommel_2005-01-07_22 [features]: Could not read image: dataset/elephants-alive/coded/Rommel/2005-01-07/Rommel_2005-01-07_22.jpg
+  Rommel_2005-01-07_22 [body]: Could not read image: dataset/elephants-alive/coded/Rommel/2005-01-07/Rommel_2005-01-07_22.jpg
+  Rommel_2005-01-07_30 [features]: Could not read image: dataset/elephants-alive/coded/Rommel/2005-01-07/Rommel_2005-01-07_30.jpg
+  Rommel_2005-01-07_30 [body]: Could not read image: dataset/elephants-alive/coded/Rommel/2005-01-07/Rommel_2005-01-07_30.jpg
+  Rommel_2005-01-07_38 [features]: Could not read image: dataset/elephants-alive/coded/Rommel/2005-01-07/Rommel_2005-01-07_38.jpg
+  Rommel_2005-01-07_38 [body]: Could not read image: dataset/elephants-alive/coded/Rommel/2005-01-07/Rommel_2005-01-07_38.jpg
+  Rommel_2005-01-07_20 [features]: Could not read image: dataset/elephants-alive/coded/Rommel/2005-01-07/Rommel_2005-01-07_20.jpg
+  Rommel_2005-01-07_20 [body]: Could not read image: dataset/elephants-alive/coded/Rommel/2005-01-07/Rommel_2005-01-07_20.jpg
+  Rommel_2005-01-07_28 [features]: Could not read image: dataset/elephants-alive/coded/Rommel/2005-01-07/Rommel_2005-01-07_28.jpg
+  Rommel_2005-01-07_28 [body]: Could not read image: dataset/elephants-alive/coded/Rommel/2005-01-07/Rommel_2005-01-07_28.jpg
+  Rommel_2005-01-07_36 [features]: Could not read image: dataset/elephants-alive/coded/Rommel/2005-01-07/Rommel_2005-01-07_36.jpg
+  Rommel_2005-01-07_36 [body]: Could not read image: dataset/elephants-alive/coded/Rommel/2005-01-07/Rommel_2005-01-07_36.jpg
+  Sweety_2005-01-09_02 [features]: Could not read image: dataset/elephants-alive/coded/Sweety/2005-01-09/Sweety_2005-01-09_02.jpg
+  Sweety_2005-01-09_02 [body]: Could not read image: dataset/elephants-alive/coded/Sweety/2005-01-09/Sweety_2005-01-09_02.jpg
+  Sweety_2005-01-09_01 [features]: Could not read image: dataset/elephants-alive/coded/Sweety/2005-01-09/Sweety_2005-01-09_01.jpg
+  Sweety_2005-01-09_01 [body]: Could not read image: dataset/elephants-alive/coded/Sweety/2005-01-09/Sweety_2005-01-09_01.jpg
+  Sweety_2005-01-09_03 [features]: Could not read image: dataset/elephants-alive/coded/Sweety/2005-01-09/Sweety_2005-01-09_03.jpg
+  Sweety_2005-01-09_03 [body]: Could not read image: dataset/elephants-alive/coded/Sweety/2005-01-09/Sweety_2005-01-09_03.jpg
+=================
+"""
