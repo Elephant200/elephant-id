@@ -104,7 +104,7 @@ class Sam3Runner:
             },
         )
 
-        if not response or not response[0] or not response[0].get("predictions") or not response[0]["predictions"].get("predictions"):
+        if not response or not response[0] or "predictions" not in response[0] or "predictions" not in response[0]["predictions"]:
             logger.warning(f"SAM3 returned no predictions for preset {query_preset!r}")
             raise ValueError(f"Unexpected response from SAM3: {response}")
 
