@@ -1,6 +1,6 @@
 """Ear field analyzer."""
 
-from elephant_id.coding.ears.contour import AnchoredEar
+from elephant_id.coding.ears.anchored_ear import AnchoredEar
 from elephant_id.coding.ears.tear_profile import compute_tear_profile
 from elephant_id.domain import Photo
 

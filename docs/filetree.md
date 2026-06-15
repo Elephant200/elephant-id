@@ -163,7 +163,7 @@ elephant-id/
 │   │   │       │   └── Public ear-field exports: `AnchoredEar`, `EarFieldAnalyzer`.
 │   │   │       ├── analyzer.py
 │   │   │       │   └── `EarFieldAnalyzer`: per-ear diagnostics plus tear and hole feature-list placeholders.
-│   │   │       ├── contour.py
+│   │   │       ├── anchored_ear.py
 │   │   │       │   └── `AnchoredEar` and mask-to-anchor-contour preparation helpers.
 │   │   │       ├── geometry.py
 │   │   │       │   └── Ear-margin geometry primitives: densify, ring side paths, alpha shape, inward normals, nearest-crossing ray scans.
