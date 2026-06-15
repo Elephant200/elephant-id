@@ -40,6 +40,6 @@ class Sighting:
         """Return the number of photos in the sighting."""
         return len(self.photos)
 
-    def __str__(self) -> str:
+    def __repr__(self) -> str:
         """Return a compact representation with the photo count."""
-        return f"Sighting({self.sighting_id}, photos={len(self.photos)})"
+        return f"Sighting({self.sighting_id!r}, num_photos={len(self.photos)})"

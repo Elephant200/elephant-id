@@ -33,6 +33,15 @@ def test_seek_code_to_str():
     )
     assert str(code) == "C00T00E0000-0000X00S000"
 
+def test_seek_code_to_str_repr():
+    code = SeekCode(
+        g="C", a=0, tr=False, tl=False,
+        ert1=0, erh1=0, ert2=0, erh2=0, elt1=0, elh1=0, elt2=0, elh2=0,
+        xr=False, xl=False, sr=False, sl=False, sb=False,
+    )
+    assert str(code) == "C00T00E0000-0000X00S000"
+    assert repr(code) == "SeekCode(g='C', a=0, tr=False, tl=False, ert1=0, erh1=0, ert2=0, erh2=0, elt1=0, elh1=0, elt2=0, elh2=0, xr=False, xl=False, sr=False, sl=False, sb=False)"
+
 REAL_CODES = [
     "B00T01E9___-____X00S___",
     "B60T11E90__-43__X00S001",

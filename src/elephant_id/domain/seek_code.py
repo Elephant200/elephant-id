@@ -171,3 +171,7 @@ class SeekCode:
             f"X{boolean[self.xr]}{boolean[self.xl]}"
             f"S{boolean[self.sr]}{boolean[self.sl]}{boolean[self.sb]}"
         )
+
+    def __repr__(self) -> str:
+        """Return a detailed debug description."""
+        return f"SeekCode(g={self.g!r}, a={self.a!r}, tr={self.tr!r}, tl={self.tl!r}, ert1={self.ert1!r}, erh1={self.erh1!r}, ert2={self.ert2!r}, erh2={self.erh2!r}, elt1={self.elt1!r}, elh1={self.elh1!r}, elt2={self.elt2!r}, elh2={self.elh2!r}, xr={self.xr!r}, xl={self.xl!r}, sr={self.sr!r}, sl={self.sl!r}, sb={self.sb!r})"

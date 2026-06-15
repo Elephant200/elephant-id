@@ -30,6 +30,6 @@ class Photo:
         if not self.sighting_id.startswith(self.elephant_name + "_"):
             raise ValueError(f"Sighting id does not start with elephant name: {self.sighting_id} does not start with {self.elephant_name}_")
 
-    def __str__(self) -> str:
+    def __repr__(self) -> str:
         """Return a compact, identifier-based representation."""
-        return f"Photo({self.identifier})"
+        return f"Photo({self.identifier!r}, image_path=Path({self.image_path.as_posix()!r}))"

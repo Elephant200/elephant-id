@@ -148,9 +148,6 @@ class AnchoredEar:
         """Return the cleaned ear contour resampled to a fixed point count."""
         return resample2d(self._cut_contour, num_points=num_points)
 
-    def __str__(self) -> str:
+    def __repr__(self) -> str:
         """Return a compact debug description."""
-        return (
-            f"AnchoredEar(side={self.side}, area={self.area:.2f}, "
-            f"xyxy={self.xyxy}, anchor_points={self.anchor_points})"
-        )
+        return f"AnchoredEar(side={self.side}, xyxy={self.xyxy}, anchor_points={self.anchor_points})"

@@ -11,7 +11,7 @@ def test_sighting_one_photo_and_len(make_sighting):
     assert s.elephant_name == "Devin"
     assert s.sighting_date == date(2015, 11, 5)
     assert s.sighting_id == "Devin_2015-11-05"
-    assert str(s) == "Sighting(Devin_2015-11-05, photos=1)"
+    assert str(s) == "Sighting('Devin_2015-11-05', num_photos=1)"
 
 
 def test_sighting_multiple_photos(make_photo, make_sighting):

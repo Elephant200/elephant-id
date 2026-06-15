@@ -8,7 +8,7 @@ def test_photo_constructed_and_str(make_photo):
     p = make_photo(sequence=9)
     assert p.identifier == "Devin_2015-11-05_09"
     assert p.image_path == Path("Devin/2015-11-05/Devin_2015-11-05_09.jpg")
-    assert str(p) == "Photo(Devin_2015-11-05_09)"
+    assert str(p) == "Photo('Devin_2015-11-05_09', image_path=Path('Devin/2015-11-05/Devin_2015-11-05_09.jpg'))"
 
 
 @pytest.mark.parametrize(
