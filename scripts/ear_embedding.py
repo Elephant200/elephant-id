@@ -20,7 +20,7 @@ import numpy as np
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from elephant_id.coding.tears import PROFILE_GRID, tear_profile
+from elephant_id.coding.ears.tear_profile import PROFILE_GRID, tear_profile
 from elephant_id.constants import TEAR_TRIM_HI, TEAR_TRIM_LO
 from scripts.evaluate import (
     PHOTOS,

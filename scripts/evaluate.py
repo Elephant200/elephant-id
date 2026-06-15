@@ -1,11 +1,9 @@
 """Evaluation harness: does the 1-D tear profile carry individual identity?
 
-TEST code for elephant_id.coding.tears -- the matchers here are drafts used
-to validate the feature, not part of the pipeline. Also hosts the shared
-research scaffolding (photo manifest from data/notable_photos.json, the
-cached ContourExtractor) used by the other exploration scripts.
+TEST code for elephant_id.coding.ears.tear_profile - the matchers here are drafts used
+to validate the feature, not part of the pipeline.
 
-For every photo in the manifest: extract the contour (cached), compute the
+For every photo in the manifest: extract the contour, compute the
 profile, reduce it to gated tear events. Score every pair two ways:
 
   * event  -- depth-weighted optimal assignment of tear events within a
@@ -22,7 +20,7 @@ validated.
 
 Outputs (outputs/evaluate/): metrics.txt, metrics.json, similarity_matrix.png.
 
-Run:  uv run python -m scripts.evaluate
+Run:  uv run python scripts/evaluate.py
 """
 import itertools
 import json
@@ -39,10 +37,9 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 from elephant_id.ai import AnchorService, Sam3Service
-from elephant_id.coding.analyzers.ears import Ear
-from elephant_id.coding.tears import PROFILE_GRID, embed
+from elephant_id.coding.ears import AnchoredEar
+from elephant_id.coding.ears.tear_profile import PROFILE_GRID, embed
 from elephant_id.constants import (
-    DEFAULT_CACHE_ROOT,
     TEAR_PROFILE_BINS,
     TEAR_TRIM_HI,
     TEAR_TRIM_LO,
@@ -72,48 +69,45 @@ def out_dir(script_name: str) -> Path:
 class ContourExtractor:
     """Research path: photo -> cached ear contour, bypassing the coder.
 
-    Mirrors PhotoAnalyzer's shared processing (SAM3 -> anchors -> Ear) so
+    Mirrors PhotoAnalyzer's shared processing (SAM3 -> anchors -> AnchoredEar) so
     scripts can iterate without the full coding pipeline; contours cache as
     .npy under .cache/contours/ (delete to re-extract). Production goes
-    SeekCoder -> PhotoAnalyzer -> EarAnalyzer.
+    SeekCoder -> PhotoAnalyzer -> EarFieldAnalyzer.
     """
 
-    def __init__(self, dataset: Dataset, sam3: Sam3Service,
-                 anchor: AnchorService,
-                 cache_root: Path = Path(DEFAULT_CACHE_ROOT)):
+    def __init__(
+        self,
+        dataset: Dataset,
+        sam3: Sam3Service,
+        anchor: AnchorService,
+    ) -> None:
         self.dataset = dataset
         self.sam3 = sam3
         self.anchor = anchor
-        self.cache_dir = cache_root / "contours"
-        self.cache_dir.mkdir(parents=True, exist_ok=True)
 
-    def ears(self, identifier: str) -> list[Ear]:
+    def ears(self, identifier: str) -> list[AnchoredEar]:
         photo = self.dataset.get_photo(identifier)
         dets = self.sam3.run(photo, "features")
-        ears: list[Ear] = []
+        ears: list[AnchoredEar] = []
         for d in (x for x in dets if x.class_name == "ear"):
             ad = self.anchor.run(photo, crop_xyxy=d.xyxy)
             if not ad:
                 continue
             best = max(ad, key=lambda a: a.confidence)
             try:
-                ears.append(Ear(d, best))
+                ears.append(AnchoredEar(d, best))
             except ValueError:
                 continue
         return ears
 
     def contour(self, identifier: str, n_points: int = 1024) -> np.ndarray | None:
         """Resampled cut contour of the largest ear, or None."""
-        path = self.cache_dir / f"{identifier}_n{n_points}.npy"
-        if path.exists():
-            return np.load(path)
         ears = self.ears(identifier)
         if not ears:
             logger.warning(f"{identifier}: no anchored ears")
             return None
         ear = max(ears, key=lambda e: e.area)
         P = ear.resampled_contour(n_points)
-        np.save(path, P)
         return P
 
     def crop(self, identifier: str) -> tuple[np.ndarray, np.ndarray] | None:

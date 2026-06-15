@@ -18,20 +18,24 @@ import shapely
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from elephant_id.coding.tears import PROFILE_GRID, hull_arclength, tear_profile
-from elephant_id.constants import (
-    TEAR_ALPHA_FRAC,
-    TEAR_OPEN_FRAC,
-    TEAR_TRIM_HI,
-    TEAR_TRIM_LO,
-)
-from elephant_id.geometry import (
+from elephant_id.coding.ears.geometry import (
     alpha_shape,
     densify,
     ear_side_path,
     inward_normals,
     nearest_crossing,
     opened_contour,
+)
+from elephant_id.coding.ears.tear_profile import (
+    PROFILE_GRID,
+    hull_arclength,
+    tear_profile,
+)
+from elephant_id.constants import (
+    TEAR_ALPHA_FRAC,
+    TEAR_OPEN_FRAC,
+    TEAR_TRIM_HI,
+    TEAR_TRIM_LO,
 )
 from scripts.evaluate import PHOTOS, REPO_ROOT, make_extractor, tear_events
 
