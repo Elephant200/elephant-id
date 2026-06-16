@@ -92,35 +92,95 @@ class AnchoredEar:
         if ear_detection.rle_mask is None:
             raise ValueError("Ear detection must have an RLE mask")
 
-        self.xyxy = ear_detection.xyxy
+        self._ear_rle_mask = ear_detection.rle_mask
         self._mask_size = tuple(ear_detection.rle_mask["size"])
-        self._source_contour = largest_contour_from_rle(ear_detection.rle_mask)
-        self.anchor_points = snap_points_to_contour(
-            self._source_contour,
-            anchor_detection.keypoints,
-        )
+        self._keypoints = anchor_detection.keypoints
 
-        # TODO: Implement lazy loading
-        self._cut_contour = cut_contour_by_anchors(
-            self._source_contour,
-            self.anchor_points,
-        )
-        self._mask = self._build_mask()
-        self._rle_mask = encode_rle_mask(self._mask)
-        self.area = float(coco_mask.area([self.rle_mask])[0])
-
-        anchor_center_x = (self.anchor_points[0][0] + self.anchor_points[1][0]) / 2
-        box_center_x = (self.xyxy[0] + self.xyxy[2]) / 2
-        self.side: Literal["left", "right"] = (
-            "left" if anchor_center_x < box_center_x else "right"
-        )
+        # The cut contour is the source of truth. Geometry derived from it
+        # (xyxy, anchor_points, side) is cheap and computed together; the
+        # expensive mask -> rle -> area chain stays separately lazy below.
+        self._cut_contour: np.ndarray | None = None
+        self._xyxy: tuple[float, float, float, float] | None = None
+        self._anchor_points: (
+            tuple[tuple[float, float], tuple[float, float]] | None
+        ) = None
+        self._side: Literal["left", "right"] | None = None
+        self._mask: np.ndarray | None = None
+        self._rle_mask: RleMask | None = None
+        self._area: float | None = None
 
         # Placeholder until quality scoring combines area and aspect ratio.
         self.quality = 0.0
 
+    def _ensure_geometry(self) -> None:
+        """Compute the cut contour and its cheap derivatives in one pass."""
+        if self._cut_contour is not None:
+            return
+
+        source_contour = largest_contour_from_rle(self._ear_rle_mask)
+        snapped = snap_points_to_contour(source_contour, self._keypoints)
+        contour = cut_contour_by_anchors(source_contour, snapped)
+
+        poly = np.round(contour).astype(np.int32)
+        x, y, w, h = cv2.boundingRect(poly)
+        xyxy = (float(x), float(y), float(x + w), float(y + h))
+
+        anchor_points = (
+            (float(contour[0][0]), float(contour[0][1])),
+            (float(contour[-1][0]), float(contour[-1][1])),
+        )
+
+        anchor_center_x = (anchor_points[0][0] + anchor_points[1][0]) / 2
+        box_center_x = (xyxy[0] + xyxy[2]) / 2
+        self._side = "left" if anchor_center_x < box_center_x else "right"
+
+        self._xyxy = xyxy
+        self._anchor_points = anchor_points
+        self._cut_contour = contour
+
+    def _ensure_mask(self) -> None:
+        """Rasterize the cut contour into a mask, then derive its RLE and area."""
+        if self._mask is not None:
+            return
+
+        self._ensure_geometry()
+        height, width = self._mask_size
+        mask = np.zeros((height, width), dtype=np.uint8)
+        polygon = np.round(self._cut_contour).astype(np.int32).reshape(-1, 1, 2)
+        cv2.fillPoly(mask, [polygon], color=1)
+
+        self._mask = mask.astype(bool)
+        self._rle_mask = encode_rle_mask(self._mask)
+        self._area = float(coco_mask.area([self._rle_mask])[0])
+
+    @property
+    def xyxy(self) -> tuple[float, float, float, float]:
+        """Bounding box of the cut contour (half-open, x2/y2 exclusive)."""
+        self._ensure_geometry()
+        return self._xyxy
+
+    @property
+    def anchor_points(self) -> tuple[tuple[float, float], tuple[float, float]]:
+        """The two anchor points, snapped onto the cut contour."""
+        self._ensure_geometry()
+        return self._anchor_points
+
+    @property
+    def side(self) -> Literal["left", "right"]:
+        """Whether this is the elephant's left or right ear."""
+        self._ensure_geometry()
+        return self._side
+
+    @property
+    def area(self) -> float:
+        """Area of the cleaned ear mask in pixels."""
+        self._ensure_mask()
+        return self._area
+
     @property
     def rle_mask(self) -> RleMask:
         """Cleaned ear mask encoded as COCO RLE."""
+        self._ensure_mask()
         return {
             "size": list(self._rle_mask["size"]),
             "counts": self._rle_mask["counts"],
@@ -129,23 +189,18 @@ class AnchoredEar:
     @property
     def mask(self) -> np.ndarray:
         """Cleaned ear mask."""
+        self._ensure_mask()
         return self._mask.copy()
 
     @property
     def contour(self) -> np.ndarray:
         """Cleaned ear contour cut between the snapped anchor points."""
+        self._ensure_geometry()
         return self._cut_contour.copy()
-
-    def _build_mask(self) -> np.ndarray:
-        """Build the cleaned ear mask from the cut contour."""
-        height, width = self._mask_size
-        mask = np.zeros((height, width), dtype=np.uint8)
-        polygon = np.round(self._cut_contour).astype(np.int32).reshape(-1, 1, 2)
-        cv2.fillPoly(mask, [polygon], color=1)
-        return mask.astype(bool)
 
     def resampled_contour(self, num_points: int = 1024) -> np.ndarray:
         """Return the cleaned ear contour resampled to a fixed point count."""
+        self._ensure_geometry()
         return resample2d(self._cut_contour, num_points=num_points)
 
     def __repr__(self) -> str:
