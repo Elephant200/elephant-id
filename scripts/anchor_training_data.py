@@ -6,6 +6,7 @@ import cv2
 import numpy as np
 from dotenv import load_dotenv
 from loguru import logger
+from tqdm import tqdm
 
 from elephant_id.ai import AnchorService, Detection, Sam3Service
 from elephant_id.coding.ears import AnchoredEar
@@ -100,7 +101,32 @@ def main() -> None:
     sam3 = Sam3Service(dataset=dataset)
     anchor_model = AnchorService(dataset=dataset) # the worse version of the model; use it for training data generation.
 
-    photo = dataset.get_photo("Headbanger_2018-07-10_14")
+    all_sightings = list(dataset.iter_sightings())
+    print(len(all_sightings))
+
+    # Randomly sample photos from the dataset. One per 5 images in a sighting
+    sampled_photos = []
+    failures = []
+    for sighting in tqdm(all_sightings):
+        counter = 0
+        for photo in sighting.photos:
+            try:
+                ears = get_ears(photo, sam3, anchor_model)
+                if ears is None:
+                    continue
+                if counter % 5 == 0:
+                    sampled_photos.append(photo)
+                counter += 1
+            except Exception as exc:
+                failures.append({"photo": photo, "error": exc})
+                logger.error(f"Error getting ears for photo {photo}: {exc}")
+                continue
+    for failure in failures:
+        logger.error(failure)
+
+    print(len(sampled_photos))
+
+
     image = dataset.read_image(photo)
 
     ears = get_ears(photo, sam3, anchor_model)
