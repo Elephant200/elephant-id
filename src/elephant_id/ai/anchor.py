@@ -46,7 +46,7 @@ class AnchorRunner:
         Returns:
             The anchor keypoint detections found in the image.
         """
-        results = self.model.predict(source=image, device="mps", conf=0.25)
+        results = self.model.predict(source=image, device="mps", conf=0.25, verbose=False)
 
         predictions = json.loads(results[0].to_json(decimals=1))
         return [detection_from_prediction(prediction) for prediction in predictions]
