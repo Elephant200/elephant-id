@@ -1,5 +1,8 @@
 """Module to generate improved training data for the anchor keypoint detection model."""
 
+import json
+import random
+from datetime import datetime
 from pathlib import Path
 
 import cv2
@@ -17,7 +20,7 @@ from elephant_id.constants import (
 )
 from elephant_id.dataset import Dataset
 from elephant_id.domain import Photo
-from elephant_id.image.transforms import apply_crop, apply_mask
+from elephant_id.image.transforms import apply_crop
 from elephant_id.log import configure_logging
 
 
@@ -91,62 +94,179 @@ def get_ears(photo: Photo, sam3: Sam3Service, anchor_model: AnchorService) -> li
 
 def main() -> None:
     load_dotenv()
-    configure_logging()
+    configure_logging(level="ERROR")
 
     dataset = Dataset(
         dataset_root=Path("dataset/elephants-alive/coded"),
         metadata_path=Path("dataset/elephants-alive/images.csv"),
     )
+    out = Path("outputs/anchor_training")
+    out.mkdir(parents=True, exist_ok=True)
 
     sam3 = Sam3Service(dataset=dataset)
     anchor_model = AnchorService(dataset=dataset) # the worse version of the model; use it for training data generation.
 
-    all_sightings = list(dataset.iter_sightings())
-    print(len(all_sightings))
-
     # Randomly sample photos from the dataset. One per 5 images in a sighting
-    sampled_photos = []
-    failures = []
-    for sighting in tqdm(all_sightings):
-        counter = 0
-        for photo in sighting.photos:
-            try:
-                ears = get_ears(photo, sam3, anchor_model)
-                if ears is None:
+    if Path("sampled_photos.json").exists():
+        with open("sampled_photos.json") as f:
+            sampled_photos = [photo for photo in tqdm(json.load(f))]
+    else:
+        sampled_photos: list[str] = []
+        failures = []
+        for sighting in tqdm(dataset.iter_sightings()):
+            counter = 0
+            for photo in sighting.photos:
+                try:
+                    ears = get_ears(photo, sam3, anchor_model)
+                    if ears is None:
+                        continue
+                    if counter % 5 == 0:
+                        sampled_photos.append(photo.identifier)
+                    counter += 1
+                except Exception as exc:
+                    failures.append({"photo": photo, "error": exc})
+                    logger.error(f"Error getting ears for photo {photo}: {exc}")
                     continue
-                if counter % 5 == 0:
-                    sampled_photos.append(photo)
-                counter += 1
-            except Exception as exc:
-                failures.append({"photo": photo, "error": exc})
-                logger.error(f"Error getting ears for photo {photo}: {exc}")
-                continue
-    for failure in failures:
-        logger.error(failure)
+        for failure in failures:
+            logger.error(failure)
+
+        with open("sampled_photos.json", "w") as f:
+            json.dump([photo for photo in sampled_photos], f, indent=4)
 
     print(len(sampled_photos))
 
+    # For every image in the photo, get the ears and save the image with the ears and anchor points.
 
-    image = dataset.read_image(photo)
+    coco_dataset = {
+        "info": {
+            "description": "Anchor training data",
+            "version": "1.0",
+            "year": datetime.now().year,
+            "date_created": datetime.now().isoformat(),
+        },
+        "licenses": [],
+        "images": [],
+        "annotations": [],
+        "categories": [
+            {
+                "id": 1,
+                "name": "left ear",
+                "supercategory": "",
+                "keypoints": [
+                    "lower", "upper",
+                ]
+            },
+            {
+                "id": 2,
+                "name": "right ear",
+                "supercategory": "",
+                "keypoints": [
+                    "lower", "upper",
+                ],
+                "skeleton": [
+                    3, 4,
+                ]
+            },
+        ],
+    }
 
-    ears = get_ears(photo, sam3, anchor_model)
-    print(ears)
-    for ear in ears:
-        ear_image = apply_mask(image, ear.mask)
-        # Find the point on the contour that maximizes the quantity y + x
-        contour: np.ndarray = ear.contour
-        if ear.side == "right":
-            lower_anchor = np.argmax(contour[:, 1] + contour[:, 0])
-            upper_anchor = np.argmin(contour[:, 1] - contour[:, 0])
-        else:
-            lower_anchor = np.argmax(contour[:, 1] - contour[:, 0])
-            upper_anchor = np.argmin(contour[:, 1] + contour[:, 0])
-        cv2.circle(ear_image, (int(contour[lower_anchor, 0]), int(contour[lower_anchor, 1])), 25, (0, 0, 255), -1)
-        cv2.circle(ear_image, (int(contour[upper_anchor, 0]), int(contour[upper_anchor, 1])), 25, (0, 0, 255), -1)
+    try:
+        random.shuffle(sampled_photos)
+        for identifier in tqdm(sampled_photos):
+            if len(coco_dataset["images"]) >= 500:
+                break
+            photo = dataset.get_photo(identifier)
+            ears = get_ears(photo, sam3, anchor_model)
+            if ears is None:
+                raise AssertionError(f"No ears found for photo {identifier}; this should never happen.")
 
-        cv2.imshow(f"Ear {ear.side}", apply_crop(ear_image, ear.xyxy))
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
+            image = dataset.read_image(photo)
+            for ear in ears:
+                width = ear.xyxy[2] - ear.xyxy[0]
+                height = ear.xyxy[3] - ear.xyxy[1]
+                crop_xyxy = (
+                    round(max(0, ear.xyxy[0] - width * 0.15)),
+                    round(max(0, ear.xyxy[1] - height * 0.15)),
+                    round(min(image.shape[1], ear.xyxy[2] + width * 0.15)),
+                    round(min(image.shape[0], ear.xyxy[3] + height * 0.15)),
+                )
+                image_copy = image.copy()
+
+                # Find the point on the contour that maximizes the quantity y + x
+                contour = ear.contour
+                if ear.side == "right":
+                    lower_anchor = np.argmax(contour[:, 1] + contour[:, 0])
+                    upper_anchor = np.argmin(contour[:, 1] - contour[:, 0])
+                else:
+                    lower_anchor = np.argmax(contour[:, 1] - contour[:, 0])
+                    upper_anchor = np.argmin(contour[:, 1] + contour[:, 0])
+
+                # Compute image quality score
+                area = ear.area
+                perimeter = cv2.arcLength(contour, True)
+                if perimeter == 0:
+                    logger.debug("Bad due to zero perimeter;",end="")
+                    continue
+                circularity = 4.0 * np.pi * area / (perimeter * perimeter)
+                logger.debug(f"Circularity: {circularity};\t", end="")
+                aspect_ratio = (ear.xyxy[2] - ear.xyxy[0]) / (ear.xyxy[3] - ear.xyxy[1])
+                logger.debug(f"Area: {area}, Aspect ratio: {aspect_ratio};\t", end="")
+                logger.debug(f"Relative area: {area / (image.shape[0] * image.shape[1])};\t", end="")
+                bad = "OK"
+                if circularity < 0.4 or circularity > 0.9:
+                    logger.debug("Bad due to circularity;",end="")
+                    bad = "CIRCULARITY"
+                if aspect_ratio < 0.5 or aspect_ratio > 1.2:
+                    logger.debug("Bad due to aspect ratio;\t", end="")
+                    bad = "ASPECT_RATIO"
+                if area / (image.shape[0] * image.shape[1]) < 0.025 or area < 50_000:
+                    logger.debug("Bad due to area;",end="")
+                    bad = "AREA"
+                if abs(ear.xyxy[2] - image.shape[1]) < 5 or abs(ear.xyxy[3] - image.shape[0]) < 5 or ear.xyxy[0] < 5 or ear.xyxy[1] < 5:
+                    logger.debug("Bad due to proximity to image edge;",end="")
+                    bad = "EDGE"
+
+                if bad != "OK":
+                    continue
+
+                # Add to coco dataset
+                try:
+                    cv2.imwrite(f"outputs/anchor_training/{photo.identifier}_{ear.side}.jpg", apply_crop(image_copy, crop_xyxy))
+                except Exception as exc:
+                    logger.error(f"Error saving image {photo.identifier}_{ear.side}: {exc}")
+                    continue
+
+                coco_dataset["images"].append({
+                    "id": len(coco_dataset["images"]) + 1,
+                    "file_name": f"{photo.identifier}_{ear.side}.jpg",
+                    "width": crop_xyxy[2] - crop_xyxy[0],
+                    "height": crop_xyxy[3] - crop_xyxy[1],
+                })
+                coco_dataset["annotations"].append({
+                    "id": len(coco_dataset["annotations"]) + 1,
+                    "image_id": coco_dataset["images"][-1]["id"],
+                    "category_id": 1 if ear.side == "left" else 2,
+                    "bbox": [1, 1, crop_xyxy[2] - crop_xyxy[0] - 2, crop_xyxy[3] - crop_xyxy[1] - 2],
+                    "area": (ear.xyxy[2] - ear.xyxy[0]) * (ear.xyxy[3] - ear.xyxy[1]),
+                    "iscrowd": 0,
+                    "keypoints": [
+                        int(contour[lower_anchor, 0]) - crop_xyxy[0], int(contour[lower_anchor, 1]) - crop_xyxy[1], 2,
+                        int(contour[upper_anchor, 0]) - crop_xyxy[0], int(contour[upper_anchor, 1]) - crop_xyxy[1], 2,
+                    ]
+                })
+
+                # color = (0, 255, 0) if bad == "OK" else (0, 0, 255)
+                # cv2.drawContours(image_copy, [contour], -1, color, 2)
+                # cv2.circle(image_copy, (int(contour[lower_anchor, 0]), int(contour[lower_anchor, 1])), 25, color, -1)
+                # cv2.circle(image_copy, (int(contour[upper_anchor, 0]), int(contour[upper_anchor, 1])), 25, color, -1)
+
+                # cv2.imshow(f"Ear {ear.side} ({bad})", apply_crop(image_copy, crop_xyxy))
+                # cv2.waitKey(0)
+                # cv2.destroyAllWindows()
+    finally:
+        with open(out / "anchor_training_data.json", "w") as f:
+            json.dump(coco_dataset, f, indent=4)
+
 
 if __name__ == "__main__":
     main()
