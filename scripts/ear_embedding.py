@@ -13,104 +13,105 @@ Outputs (outputs/ear_embedding/): profiles.png, <label>.png per photo.
 
 Run:  uv run python -m scripts.ear_embedding
 """
+from pathlib import Path
+
 import cv2
-import matplotlib
-import numpy as np
-
-matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+import numpy as np
+from dotenv import load_dotenv
 
-from elephant_id.coding.ears.tear_profile import PROFILE_GRID, tear_profile
+from elephant_id.coding.ears.tear_profile import PROFILE_GRID, TearProfile
+from elephant_id.coding.photo_analyzer import PhotoAnalyzer
 from elephant_id.constants import TEAR_TRIM_HI, TEAR_TRIM_LO
-from scripts.evaluate import (
-    PHOTOS,
-    base_name,
-    make_extractor,
-    out_dir,
-    tear_events,
-)
+from elephant_id.dataset import Dataset
+from elephant_id.image.transforms import apply_crop
+from elephant_id.log import configure_logging
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
 
 LINESTYLES = ["-", "--", "-.", ":"]
-
+PHOTOS = {
+    "adam1": "Adam_2011-03-31_03",
+    "adam2": "Adam_2011-03-31_07",
+    "ripley1": "Ripley_2008-06-25_06",
+    "ripley2": "Ripley_2016-04-19_13",
+    "les1": "Les_2007-05-03_08",
+    "larson1": "Larson_2018-02-13_09",
+    "delani1": "Delani_2008-12-16_01",
+    "nile1": "Nile_2017-06-21_03",
+    "nile2": "Nile_2014-08-21_39",
+    "nile3": "Nile_2017-09-30_06",
+    "nile4": "Nile_2016-08-24_27",
+    "snap1": "Snap_2008-10-17_07",
+    "snap2": "Snap_2008-10-17_06",
+    "snap3": "Snap_2007-06-10_08",
+    "snap4": "Snap_2007-06-10_22",
+}
 
 def main() -> None:
-    extractor = make_extractor()
-    out = out_dir("ear_embedding")
+    load_dotenv()
+    configure_logging()
+
+    dataset = Dataset(
+        dataset_root=REPO_ROOT / "dataset/elephants-alive/coded",
+        metadata_path=REPO_ROOT / "dataset/elephants-alive/images.csv",
+    )
+    analyzer = PhotoAnalyzer(dataset=dataset)
+
+    out = REPO_ROOT / "outputs" / "ear_embedding"
+    out.mkdir(parents=True, exist_ok=True)
 
     results = {}
-    for label, ident in PHOTOS.items():
-        P = extractor.contour(ident)
-        if P is None:
-            print(f"{label}: no contour")
-            continue
-        results[label] = (P, tear_profile(P))
-        print(f"{label}: embedded")
+    for label, identifier in PHOTOS.items():
+        photo = dataset.get_photo(identifier)
+        analysis = analyzer.analyze(photo)
+        ear_data: list[dict] = analysis["ears"]
+        results[label] = {ear["ear"].side: ear for ear in ear_data}
 
-    # all-photo overlay: one color per individual, linestyle per photo
-    bases = sorted({base_name(label) for label in results})
-    palette = plt.get_cmap("tab10").colors
-    colors = {b: palette[i % len(palette)] for i, b in enumerate(bases)}
-    fig, ax = plt.subplots(figsize=(15, 5))
-    style_count: dict[str, int] = {}
-    for label, (_, res) in results.items():
-        base = base_name(label)
-        ls = LINESTYLES[style_count.get(base, 0) % len(LINESTYLES)]
-        style_count[base] = style_count.get(base, 0) + 1
-        ax.plot(PROFILE_GRID, res.profile, ls=ls, color=colors[base],
-                lw=1.1, label=label)
-    ax.set_xlabel("normalized reference arclength (0 = anchor P[0], 1 = P[-1])")
-    ax.set_ylabel("tear depth / S")
-    ax.set_title("ear-margin tear profiles", fontsize=12)
-    ax.legend(fontsize=7, ncol=4)
-    ax.grid(alpha=0.3)
-    fig.tight_layout()
-    fig.savefig(out / "profiles.png", dpi=110)
-    plt.close(fig)
-    print(f"saved {out}/profiles.png")
-
-    # per-photo: ear image with overlays | profile with events
-    for label, ident in PHOTOS.items():
+    # per-photo: ear image with overlays and profile with events
+    for label, identifier in PHOTOS.items():
         if label not in results:
             continue
-        crop = extractor.crop(ident)
-        if crop is None:
-            continue
-        img, off = crop
-        P, res = results[label]
-        events = tear_events(res.profile)
-        k = int(np.argmax(res.profile))
+        image = dataset.read_image(dataset.get_photo(identifier))
 
-        fig, (axi, axp) = plt.subplots(
-            1, 2, figsize=(16, 7), width_ratios=[1, 1.25])
-        axi.imshow(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
-        axi.plot(*(P - off).T, "w", lw=1.1, alpha=0.9, label="margin")
-        axi.plot(*(res.reference - off).T, "tab:cyan", lw=1.5,
-                 label="alpha reference")
-        hit = res.origins[k] + res.profile[k] * res.scale * res.normals[k]
-        axi.plot([res.origins[k, 0] - off[0], hit[0] - off[0]],
-                 [res.origins[k, 1] - off[1], hit[1] - off[1]],
-                 "r-", lw=2.0, label="deepest tear")
-        axi.legend(fontsize=9, loc="lower right")
-        axi.set_title(f"{label} ({ident})", fontsize=12)
-        axi.axis("off")
+        for ear_side, ear_data in results[label].items():
+            ear_image = apply_crop(image, ear_data["ear"].xyxy)
+            offset = np.array([ear_data["ear"].xyxy[0], ear_data["ear"].xyxy[1]])
 
-        axp.plot(PROFILE_GRID, res.profile, color=colors[base_name(label)],
-                 lw=1.4)
-        for x, d in events:
-            axp.plot(x, d, "rv", ms=7)
-        axp.axvspan(0, TEAR_TRIM_LO, color="0.85")
-        axp.axvspan(1 - TEAR_TRIM_HI, 1, color="0.85")
-        axp.set_xlim(0, 1)
-        axp.set_ylim(min(1.3 * res.profile.min(), -0.002),
-                     max(1.3 * res.profile.max(), 0.02))
-        axp.set_xlabel("normalized reference arclength")
-        axp.set_ylabel("tear depth / S")
-        axp.set_title(f"tear profile ({len(events)} events)", fontsize=12)
-        axp.grid(alpha=0.3)
-        fig.tight_layout()
-        fig.savefig(out / f"{label}.png", dpi=110)
-        plt.close(fig)
-    print(f"saved {out}/<label>.png ({len(results)} photos)")
+            contour = ear_data["ear"].resampled_contour(1024)
+            tear_profile: TearProfile = ear_data["tear_profile"]
+
+            # events = tear_events(res.profile)
+            k = int(np.argmax(tear_profile.profile))
+
+            fig, (axi, axp) = plt.subplots(
+                1, 2, figsize=(16, 7), width_ratios=[1, 1.25])
+            axi.imshow(cv2.cvtColor(ear_image, cv2.COLOR_BGR2RGB))
+            axi.plot(*(contour - offset).transpose(), "w", lw=1.1, alpha=0.9, label="contour")
+            axi.plot(*(tear_profile.reference - offset).transpose(), "tab:cyan", lw=1.5,
+                    label="alpha reference")
+            hit = tear_profile.origins[k] + tear_profile.profile[k] * tear_profile.scale * tear_profile.normals[k]
+            axi.plot([tear_profile.origins[k, 0] - offset[0], hit[0] - offset[0]],
+                    [tear_profile.origins[k, 1] - offset[1], hit[1] - offset[1]],
+                    "r-", lw=2.0, label="deepest tear")
+            axi.legend(fontsize=9, loc="lower right")
+            axi.set_title(f"{label} ({identifier})", fontsize=12)
+            axi.axis("off")
+
+            axp.plot(PROFILE_GRID, tear_profile.profile, "tab:red",
+                    lw=1.4)
+            axp.axvspan(0, TEAR_TRIM_LO, color="0.85")
+            axp.axvspan(1 - TEAR_TRIM_HI, 1, color="0.85")
+            axp.set_xlim(0, 1)
+            axp.set_ylim(-0.01, 0.10)
+            axp.set_xlabel("normalized reference arclength")
+            axp.set_ylabel("tear depth / S")
+            axp.set_title("tear profile", fontsize=12)
+            axp.grid(alpha=0.3)
+            fig.tight_layout()
+            fig.savefig(out / f"{label}_{ear_side}.png", dpi=110)
+            plt.close(fig)
+    print(f"saved {out}/<label>_<side>.png for ({len(results)}) images)")
 
 
 if __name__ == "__main__":
