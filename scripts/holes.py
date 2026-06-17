@@ -76,9 +76,11 @@ if __name__ == "__main__":
         "Centaures": "Centaures_2018-11-24_10",
         "Bloom": "Bloom_2016-06-06_08",
         "Intwandamela": "Intwandamela_2021-05-27_03",
+        "Intwandamela2": "Intwandamela_2019-05-21_13",
         "Nguyen": "Nguyen_2012-08-02_07",
         "Scar": "Scar_2010-11-30_08",
         "Delani": "Delani_2017-10-09_06",
+        "Fire": "Fire_2004-01-10_03",
     }
     photo = dataset.get_photo(photos["Gap"])
 
