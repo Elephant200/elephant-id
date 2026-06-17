@@ -1,6 +1,6 @@
 # The Tear Embedding: Goals and Key Decisions
 
-This document records the design of the tear-embedding stage (`src/elephant_id/coding/ears/tear_profile.py`) and the reasoning behind each major choice, in roughly the order the decisions were made. It is written to support an ablation study: every rejected alternative described here was implemented and tested before being set aside, and frozen snapshots of that code are preserved in `legacy/tear_algorithm/`. The companion figures referenced below live in `docs/assets/` and can be regenerated with `uv run python -m scripts.tear_doc_figures`.
+This document records the design of the tear-embedding stage (`src/elephant_id/coding/ears/tear_profile.py`) and the reasoning behind each major choice, in roughly the order the decisions were made. It is written to support an ablation study: every rejected alternative described here was implemented and tested before being set aside, and frozen snapshots of that code are preserved in `legacy/tear_algorithm/`. The companion figures referenced below live in `docs/assets/`.
 
 ## Goal
 
