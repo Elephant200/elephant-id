@@ -11,9 +11,11 @@ class EarFieldAnalyzer:
     def __init__(self) -> None:
         ...
 
-    def analyze(self, photo: Photo, shared_data: dict) -> dict:
+    def analyze(self, photo: Photo, shared_data: dict) -> list[dict]:
         """Return ear diagnostics plus tear and hole feature lists."""
         ears: list[AnchoredEar] = shared_data["ears"] # TODO: after adding typing, remove this type here
+        if not ears:
+            return []
 
         ear_data = []
         for ear in ears:
@@ -21,16 +23,8 @@ class EarFieldAnalyzer:
             ear_data.append({
                 "ear": ear,
                 "ear_side": ear.side,
-                "scale": profile.scale,
-                "tear_profile": profile.profile,
-                "tears": ..., # TODO: list of tears
+                "tear_profile": profile,
+                "tears": ..., # TODO: list of tear objects
             })
 
-        profile = compute_tear_profile(ear.resampled_contour())
-        return {
-            "ear": ear,
-            "photo_identifier": photo.identifier,
-            "side": ear.side,
-            "tear_profile": profile.profile,
-            "scale": profile.scale,
-        }
+        return ear_data
