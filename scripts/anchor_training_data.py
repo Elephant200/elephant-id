@@ -92,10 +92,7 @@ def get_ears(photo: Photo, sam3: Sam3Service, anchor_model: AnchorService) -> li
 
     return anchored_ears
 
-def main() -> None:
-    load_dotenv()
-    configure_logging(level="ERROR")
-
+def generate_preliminary_data() -> None:
     dataset = Dataset(
         dataset_root=Path("dataset/elephants-alive/coded"),
         metadata_path=Path("dataset/elephants-alive/images.csv"),
@@ -173,7 +170,7 @@ def main() -> None:
     try:
         random.shuffle(sampled_photos)
         for identifier in tqdm(sampled_photos):
-            if len(coco_dataset["images"]) >= 500:
+            if len(coco_dataset["images"]) >= 250:
                 break
             photo = dataset.get_photo(identifier)
             ears = get_ears(photo, sam3, anchor_model)
@@ -266,6 +263,12 @@ def main() -> None:
     finally:
         with open(out / "anchor_training_data.json", "w") as f:
             json.dump(coco_dataset, f, indent=4)
+
+def main() -> None:
+    load_dotenv()
+    configure_logging(level="ERROR")
+
+    generate_preliminary_data()
 
 
 if __name__ == "__main__":
