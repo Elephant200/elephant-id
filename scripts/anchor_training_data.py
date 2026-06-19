@@ -1,6 +1,7 @@
 """Module to generate improved training data for the anchor keypoint detection model."""
 
 import json
+import os
 import random
 from datetime import datetime
 from pathlib import Path
@@ -264,11 +265,129 @@ def generate_preliminary_data() -> None:
         with open(out / "anchor_training_data.json", "w") as f:
             json.dump(coco_dataset, f, indent=4)
 
+def update_hand_annotated_data(input_dir: Path, output_dir: Path) -> None:
+    """
+    Update the hand-annotated data, which does not have proper boxes
+    nor side data, sam3 and the old anchor model predictions.
+    """
+    import shutil
+
+    coco_datasets = {
+        "train": input_dir / "train" / "_annotations.coco.json",
+        "valid": input_dir / "valid" / "_annotations.coco.json",
+        "test": input_dir / "test" / "_annotations.coco.json",
+    }
+
+    dataset = Dataset(
+        dataset_root=Path("dataset/elephants-alive/coded"),
+        metadata_path=Path("dataset/elephants-alive/images.csv"),
+    )
+    sam3 = Sam3Service(dataset=dataset)
+    anchor_model = AnchorService(dataset=dataset)
+
+    for dataset_name, coco_dir in coco_datasets.items():
+        with open(coco_dir) as f:
+            coco_data = json.load(f)
+        os.makedirs(output_dir / dataset_name, exist_ok=True)
+        for image in coco_data["images"]:
+            roboflow_filename = image["file_name"]
+            filename = image["extra"]["name"]
+            del image["extra"]
+            del image["date_captured"]
+            filename = "_".join([filename.split("_")[0].replace("-", " ")] + filename.split("_")[1:])
+
+            side = None
+            if "_right" in filename:
+                side = "right"
+            elif "_left" in filename:
+                side = "left"
+            else:
+                raise AssertionError(f"Invalid filename: {filename}")
+
+            identifier = filename.replace(f"_{side}", "").replace(".jpg", "")
+            try:
+                photo = dataset.get_photo(identifier)
+            except Exception as exc:
+                logger.error(f"Error getting photo {filename}: {exc}")
+                continue
+
+            ears = get_ears(photo, sam3, anchor_model)
+
+            ear = None
+
+            for e in ears:
+                if e.side == side:
+                    ear = e
+                    break
+            else:
+                raise AssertionError(f"No matching {side} ear found for {filename}")
+
+            # Update the coco annotation bbox to align with the ear xyxy AND the keypoints (in case of mismatch)
+            try:
+                annotation = next(a for a in coco_data["annotations"] if a["image_id"] == image["id"])
+            except StopIteration:
+                print(f"Image {filename} has no ears.")
+                continue
+
+            if "keypoints" not in annotation:
+                print(f"Image {filename} has no keypoints.")
+                continue
+
+
+            # Compute x and y buffer based on the ear width AND image coordinates
+            crop_x = max(0, ear.xyxy[0] - (ear.xyxy[2] - ear.xyxy[0]) * 0.15)
+            crop_y = max(0, ear.xyxy[1] - (ear.xyxy[3] - ear.xyxy[1]) * 0.15)
+            x_buffer = ear.xyxy[0] - crop_x
+            y_buffer = ear.xyxy[1] - crop_y
+
+
+            x1 = min(x_buffer, annotation["keypoints"][0], annotation["keypoints"][3])
+            y1 = min(y_buffer, annotation["keypoints"][1], annotation["keypoints"][4])
+            x2 = max(ear.xyxy[2] - ear.xyxy[0] + x_buffer, annotation["keypoints"][0], annotation["keypoints"][3])
+            y2 = max(ear.xyxy[3] - ear.xyxy[1] + y_buffer, annotation["keypoints"][1], annotation["keypoints"][4])
+            width = x2 - x1
+            height = y2 - y1
+
+            annotation["bbox"] = [round(x1, 3), round(y1, 3), round(width, 3), round(height, 3)]
+            annotation["area"] = round(width * height, 3)
+
+            # ear_image = dataset.read_image(photo)
+            # cv2.drawContours(ear_image, [ear.contour], -1, (0, 0, 255), 2)
+            # ear_image = apply_crop(ear_image, (ear.xyxy[0] - x_buffer, ear.xyxy[1] - y_buffer, ear.xyxy[2] + x_buffer, ear.xyxy[3] + y_buffer))
+
+            # cv2.rectangle(ear_image, (int(x1), int(y1)), (int(x2), int(y2)), (0, 0, 255), 2)
+            # cv2.circle(ear_image, (int(annotation["keypoints"][0]), int(annotation["keypoints"][1])), 5, (0, 0, 255), -1)
+            # cv2.circle(ear_image, (int(annotation["keypoints"][3]), int(annotation["keypoints"][4])), 5, (0, 0, 255), -1)
+            # cv2.imshow(f"Image {image['id']}", ear_image)
+            # cv2.waitKey(0)
+            # cv2.destroyAllWindows()
+
+            # Change the coco data to match the canonical filename, and rename the file to match the canonical filename.
+            shutil.copy2(input_dir / dataset_name / roboflow_filename, output_dir / dataset_name / filename)
+            image["file_name"] = filename
+
+
+        with open(output_dir / dataset_name / "_annotations.coco.json", "w") as f:
+            json.dump(coco_data, f, indent=4)
+
+
+def augment_data(input_dir: Path) -> None:
+    import albumentations as A
+    train_dir = input_dir / "train"
+    valid_dir = input_dir / "valid"
+    test_dir = input_dir / "test"
+
+    transform = A.Compose([
+        # TODO: Implement transformations
+    ])
+
+    pass
+
 def main() -> None:
     load_dotenv()
     configure_logging(level="ERROR")
 
-    generate_preliminary_data()
+    update_hand_annotated_data(input_dir=Path("dataset/anchors"), output_dir=Path("outputs/anchor_training_data"))
 
 
 if __name__ == "__main__":
