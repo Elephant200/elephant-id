@@ -296,6 +296,10 @@ def update_hand_annotated_data(input_dir: Path, output_dir: Path) -> None:
             del image["date_captured"]
             filename = "_".join([filename.split("_")[0].replace("-", " ")] + filename.split("_")[1:])
 
+            # Change the coco data to match the canonical filename, and rename the file to match the canonical filename.
+            shutil.copy2(input_dir / dataset_name / roboflow_filename, output_dir / dataset_name / filename)
+            image["file_name"] = filename
+
             side = None
             if "_right" in filename:
                 side = "right"
@@ -326,7 +330,7 @@ def update_hand_annotated_data(input_dir: Path, output_dir: Path) -> None:
             try:
                 annotation = next(a for a in coco_data["annotations"] if a["image_id"] == image["id"])
             except StopIteration:
-                print(f"Image {filename} has no ears.")
+                #print(f"Image {filename} has no ears.")
                 continue
 
             if "keypoints" not in annotation:
@@ -351,6 +355,13 @@ def update_hand_annotated_data(input_dir: Path, output_dir: Path) -> None:
             annotation["bbox"] = [round(x1, 3), round(y1, 3), round(width, 3), round(height, 3)]
             annotation["area"] = round(width * height, 3)
 
+            upper_keypoint = annotation["keypoints"][0:3] if annotation["keypoints"][1] > annotation["keypoints"][4] else annotation["keypoints"][3:6]
+            lower_keypoint = annotation["keypoints"][0:3] if annotation["keypoints"][1] < annotation["keypoints"][4] else annotation["keypoints"][3:6]
+            annotation["keypoints"] = [
+                *upper_keypoint,
+                *lower_keypoint,
+            ]
+
             # ear_image = dataset.read_image(photo)
             # cv2.drawContours(ear_image, [ear.contour], -1, (0, 0, 255), 2)
             # ear_image = apply_crop(ear_image, (ear.xyxy[0] - x_buffer, ear.xyxy[1] - y_buffer, ear.xyxy[2] + x_buffer, ear.xyxy[3] + y_buffer))
@@ -362,32 +373,50 @@ def update_hand_annotated_data(input_dir: Path, output_dir: Path) -> None:
             # cv2.waitKey(0)
             # cv2.destroyAllWindows()
 
-            # Change the coco data to match the canonical filename, and rename the file to match the canonical filename.
-            shutil.copy2(input_dir / dataset_name / roboflow_filename, output_dir / dataset_name / filename)
-            image["file_name"] = filename
-
 
         with open(output_dir / dataset_name / "_annotations.coco.json", "w") as f:
             json.dump(coco_data, f, indent=4)
 
 
 def augment_data(input_dir: Path) -> None:
-    import albumentations as A
+    import albumentations as A  # Albumentations has been removed
     train_dir = input_dir / "train"
     valid_dir = input_dir / "valid"
     test_dir = input_dir / "test"
 
     transform = A.Compose([
-        # TODO: Implement transformations
+        #A.Resize(640, 640), # 1. Resize to 640x640
+        A.HorizontalFlip(p=0.5), # 2. Horizontal flip
+        A.Affine(
+            rotate=(-20,20),
+            scale=(0.9,1.1),
+            translate_percent=(0,0.06),
+            shear=(-8,8),
+            border_mode=cv2.BORDER_REPLICATE,
+            p=0.8
+        ), # 3. Affine transform (rotate, scale, translate, shear)
     ])
 
+    image = cv2.cvtColor(cv2.imread(train_dir / "Abejundio_2008-10-26_01_left.jpg"), cv2.COLOR_BGR2RGB)
+    keypoints = [[51, 444], [26, 95]]
+
+    augmented_image = transform(image=image)#, keypoints=keypoints)
+    augmented_image = augmented_image["image"]
+    #augmented_keypoints = augmented_image["keypoints"]
+
+    cv2.imshow("Original", cv2.cvtColor(image, cv2.COLOR_RGB2BGR))
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
+    cv2.imshow("Augmented", cv2.cvtColor(augmented_image, cv2.COLOR_RGB2BGR))
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
     pass
 
 def main() -> None:
     load_dotenv()
     configure_logging(level="ERROR")
 
-    update_hand_annotated_data(input_dir=Path("dataset/anchors"), output_dir=Path("outputs/anchor_training_data"))
+    update_hand_annotated_data(input_dir=Path("dataset/raw_anchor_training_data"), output_dir=Path("outputs/anchor_training_data"))
 
 
 if __name__ == "__main__":
