@@ -1,7 +1,7 @@
 """Ear field analyzer."""
 
 from elephant_id.coding.ears.anchored_ear import AnchoredEar
-from elephant_id.coding.ears.tear_profile import compute_tear_profile
+from elephant_id.coding.ears.tear_profile import tear_profile
 from elephant_id.domain import Photo
 
 
@@ -19,7 +19,7 @@ class EarFieldAnalyzer:
 
         ear_data = []
         for ear in ears:
-            profile = compute_tear_profile(ear.resampled_contour(1024))
+            profile = tear_profile(ear.resampled_contour(1024))
             ear_data.append({
                 "ear": ear,
                 "ear_side": ear.side,

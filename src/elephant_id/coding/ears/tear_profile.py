@@ -69,23 +69,23 @@ class TearProfile:
     normals: np.ndarray    # inward unit normals, one per bin
 
 
-def hull_arclength(P: np.ndarray) -> float:
+def hull_arclength(points: np.ndarray) -> float:
     """S: arc length of the convex hull between the anchors, px."""
-    ring = np.asarray(shapely.MultiPoint(P).convex_hull.exterior.coords)[:-1]
-    path = ear_side_path(ring, P[0], P[-1])
+    ring = np.asarray(shapely.MultiPoint(points).convex_hull.exterior.coords)[:-1]
+    path = ear_side_path(ring, points[0], points[-1])
     return float(np.linalg.norm(np.diff(path, axis=0), axis=1).sum())
 
 
-def compute_tear_profile(P: np.ndarray) -> TearProfile:
+def tear_profile(points: np.ndarray) -> TearProfile:
     """The pipeline, returning the profile with its scan geometry."""
-    S = hull_arclength(P)  # 1. scale
+    S = hull_arclength(points)  # 1. scale
     # TODO: Consider using the alpha shape length instead of the hull arclength for the scale
-    src = opened_contour(P, TEAR_OPEN_FRAC * S)  # 2. opening
+    src = opened_contour(points, TEAR_OPEN_FRAC * S)  # 2. opening
     shape = alpha_shape(src, TEAR_ALPHA_FRAC * S)  # 3. reference
     path = densify(ear_side_path(
         np.asarray(shape.exterior.coords)[:-1], src[0], src[-1]))
     origins, normals = inward_normals(path, shape, PROFILE_GRID)
-    depth = nearest_crossing(origins, normals, P) / S  # 4. signed depth scan
+    depth = nearest_crossing(origins, normals, points) / S  # 4. signed depth scan
     profile = gaussian_filter1d(depth, sigma=TEAR_SMOOTH_SIGMA)  # 5. cleanup
     profile[:_LO] = 0
     profile[-_HI:] = 0
@@ -93,11 +93,6 @@ def compute_tear_profile(P: np.ndarray) -> TearProfile:
                        origins=origins, normals=normals)
 
 
-def tear_profile(P: np.ndarray) -> TearProfile:
-    """Return the 1-D tear-depth profile for an anchored ear margin."""
-    return compute_tear_profile(P)
-
-
-def embed(P: np.ndarray) -> np.ndarray:
+def embed(points: np.ndarray) -> np.ndarray:
     """Margin polyline -> 1-D tear-depth profile (TEAR_PROFILE_BINS,)."""
-    return compute_tear_profile(P).profile
+    return tear_profile(points).profile
