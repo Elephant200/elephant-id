@@ -35,7 +35,7 @@ class AnchorRunner:
 
     def __init__(self) -> None:
         # Initialize ultralytics model and configure for inference
-        self.model = YOLO("model_weights/anchor_extraction_yolo26/weights.pt")
+        self.model = YOLO("model_weights/anchor_extraction_yolo26_v2/weights.pt")
 
     def run(self, image: BgrImage) -> list[Detection]:
         """Run anchor keypoint detection on an image.
