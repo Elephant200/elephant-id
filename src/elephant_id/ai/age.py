@@ -24,8 +24,8 @@ class AgeRunner:
         """
         # Run model on image
         return {
-            "buckets": [0.0, 5.0, 10.0, 25.0, 50.0, 75.0],
-            "probabilities": [1.0, 1.0, 1.0, 1.0, 0.5, 0.0],
+            "buckets": [0.0, 5.0, 10.0, 25.0, 50.0],
+            "probabilities": [0.01, 0.04, 0.05, 0.6, 0.3],
         }
 
 class AgeService:
