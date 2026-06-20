@@ -16,11 +16,17 @@ class AgeRunner:
 
     def __init__(self) -> None:
         # Initialize pytorch model and configure for inference
-        ...
+        self.model = None
 
     def run(self, image: BgrImage) -> dict:
+        """
+        Currently a placeholder that always returns the same probabilities for each bucket.
+        """
         # Run model on image
-        ...
+        return {
+            "buckets": [0.0, 5.0, 10.0, 25.0, 50.0, 75.0],
+            "probabilities": [1.0, 1.0, 1.0, 1.0, 0.5, 0.0],
+        }
 
 class AgeService:
     """
