@@ -1,0 +1,7 @@
+Type: YOLO26 Keypoint Detection (Nano)
+Trained On: Hand-Annotated Images + Horizontal Reflection Augmentation
+Dataset Size: 1700
+Test Set mAP@50: 99.3%
+Weight Location: model_weights/anchor_extraction_yolo26_v2/weights.pt
+
+Qualitative Results: Sometimes wrong, but the anchor points are actually well-defined compared to the previous model.
