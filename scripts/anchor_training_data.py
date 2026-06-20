@@ -377,46 +377,157 @@ def update_hand_annotated_data(input_dir: Path, output_dir: Path) -> None:
         with open(output_dir / dataset_name / "_annotations.coco.json", "w") as f:
             json.dump(coco_data, f, indent=4)
 
+# Ultralytics default keypoint-detection augmentation hyperparameters.
+DEFAULT_AUG_CONFIG = {
+    "hsv_h": 0.01,
+    "hsv_s": 0.3,
+    "hsv_v": 0.3,
+    "degrees": 5,
+    "translate": 0,
+    "scale": 0,
+    "shear": 2,
+    "perspective": 0,
+    "flipud": 0,
+    "fliplr": 0.5,
+    "mosaic": 0.0,
+    "mixup": 0,
+    "copy_paste": 0,
+}
 
-def augment_data(input_dir: Path) -> None:
-    import albumentations as A  # Albumentations has been removed
-    train_dir = input_dir / "train"
-    valid_dir = input_dir / "valid"
-    test_dir = input_dir / "test"
 
-    transform = A.Compose([
-        #A.Resize(640, 640), # 1. Resize to 640x640
-        A.HorizontalFlip(p=0.5), # 2. Horizontal flip
-        A.Affine(
-            rotate=(-20,20),
-            scale=(0.9,1.1),
-            translate_percent=(0,0.06),
-            shear=(-8,8),
-            border_mode=cv2.BORDER_REPLICATE,
-            p=0.8
-        ), # 3. Affine transform (rotate, scale, translate, shear)
-    ])
+SPLITS = ("train", "valid", "test")
 
-    image = cv2.cvtColor(cv2.imread(train_dir / "Abejundio_2008-10-26_01_left.jpg"), cv2.COLOR_BGR2RGB)
-    keypoints = [[51, 444], [26, 95]]
 
-    augmented_image = transform(image=image)#, keypoints=keypoints)
-    augmented_image = augmented_image["image"]
-    #augmented_keypoints = augmented_image["keypoints"]
+def flip_augment(
+    input_dir: str = "outputs/anchor_training_data",
+    output_dir: str = "outputs/anchor_training_data_flipped",
+    flip_splits: tuple[str, ...] = ("train",),
+) -> None:
+    """Write a COCO dataset where flip_splits contain every original image plus a horizontally-flipped
+    copy; other splits are copied through unchanged. Expects the images/{split} + annotations/
+    instances_{split}.json layout. Flips use the pixel-exact (W-1)-x convention to match cv2.flip;
+    lower/upper keypoints keep their order (a vertical pair is flip-invariant), category is unchanged."""
+    import shutil
 
-    cv2.imshow("Original", cv2.cvtColor(image, cv2.COLOR_RGB2BGR))
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
-    cv2.imshow("Augmented", cv2.cvtColor(augmented_image, cv2.COLOR_RGB2BGR))
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
-    pass
+    root, out = Path(input_dir), Path(output_dir)
+    for split in SPLITS:
+        with open(root / "annotations" / f"instances_{split}.json") as f:
+            coco = json.load(f)
+        img_src, img_dst = root / "images" / split, out / "images" / split
+        img_dst.mkdir(parents=True, exist_ok=True)
+        for im in coco["images"]:
+            shutil.copy2(img_src / im["file_name"], img_dst / im["file_name"])
+
+        if split in flip_splits:
+            anns_by_image: dict[int, list[dict]] = {}
+            for ann in coco["annotations"]:
+                anns_by_image.setdefault(ann["image_id"], []).append(ann)
+            next_image_id = max(im["id"] for im in coco["images"]) + 1
+            next_ann_id = max((a["id"] for a in coco["annotations"]), default=0) + 1
+
+            flipped_images, flipped_anns = [], []
+            for im in coco["images"]:
+                w = im["width"]
+                flip_name = f"{Path(im['file_name']).stem}_flip{Path(im['file_name']).suffix}"
+                cv2.imwrite(str(img_dst / flip_name), cv2.flip(cv2.imread(str(img_src / im["file_name"])), 1))
+                flipped_images.append({**im, "id": next_image_id, "file_name": flip_name})
+
+                for ann in anns_by_image.get(im["id"], []):
+                    x, y, bw, bh = ann["bbox"]
+                    kpts = ann.get("keypoints", [])
+                    flipped_kpts = []
+                    for i in range(0, len(kpts), 3):
+                        kx, ky, kv = kpts[i], kpts[i + 1], kpts[i + 2]
+                        flipped_kpts += [(w - 1 - kx) if kv > 0 else kx, ky, kv]
+                    flipped_anns.append({
+                        **ann,
+                        "id": next_ann_id,
+                        "image_id": next_image_id,
+                        "bbox": [max(0.0, w - 1 - x - bw), y, bw, bh],
+                        "keypoints": flipped_kpts,
+                    })
+                    next_ann_id += 1
+                next_image_id += 1
+
+            coco["images"] += flipped_images
+            coco["annotations"] += flipped_anns
+
+        (out / "annotations").mkdir(parents=True, exist_ok=True)
+        with open(out / "annotations" / f"instances_{split}.json", "w") as f:
+            json.dump(coco, f, indent=2)
+        logger.info(f"{split}: wrote {len(coco['images'])} images, {len(coco['annotations'])} annotations")
+
+
+def restructure_to_coco(input_dir: str) -> None:
+    """Modify a per-split COCO dataset ({split}/*.jpg + {split}/_annotations.coco.json) in place into
+    the layout convert_coco expects: images/{split}/ + annotations/instances_{split}.json. Idempotent."""
+    import shutil
+
+    root = Path(input_dir)
+    if (root / "annotations").exists():
+        return
+    (root / "annotations").mkdir(parents=True)
+    for split in SPLITS:
+        (root / "images" / split).mkdir(parents=True, exist_ok=True)
+        for jpg in (root / split).glob("*.jpg"):
+            shutil.move(str(jpg), str(root / "images" / split / jpg.name))
+        shutil.move(str(root / split / "_annotations.coco.json"), str(root / "annotations" / f"instances_{split}.json"))
+        (root / split).rmdir()
+
+
+def convert(input_dir: str = "outputs/anchor_training_data", output_dir: str = "outputs/anchor_training_data_yolo") -> None:
+    """Restructure the per-split COCO dataset, convert it to YOLO pose format, place images alongside
+    labels, write the pose dataset.yaml, and verify per the Ultralytics coco-to-yolo guide (step 6)."""
+    import shutil
+
+    from ultralytics.data.converter import convert_coco
+
+    root, out = Path(input_dir), Path(output_dir)
+    restructure_to_coco(input_dir)
+
+    # convert_coco strips "instances_", so labels land in <save_dir>/labels/{train,valid,test}/.
+    convert_coco(labels_dir=str(root / "annotations"), save_dir=str(out), use_keypoints=True, cls91to80=False)
+
+    # YOLO expects labels/ to mirror images/; copy the images in and write the pose dataset.yaml.
+    for split in SPLITS:
+        shutil.copytree(root / "images" / split, out / "images" / split, dirs_exist_ok=True)
+    (out / "dataset.yaml").write_text(
+        f"path: {out.resolve()}\n"
+        "train: images/train\n"
+        "val: images/valid\n"
+        "test: images/test\n"
+        "kpt_shape: [2, 3]\n"
+        "flip_idx: [0, 1]\n"
+        "names:\n  0: ear\n"
+    )
+
+    # Verify Your Conversion: class IDs non-negative, normalized bbox coords within [0, 1].
+    for label_file in (out / "labels").rglob("*.txt"):
+        for line in label_file.read_text().strip().splitlines():
+            parts = line.split()
+            cls_id = int(parts[0])
+            coords = [float(v) for v in parts[1:5]]
+            assert cls_id >= 0, f"Negative class ID {cls_id} — category_id in your JSON may start from 0"
+            assert all(0 <= v <= 1 for v in coords), f"Coordinates out of [0, 1] range: {coords}"
+
+
+def train(cfg: dict, data: str = "dataset/anchors/data.yaml", model: str = "yolo26n-pose.pt", epochs: int = 100, imgsz: int = 640) -> None:
+    """Fine-tune a pretrained YOLO pose model. The aug config keys are Ultralytics train
+    args, so cfg is splatted straight in. plots=True (default) writes train_batch*.jpg
+    (augmented batches with keypoints drawn) to the run directory."""
+    from ultralytics import YOLO
+
+    YOLO(model).train(
+        data=data,
+        epochs=epochs,
+        imgsz=imgsz,
+        **cfg)
 
 def main() -> None:
     load_dotenv()
     configure_logging(level="ERROR")
 
-    update_hand_annotated_data(input_dir=Path("dataset/raw_anchor_training_data"), output_dir=Path("outputs/anchor_training_data"))
+    train(DEFAULT_AUG_CONFIG)
 
 
 if __name__ == "__main__":
