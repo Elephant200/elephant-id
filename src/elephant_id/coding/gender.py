@@ -11,4 +11,4 @@ class GenderFieldAnalyzer:
         self.gender_service = gender_service
 
     def analyze(self, photo: Photo, shared_data: dict) -> dict:
-        ...
+        return self.gender_service.run(photo, shared_data["body"].rle_mask)

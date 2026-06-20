@@ -11,4 +11,4 @@ class AgeFieldAnalyzer:
         self.age_service = age_service
 
     def analyze(self, photo: Photo, shared_data: dict) -> dict:
-        ...
+        return self.age_service.run(photo, shared_data["body"].rle_mask)
