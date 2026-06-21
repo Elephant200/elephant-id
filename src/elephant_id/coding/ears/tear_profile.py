@@ -36,8 +36,8 @@ class TearProfile:
     profile: np.ndarray  # (TEAR_PROFILE_BINS,) signed depth / R
     scale: float  # Equal-area semicircle radius R, px
     reference: np.ndarray  # Densified alpha-reference path, px
-    origins: np.ndarray  # Polar scan-ray origins; NaN in trimmed bins, px
-    normals: np.ndarray  # Inward unit normals; NaN in trimmed bins
+    origins: np.ndarray  # Polar scan-ray origins; NaN in trimmed/missed bins, px
+    normals: np.ndarray  # Inward unit normals; NaN in trimmed/missed bins
 
 
 def polar_directions(
@@ -71,8 +71,13 @@ def tear_profile(
     contour: np.ndarray,
     area: float,
     side: Literal["left", "right"],
+    original_anchor_points: tuple[tuple[float, float], tuple[float, float]],
 ) -> TearProfile:
-    """Return the angular tear profile for an upper-to-lower ear contour."""
+    """Return the angular tear profile for an upper-to-lower ear contour.
+
+    ``original_anchor_points`` calibrate the polar coordinate before the
+    anchors are snapped to the segmentation contour.
+    """
     radius = float(np.sqrt(2.0 * area / np.pi))
     opened = opened_contour(contour, TEAR_OPEN_FRAC * radius)
     reference_hull = alpha_shape(opened, TEAR_ALPHA_FRAC * radius)
@@ -84,30 +89,49 @@ def tear_profile(
         (angles_degrees > TEAR_TRIM_DEGREES)
         & (angles_degrees < 180.0 - TEAR_TRIM_DEGREES)
     )
+    original_upper_anchor = np.asarray(original_anchor_points[0], dtype=float)
+    original_lower_anchor = np.asarray(original_anchor_points[1], dtype=float)
     anchor_midpoint, ray_directions = polar_directions(
-        contour[0], contour[-1], side, angles_degrees[coded_angle_mask]
+        original_upper_anchor,
+        original_lower_anchor,
+        side,
+        angles_degrees[coded_angle_mask],
     )
     coded_origins = furthest_ray_crossings(
         anchor_midpoint,
         ray_directions,
         reference_boundary,
     )
-    coded_normals = inward_normals_at_origins(
-        reference_path,
-        reference_hull,
-        coded_origins,
-    )
-    coded_depths = nearest_crossing(coded_origins, coded_normals, contour) / radius
+    valid_coded_origins = np.isfinite(coded_origins).all(axis=1)
+    coded_normals = np.full_like(coded_origins, np.nan)
+    coded_depths = np.zeros(len(coded_origins))
+    if valid_coded_origins.any():
+        valid_origins = coded_origins[valid_coded_origins]
+        coded_normals[valid_coded_origins] = inward_normals_at_origins(
+            reference_path,
+            reference_hull,
+            valid_origins,
+        )
+        coded_depths[valid_coded_origins] = (
+            nearest_crossing(
+                valid_origins,
+                coded_normals[valid_coded_origins],
+                contour,
+            )
+            / radius
+        )
 
     origins = np.full((TEAR_PROFILE_BINS, 2), np.nan)
     normals = np.full((TEAR_PROFILE_BINS, 2), np.nan)
     profile = np.zeros(TEAR_PROFILE_BINS)
     origins[coded_angle_mask] = coded_origins
     normals[coded_angle_mask] = coded_normals
-    profile[coded_angle_mask] = gaussian_filter1d(
+    coded_profile = gaussian_filter1d(
         coded_depths,
         sigma=TEAR_SMOOTH_SIGMA,
     )
+    coded_profile[~valid_coded_origins] = 0.0
+    profile[coded_angle_mask] = coded_profile
     return TearProfile(
         profile=profile,
         scale=radius,
@@ -121,6 +145,7 @@ def embed(
     contour: np.ndarray,
     area: float,
     side: Literal["left", "right"],
+    original_anchor_points: tuple[tuple[float, float], tuple[float, float]],
 ) -> np.ndarray:
     """Return the angular tear-depth profile for an anchored ear contour."""
-    return tear_profile(contour, area, side).profile
+    return tear_profile(contour, area, side, original_anchor_points).profile

@@ -185,8 +185,7 @@ def furthest_ray_crossings(
 ) -> np.ndarray:
     """Return the furthest forward boundary crossing for each ray direction.
 
-    Raises:
-        ValueError: If a ray has no forward intersection.
+    Rays without a forward intersection return ``(nan, nan)``.
     """
     segment_vectors = np.roll(exterior_boundary, -1, axis=0) - exterior_boundary
     relative_starts = exterior_boundary[None, :, :] - origin
@@ -212,10 +211,12 @@ def furthest_ray_crossings(
         & (segment_positions <= 1 + tolerance)
     )
     furthest_distances = np.where(valid_intersections, ray_distances, -np.inf).max(axis=1)
-    if not np.isfinite(furthest_distances).all():
-        missing = np.flatnonzero(~np.isfinite(furthest_distances)).tolist()
-        raise ValueError(f"Polar tear-profile rays miss the alpha reference: {missing}")
-    return origin + furthest_distances[:, None] * directions
+    crossings = np.full(directions.shape, np.nan, dtype=float)
+    valid_rays = np.isfinite(furthest_distances)
+    crossings[valid_rays] = (
+        origin + furthest_distances[valid_rays, None] * directions[valid_rays]
+    )
+    return crossings
 
 
 def inward_normals_at_origins(

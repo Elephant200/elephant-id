@@ -95,6 +95,9 @@ class AnchoredEar:
         self._ear_rle_mask = ear_detection.rle_mask
         self._mask_size = tuple(ear_detection.rle_mask["size"])
         self._keypoints = anchor_detection.keypoints
+        self._original_anchor_points = tuple(
+            sorted(anchor_detection.keypoints, key=lambda point: point[1])
+        )
 
         # The cut contour is the source of truth for the cheap geometry.
         self._cut_contour: np.ndarray | None = None
@@ -168,6 +171,11 @@ class AnchoredEar:
         """The two anchor points, snapped onto the cut contour."""
         self._ensure_geometry()
         return self._anchor_points
+
+    @property
+    def original_anchor_points(self) -> tuple[tuple[float, float], tuple[float, float]]:
+        """Model anchor points ordered upper to lower before contour snapping."""
+        return self._original_anchor_points
 
     @property
     def side(self) -> Literal["left", "right"]:

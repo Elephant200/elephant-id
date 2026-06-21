@@ -20,7 +20,12 @@ class EarFieldAnalyzer:
         ear_data = []
         for ear in ears:
             contour = ear.resampled_contour(1024)
-            profile = tear_profile(contour, ear.area, ear.side)
+            profile = tear_profile(
+                contour,
+                ear.area,
+                ear.side,
+                ear.original_anchor_points,
+            )
             ear_data.append({
                 "ear": ear,
                 "ear_side": ear.side,
