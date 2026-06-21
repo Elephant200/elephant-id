@@ -7,7 +7,7 @@ Local checkout layout; huge trees (`dataset/`, `node_modules/`, `.venv/`, `.next
 ```text
 elephant-id/
 ├── .env
-│   └── Local secrets — not committed; used by scripts (e.g. `scripts/visualize_sam3.py`).
+│   └── Local secrets — not committed; used by scripts
 ├── .env.example
 │   └── Expected variables template.
 ├── .gitattributes / .gitignore
@@ -111,6 +111,10 @@ elephant-id/
 │   │   └── Example SAM3 response payload used to understand prediction schema and support visualization work.
 │   ├── seek.md
 │   │   └── SEEK coding reference documentation that informs `SeekCode` parsing and dataset ground-truth interpretation.
+│   ├── tear-embedding.md
+│   │   └── Design record for the v1 tear-depth profile (`tear_profile.py`); superseded in implementation by v2.
+│   ├── tear-embedding-v2.md
+│   │   └── Current angular tear-profile coordinate system and pipeline parameters.
 │   └── technical-architecture.md
 │       └── Architecture overview connecting datasets, AI services, coding models, and future application surfaces.
 ```
@@ -157,18 +161,23 @@ elephant-id/
 │   │   │   ├── gender.py
 │   │   │   │   └── `GenderFieldAnalyzer`; runs `GenderService` on the masked body crop.
 │   │   │   ├── tusks.py
-│   │   │   │   └── `TuskFieldAnalyzer`; infers tusk presence and side from tusk detections.
+│   │   │   │   └── `TuskFieldAnalyzer`; infers tusk presence and side from tusk, trunk, and view evidence.
 │   │   │   └── ears/
 │   │   │       ├── __init__.py
 │   │   │       │   └── Public ear-field exports: `AnchoredEar`, `EarFieldAnalyzer`.
 │   │   │       ├── analyzer.py
-│   │   │       │   └── `EarFieldAnalyzer`: per-ear diagnostics plus tear and hole feature-list placeholders.
+│   │   │       │   └── `EarFieldAnalyzer`: per-ear diagnostics, tear profiles, and tear/hole placeholders.
 │   │   │       ├── anchored_ear.py
 │   │   │       │   └── `AnchoredEar` and mask-to-anchor-contour preparation helpers.
 │   │   │       ├── geometry.py
 │   │   │       │   └── Ear-margin geometry primitives: densify, ring side paths, alpha shape, inward normals, nearest-crossing ray scans.
 │   │   │       └── tear_profile.py
-│   │   │           └── Continuous tear-depth embedding: `compute_tear_profile(P)` / `embed(P)` -> 1-D profile.
+│   │   │           └── Angular tear-depth profile: `tear_profile()` / `embed()` -> `TearProfile` or 1-D array.
+│   │   ├── matching/
+│   │   │   ├── __init__.py
+│   │   │   │   └── Matching subpackage stub.
+│   │   │   └── matcher.py
+│   │   │       └── Similarity computation stub for future matching workflow.
 │   │   ├── domain/
 │   │   │   ├── __init__.py
 │   │   │   │   └── Public data-model exports for `SeekCode`, `Photo`, and `Sighting`.
@@ -205,8 +214,12 @@ elephant-id/
 │   │   └── Legacy cropping utilities.
 │   ├── distill.py
 │   │   └── Model distillation tooling.
-│   └── model.py
-│       └── Legacy Roboflow inference wrapper.
+│   ├── hole_experiments.py
+│   │   └── Ear-notch/hole detection method comparison on anchored ear crops.
+│   ├── model.py
+│   │   └── Legacy Roboflow inference wrapper.
+│   └── tear_doc_figures.py
+│       └── Regenerates decision-record diagrams for `docs/tear-embedding.md`.
 ├── model_weights/ [summarized]
 │   ├── anchor_extraction_yolo26/ · anchor_extraction_yolov11/
 │   ├── ear_detection_yolo26/ · ear_segmentation_yolo26/
@@ -219,22 +232,18 @@ elephant-id/
 ├── legacy/tear_algorithm/
 │   └── Frozen exploration snapshots (tear_*.py, arPLS.py) with a README of what each tried and concluded; not maintained.
 ├── scripts/
-│   ├── evaluate.py
-│   │   └── TEST harness for the embedding (gated tear-event matching + profile correlation, retrieval metrics) and home of the shared research scaffolding: photo manifest from data/notable_photos.json, cached `ContourExtractor`.
-│   ├── tear_doc_figures.py
-│   │   └── Regenerates the decision-record diagrams in docs/assets/ (tear_embedding_*.png) for docs/tear-embedding.md.
+│   ├── anchor_training_data.py
+│   │   └── Generate, augment, and export anchor keypoint training data from dataset photos.
 │   ├── ear_embedding.py
-│   │   └── Visual QA: per-photo ear image beside its 1-D tear profile with detected events, plus an all-photo overlay.
-│   ├── anchor.py
-│   │   └── Local script exercising `Sam3Service` and `AnchorService` on a dataset photo.
+│   │   └── Visual QA: per-photo ear image beside its 1-D tear profile with detected events.
 │   ├── holes.py
 │   │   └── Ear-notch/hole contour exploration on masked ear crops via Laplacian-of-Gaussian filtering.
-│   ├── sam3_local.py
-│   │   └── Local ultralytics SAM smoke test on a dataset photo using `model_weights/sam3/sam3.pt`.
 │   ├── view.py
 │   │   └── Local script that runs SAM3, anchor, and ear analyzers across named preset photos with OpenCV display.
-│   └── visualize_sam3.py
-│       └── Local script that loads a dataset sighting, runs cached SAM3 predictions, and displays annotated images via `visualize_predictions`.
+│   ├── visualize_analyzer.py
+│   │   └── Matplotlib dashboard for one photo's `PhotoAnalyzer` output; saves under `outputs/analyzer/`.
+│   └── warm_sam3_cache.py
+│       └── Warm the SAM3 cache for every photo in the dataset.
 └── tests/
     ├── conftest.py
     │   └── Shared pytest fixtures (RLE helpers, sample photos/sightings).
