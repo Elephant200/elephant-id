@@ -97,7 +97,7 @@ def plot_ear_diagnostic(
         transform=crop_ax.transAxes,
         bbox={"facecolor": "black", "alpha": 0.45, "pad": 2, "edgecolor": "none"},
     )
-    crop_ax.legend(loc="lower right", fontsize=7, framealpha=0.8)
+    # crop_ax.legend(loc="lower right", fontsize=7, framealpha=0.8)
     crop_ax.set_xticks([])
     crop_ax.set_yticks([])
     for spine in crop_ax.spines.values():
