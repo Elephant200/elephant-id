@@ -28,8 +28,8 @@ DEFAULT_SAM3_NMS_IOU_THRESHOLD = 0.2
 # Tear profile (coding/ears/tear_profile.py) -- all lengths in units of S, the convex-
 # hull arc length between the ear anchors
 TEAR_PROFILE_BINS = 1024  # matches contour resampling
-TEAR_TRIM_LO = 0.20       # zeroed leading fraction of x: outside SEEK coverage
-TEAR_TRIM_HI = 0.10       # zeroed trailing fraction of x: outside SEEK coverage
+TEAR_TRIM_LO = 0.025      # zeroed leading fraction of x: reduces edge noise
+TEAR_TRIM_HI = 0.025      # zeroed trailing fraction of x: reduces edge noise
 TEAR_ALPHA_FRAC = 0.10    # rolling-disk radius / S (~20% of bbox long side)
 TEAR_OPEN_FRAC = 0.007    # opening radius / S (~1.5% of bbox long side)
 TEAR_SMOOTH_SIGMA = 2.0   # profile gaussian, bins
