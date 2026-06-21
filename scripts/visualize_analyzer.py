@@ -15,9 +15,8 @@ from matplotlib.axes import Axes
 from matplotlib.lines import Line2D
 from matplotlib.patches import Rectangle
 
-from elephant_id.coding.ears.tear_profile import PROFILE_GRID
 from elephant_id.coding.photo_analyzer import PhotoAnalyzer
-from elephant_id.constants import TEAR_TRIM_HI, TEAR_TRIM_LO
+from elephant_id.constants import TEAR_PROFILE_BINS, TEAR_TRIM_DEGREES
 from elephant_id.dataset import Dataset
 from elephant_id.image.boxes import clip_xyxy
 from elephant_id.image.masks import decode_rle_mask
@@ -59,7 +58,12 @@ def plot_ear_diagnostic(
     profile = ear_data["tear_profile"]
     x1, y1, _, _ = clip_xyxy(*ear.xyxy, image.shape[1], image.shape[0])
     offset = np.array((x1, y1))
-    deepest = int(np.argmax(profile.profile))
+    angles_degrees = np.linspace(0.0, 180.0, TEAR_PROFILE_BINS)
+    coded_angle_mask = (
+        (angles_degrees > TEAR_TRIM_DEGREES)
+        & (angles_degrees < 180.0 - TEAR_TRIM_DEGREES)
+    )
+    deepest = int(np.argmax(np.where(coded_angle_mask, profile.profile, -np.inf)))
     ray_end = (
         profile.origins[deepest]
         + profile.profile[deepest] * profile.scale * profile.normals[deepest]
@@ -103,12 +107,22 @@ def plot_ear_diagnostic(
     for spine in crop_ax.spines.values():
         spine.set_visible(False)
 
-    profile_ax.plot(PROFILE_GRID, profile.profile, color="tab:red", linewidth=1.4)
-    profile_ax.axvspan(0, TEAR_TRIM_LO, color="0.85")
-    profile_ax.axvspan(1 - TEAR_TRIM_HI, 1, color="0.85")
-    profile_ax.set(xlim=(0, 1.04), ylim=(-0.01, 0.10))
-    profile_ax.set_xticks((0, 0.25, 0.5, 0.75, 1))
-    profile_ax.set_ylabel("depth / S", fontsize=8, labelpad=2)
+    profile_ax.plot(
+        angles_degrees,
+        profile.profile,
+        color="tab:red",
+        linewidth=1.4,
+    )
+    profile_ax.axvspan(0, TEAR_TRIM_DEGREES, color="0.85")
+    profile_ax.axvspan(
+        180 - TEAR_TRIM_DEGREES,
+        180,
+        color="0.85",
+    )
+    profile_ax.set(xlim=(0, 180), ylim=(-0.03, 0.4))
+    profile_ax.set_xticks((0, 45, 90, 135, 180))
+    profile_ax.set_xlabel("angle (degrees)", fontsize=8, labelpad=2)
+    profile_ax.set_ylabel("depth / R", fontsize=8, labelpad=2)
     profile_ax.tick_params(axis="both", labelsize=8, pad=2)
     profile_ax.grid(alpha=0.3)
     profile_ax.text(

@@ -6,10 +6,7 @@ profile, with detected tear events marked. This is how embedding accuracy is
 checked against the actual image: every bump in the profile should point at
 a visible tear, and the profile should read as the ear unrolled flat.
 
-Also writes an all-photo overlay (same individual = same color) where
-same-ear profiles should visibly align.
-
-Outputs (outputs/ear_embedding/): profiles.png, <label>.png per photo.
+Outputs (outputs/ear_embedding_v2/): <label>.png per photo.
 
 Run:  uv run python -m scripts.ear_embedding
 """
@@ -20,16 +17,15 @@ import matplotlib.pyplot as plt
 import numpy as np
 from dotenv import load_dotenv
 
-from elephant_id.coding.ears.tear_profile import PROFILE_GRID, TearProfile
+from elephant_id.coding.ears.tear_profile import TearProfile
 from elephant_id.coding.photo_analyzer import PhotoAnalyzer
-from elephant_id.constants import TEAR_TRIM_HI, TEAR_TRIM_LO
+from elephant_id.constants import TEAR_PROFILE_BINS, TEAR_TRIM_DEGREES
 from elephant_id.dataset import Dataset
 from elephant_id.image.transforms import apply_crop
 from elephant_id.log import configure_logging
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
-LINESTYLES = ["-", "--", "-.", ":"]
 PHOTOS = {
     "adam1": "Adam_2011-03-31_03",
     "adam2": "Adam_2011-03-31_07",
@@ -57,8 +53,13 @@ def main() -> None:
         metadata_path=REPO_ROOT / "dataset/elephants-alive/images.csv",
     )
     analyzer = PhotoAnalyzer(dataset=dataset)
+    angles_degrees = np.linspace(0.0, 180.0, TEAR_PROFILE_BINS)
+    coded_angle_mask = (
+        (angles_degrees > TEAR_TRIM_DEGREES)
+        & (angles_degrees < 180.0 - TEAR_TRIM_DEGREES)
+    )
 
-    out = REPO_ROOT / "outputs" / "ear_embedding"
+    out = REPO_ROOT / "outputs" / "ear_embedding_v2"
     out.mkdir(parents=True, exist_ok=True)
 
     results = {}
@@ -81,8 +82,7 @@ def main() -> None:
             contour = ear_data["ear"].resampled_contour(1024)
             tear_profile: TearProfile = ear_data["tear_profile"]
 
-            # events = tear_events(res.profile)
-            k = int(np.argmax(tear_profile.profile))
+            k = int(np.argmax(np.where(coded_angle_mask, tear_profile.profile, -np.inf)))
 
             fig, (axi, axp) = plt.subplots(
                 1, 2, figsize=(16, 7), width_ratios=[1, 1.25])
@@ -98,14 +98,15 @@ def main() -> None:
             axi.set_title(f"{label} ({identifier})", fontsize=12)
             axi.axis("off")
 
-            axp.plot(PROFILE_GRID, tear_profile.profile, "tab:red",
+            axp.plot(angles_degrees, tear_profile.profile, "tab:red",
                     lw=1.4)
-            axp.axvspan(0, TEAR_TRIM_LO, color="0.85")
-            axp.axvspan(1 - TEAR_TRIM_HI, 1, color="0.85")
-            axp.set_xlim(0, 1)
-            axp.set_ylim(-0.01, 0.10)
-            axp.set_xlabel("normalized reference arclength")
-            axp.set_ylabel("tear depth / S")
+            axp.axvspan(0, TEAR_TRIM_DEGREES, color="0.85")
+            axp.axvspan(180 - TEAR_TRIM_DEGREES, 180, color="0.85")
+            axp.set_xlim(0, 180)
+            axp.set_xticks((0, 45, 90, 135, 180))
+            axp.set_ylim(-0.03, 0.4)
+            axp.set_xlabel("ear angle (degrees)")
+            axp.set_ylabel("tear depth / R")
             axp.set_title("tear profile", fontsize=12)
             axp.grid(alpha=0.3)
             fig.tight_layout()

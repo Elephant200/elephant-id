@@ -1,45 +1,22 @@
-"""Tear finding: ear contour -> 1-D tear-depth profile.
+"""Tear finding: an anchored ear contour -> angular tear-depth profile.
 
-Input: the cut ear contour P (N x 2 px, ordered, anchor P[0] -> anchor
-P[-1]; any point spacing of a few px works -- fixed-count resampling is
-not required).
-
-Output: TEAR_PROFILE_BINS signed values on x in [0, 1], where x is
-normalized arclength along an estimate of the intact ear edge. The profile
-reads as the ear unrolled flat: ~0 where intact, a positive bump per tear
-(height = depth, area = size), and small negative dips where the contour
-pokes outside the reference (shaved spurs / outward texture -- a useful
-diagnostic, bounded by roughly the opening radius). Two photos of the same
-ear produce bumps at the same x.
-
-Pipeline (tunables in elephant_id.constants; lengths in units of S):
-  1. S     = convex-hull arc length between the anchors
-             (rotation- and tear-invariant scale)
-  2. open  = morphological opening, radius TEAR_OPEN_FRAC * S
-             (outward segmentation spurs cannot lift the reference)
-  3. ref   = alpha hull of the opened contour, radius TEAR_ALPHA_FRAC * S
-             (bridges tears, follows anatomical bays)
-  4. scan  = signed nearest contour crossing along the reference's inward
-             normals, divided by S
-  5. clean = light gaussian smoothing, then zero the SEEK-uncoded ends
-             (TEAR_TRIM_LO / TEAR_TRIM_HI)
-
-The reasoning behind every choice: docs/tear-embedding.md. Production
-entry point: EarFieldAnalyzer calls compute_tear_profile() per anchored ear; the
-standalone research path lives in scripts/evaluate.py. Constants are
-calibrated on a 17-photo pilot set; re-validate at scale.
+The profile has one value per angle from the upper anchor direction (0°) to
+the lower anchor direction (180°). A ray from the anchor midpoint selects
+the furthest alpha-reference crossing, then the local inward normal measures
+depth to the original contour. Positive values are inward tears.
 """
 from dataclasses import dataclass
+from typing import Literal
 
 import numpy as np
-import shapely
 from scipy.ndimage import gaussian_filter1d
 
 from elephant_id.coding.ears.geometry import (
     alpha_shape,
     densify,
     ear_side_path,
-    inward_normals,
+    furthest_ray_crossings,
+    inward_normals_at_origins,
     nearest_crossing,
     opened_contour,
 )
@@ -48,51 +25,102 @@ from elephant_id.constants import (
     TEAR_OPEN_FRAC,
     TEAR_PROFILE_BINS,
     TEAR_SMOOTH_SIGMA,
-    TEAR_TRIM_HI,
-    TEAR_TRIM_LO,
+    TEAR_TRIM_DEGREES,
 )
-
-# Tunables live in elephant_id.constants (TEAR_*); derived values here.
-PROFILE_GRID = (np.arange(TEAR_PROFILE_BINS) + 0.5) / TEAR_PROFILE_BINS
-_LO = int(TEAR_TRIM_LO * TEAR_PROFILE_BINS)
-_HI = int(TEAR_TRIM_HI * TEAR_PROFILE_BINS)
 
 
 @dataclass
 class TearProfile:
-    """Profile plus the scan geometry needed to draw it on the photo."""
+    """Angular profile plus the scan geometry needed to draw it."""
 
-    profile: np.ndarray    # (TEAR_PROFILE_BINS,) signed depth / S
-    scale: float           # S, px
-    reference: np.ndarray  # densified reference path, px
-    origins: np.ndarray    # scan-ray origins on the reference, px
-    normals: np.ndarray    # inward unit normals, one per bin
-
-
-def hull_arclength(points: np.ndarray) -> float:
-    """S: arc length of the convex hull between the anchors, px."""
-    ring = np.asarray(shapely.MultiPoint(points).convex_hull.exterior.coords)[:-1]
-    path = ear_side_path(ring, points[0], points[-1])
-    return float(np.linalg.norm(np.diff(path, axis=0), axis=1).sum())
+    profile: np.ndarray  # (TEAR_PROFILE_BINS,) signed depth / R
+    scale: float  # Equal-area semicircle radius R, px
+    reference: np.ndarray  # Densified alpha-reference path, px
+    origins: np.ndarray  # Polar scan-ray origins; NaN in trimmed bins, px
+    normals: np.ndarray  # Inward unit normals; NaN in trimmed bins
 
 
-def tear_profile(points: np.ndarray) -> TearProfile:
-    """The pipeline, returning the profile with its scan geometry."""
-    S = hull_arclength(points)  # 1. scale
-    # TODO: Consider using the alpha shape length instead of the hull arclength for the scale
-    src = opened_contour(points, TEAR_OPEN_FRAC * S)  # 2. opening
-    shape = alpha_shape(src, TEAR_ALPHA_FRAC * S)  # 3. reference
-    path = densify(ear_side_path(
-        np.asarray(shape.exterior.coords)[:-1], src[0], src[-1]))
-    origins, normals = inward_normals(path, shape, PROFILE_GRID)
-    depth = nearest_crossing(origins, normals, points) / S  # 4. signed depth scan
-    profile = gaussian_filter1d(depth, sigma=TEAR_SMOOTH_SIGMA)  # 5. cleanup
-    profile[:_LO] = 0
-    profile[-_HI:] = 0
-    return TearProfile(profile=profile, scale=S, reference=path,
-                       origins=origins, normals=normals)
+def polar_directions(
+    upper_anchor: np.ndarray,
+    lower_anchor: np.ndarray,
+    side: Literal["left", "right"],
+    angles_degrees: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return the anchor midpoint and unit ray directions for ear angles.
+
+    The left/right side selects which semicircle runs between the anchors.
+    Coordinates use the image convention where positive y points down.
+    """
+    if side not in {"left", "right"}:
+        raise ValueError(f"Unknown ear side: {side!r}")
+    midpoint = (upper_anchor + lower_anchor) / 2.0
+    upper_direction = upper_anchor - midpoint
+    distance = float(np.linalg.norm(upper_direction))
+    if distance == 0:
+        raise ValueError("Ear anchors must be distinct")
+    upper_direction /= distance
+    right_of_chord = np.array((-upper_direction[1], upper_direction[0]))
+    # The outer margin of the elephant's left ear is right of its anchor chord.
+    margin_direction = right_of_chord if side == "left" else -right_of_chord
+    radians = np.deg2rad(angles_degrees)[:, None]
+    directions = np.cos(radians) * upper_direction + np.sin(radians) * margin_direction
+    return midpoint, directions
 
 
-def embed(points: np.ndarray) -> np.ndarray:
-    """Margin polyline -> 1-D tear-depth profile (TEAR_PROFILE_BINS,)."""
-    return tear_profile(points).profile
+def tear_profile(
+    contour: np.ndarray,
+    area: float,
+    side: Literal["left", "right"],
+) -> TearProfile:
+    """Return the angular tear profile for an upper-to-lower ear contour."""
+    radius = float(np.sqrt(2.0 * area / np.pi))
+    opened = opened_contour(contour, TEAR_OPEN_FRAC * radius)
+    reference_hull = alpha_shape(opened, TEAR_ALPHA_FRAC * radius)
+    reference_boundary = np.asarray(reference_hull.exterior.coords)[:-1]
+    reference_path = densify(ear_side_path(reference_boundary, opened[0], opened[-1]))
+
+    angles_degrees = np.linspace(0.0, 180.0, TEAR_PROFILE_BINS)
+    coded_angle_mask = (
+        (angles_degrees > TEAR_TRIM_DEGREES)
+        & (angles_degrees < 180.0 - TEAR_TRIM_DEGREES)
+    )
+    anchor_midpoint, ray_directions = polar_directions(
+        contour[0], contour[-1], side, angles_degrees[coded_angle_mask]
+    )
+    coded_origins = furthest_ray_crossings(
+        anchor_midpoint,
+        ray_directions,
+        reference_boundary,
+    )
+    coded_normals = inward_normals_at_origins(
+        reference_path,
+        reference_hull,
+        coded_origins,
+    )
+    coded_depths = nearest_crossing(coded_origins, coded_normals, contour) / radius
+
+    origins = np.full((TEAR_PROFILE_BINS, 2), np.nan)
+    normals = np.full((TEAR_PROFILE_BINS, 2), np.nan)
+    profile = np.zeros(TEAR_PROFILE_BINS)
+    origins[coded_angle_mask] = coded_origins
+    normals[coded_angle_mask] = coded_normals
+    profile[coded_angle_mask] = gaussian_filter1d(
+        coded_depths,
+        sigma=TEAR_SMOOTH_SIGMA,
+    )
+    return TearProfile(
+        profile=profile,
+        scale=radius,
+        reference=reference_path,
+        origins=origins,
+        normals=normals,
+    )
+
+
+def embed(
+    contour: np.ndarray,
+    area: float,
+    side: Literal["left", "right"],
+) -> np.ndarray:
+    """Return the angular tear-depth profile for an anchored ear contour."""
+    return tear_profile(contour, area, side).profile
