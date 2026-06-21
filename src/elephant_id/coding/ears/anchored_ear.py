@@ -96,9 +96,7 @@ class AnchoredEar:
         self._mask_size = tuple(ear_detection.rle_mask["size"])
         self._keypoints = anchor_detection.keypoints
 
-        # The cut contour is the source of truth. Geometry derived from it
-        # (xyxy, anchor_points, side) is cheap and computed together; the
-        # expensive mask -> rle -> area chain stays separately lazy below.
+        # The cut contour is the source of truth for the cheap geometry.
         self._cut_contour: np.ndarray | None = None
         self._xyxy: tuple[float, float, float, float] | None = None
         self._anchor_points: (
@@ -139,7 +137,7 @@ class AnchoredEar:
         self._cut_contour = contour
 
     def _ensure_mask(self) -> None:
-        """Rasterize the cut contour into a mask, then derive its RLE and area."""
+        """Rasterize the cut contour and calculate its pixel area."""
         if self._mask is not None:
             return
 
@@ -150,8 +148,14 @@ class AnchoredEar:
         cv2.fillPoly(mask, [polygon], color=1)
 
         self._mask = mask.astype(bool)
+        self._area = float(np.count_nonzero(self._mask))
+
+    def _ensure_rle_mask(self) -> None:
+        """Encode the cleaned mask only when a caller needs its RLE."""
+        if self._rle_mask is not None:
+            return
+        self._ensure_mask()
         self._rle_mask = encode_rle_mask(self._mask)
-        self._area = float(coco_mask.area([self._rle_mask])[0])
 
     @property
     def xyxy(self) -> tuple[float, float, float, float]:
@@ -180,7 +184,7 @@ class AnchoredEar:
     @property
     def rle_mask(self) -> RleMask:
         """Cleaned ear mask encoded as COCO RLE."""
-        self._ensure_mask()
+        self._ensure_rle_mask()
         return {
             "size": list(self._rle_mask["size"]),
             "counts": self._rle_mask["counts"],
