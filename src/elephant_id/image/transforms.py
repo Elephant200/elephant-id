@@ -10,13 +10,23 @@ from elephant_id.image.masks import RleMask, decode_rle_mask, mask_bounds
 def apply_crop(
     image: BgrImage,
     crop_xyxy: tuple[float, float, float, float],
+    pad: float = 0.0,
 ) -> BgrImage:
-    """Return a copy of image cropped to a clipped xyxy box."""
+    """Return a copy of image cropped to a clipped xyxy box.
+
+    Args:
+        image: Source image to crop.
+        crop_xyxy: Crop box in float xyxy coordinates.
+        pad: Fraction of the box width/height to expand outward on each side
+            before clipping to image bounds.
+    """
+    w = crop_xyxy[2] - crop_xyxy[0]
+    h = crop_xyxy[3] - crop_xyxy[1]
     x1, y1, x2, y2 = clip_xyxy(
-        crop_xyxy[0],
-        crop_xyxy[1],
-        crop_xyxy[2],
-        crop_xyxy[3],
+        crop_xyxy[0] - w * pad,
+        crop_xyxy[1] - h * pad,
+        crop_xyxy[2] + w * pad,
+        crop_xyxy[3] + h * pad,
         image.shape[1],
         image.shape[0],
     )
