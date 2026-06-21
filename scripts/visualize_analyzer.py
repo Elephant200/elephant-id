@@ -1,6 +1,6 @@
 """Show one photo analysis as a fixed Matplotlib dashboard.
 
-Run with ``uv run python -m scripts.analyzer PHOTO_IDENTIFIER``. The figure is
+Run with ``uv run python scripts/visualize_analyzer.py PHOTO_IDENTIFIER``. The figure is
 displayed and saved under ``outputs/analyzer/``.
 """
 
@@ -235,14 +235,14 @@ def main() -> None:
     for spine in status_ax.spines.values():
         spine.set_visible(False)
 
-    ears = analysis["ears"]
-    for index in range(2):
+    ears_by_side = {ear_data["ear"].side: ear_data for ear_data in analysis["ears"]}
+    for index, side in enumerate(("left", "right")):
         row = right[index].subgridspec(1, 2, wspace=0.04)
         crop_ax = figure.add_subplot(row[0])
         profile_layout = row[1].subgridspec(3, 1, height_ratios=(0.08, 0.72, 0.20), hspace=0)
         profile_ax = figure.add_subplot(profile_layout[1])
-        if index < len(ears):
-            plot_ear_diagnostic(crop_ax, profile_ax, image, ears[index])
+        if ear_data := ears_by_side.get(side):
+            plot_ear_diagnostic(crop_ax, profile_ax, image, ear_data)
         else:
             crop_ax.set_axis_off()
             profile_ax.set_axis_off()
