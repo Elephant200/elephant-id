@@ -183,7 +183,7 @@ class PhotoAnalyzer:
             elif len(ears) == 2:
                 if ears[0].side == ears[1].side:
                     logger.warning("Both ears are on the same side")
-                    return "unknown"
+                    view = "front" # fallback; may be wrong, but better than "unknown"
                 else:
                     view = "front"
 
