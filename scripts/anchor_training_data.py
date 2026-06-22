@@ -93,13 +93,12 @@ def get_ears(photo: Photo, sam3: Sam3Service, anchor_model: AnchorService) -> li
 
     return anchored_ears
 
-def generate_preliminary_data() -> None:
+def generate_preliminary_data(output_dir: Path) -> None:
     dataset = Dataset(
         dataset_root=Path("dataset/elephants-alive/coded"),
         metadata_path=Path("dataset/elephants-alive/images.csv"),
     )
-    out = Path("outputs/anchor_training")
-    out.mkdir(parents=True, exist_ok=True)
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     sam3 = Sam3Service(dataset=dataset)
     anchor_model = AnchorService(dataset=dataset) # the worse version of the model; use it for training data generation.
@@ -229,7 +228,7 @@ def generate_preliminary_data() -> None:
 
                 # Add to coco dataset
                 try:
-                    cv2.imwrite(f"outputs/anchor_training/{photo.identifier}_{ear.side}.jpg", apply_crop(image_copy, crop_xyxy))
+                    cv2.imwrite(output_dir / f"{photo.identifier}_{ear.side}.jpg", apply_crop(image_copy, crop_xyxy))
                 except Exception as exc:
                     logger.error(f"Error saving image {photo.identifier}_{ear.side}: {exc}")
                     continue
@@ -262,7 +261,7 @@ def generate_preliminary_data() -> None:
                 # cv2.waitKey(0)
                 # cv2.destroyAllWindows()
     finally:
-        with open(out / "anchor_training_data.json", "w") as f:
+        with open(output_dir / "anchor_training_data.json", "w") as f:
             json.dump(coco_dataset, f, indent=4)
 
 def update_hand_annotated_data(input_dir: Path, output_dir: Path) -> None:
@@ -527,7 +526,7 @@ def main() -> None:
     load_dotenv()
     configure_logging(level="ERROR")
 
-    train(DEFAULT_AUG_CONFIG)
+    generate_preliminary_data(Path("outputs/ear_segmentation"))
 
 
 if __name__ == "__main__":
