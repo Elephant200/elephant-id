@@ -24,32 +24,32 @@ class TuskFieldAnalyzer:
             tusks = sorted(tusks, key=lambda t: t.area() * t.confidence, reverse=True)
             tusks = tusks[:2]
 
-        if len(tusks) == 2:
-            return [
-                {
-                    "side": "unknown",
-                    "confidence": tusk.confidence,
-                    "area": tusk.area(),
-                    "x1": tusk.x1,
-                    "y1": tusk.y1,
-                    "x2": tusk.x2,
-                    "y2": tusk.y2,
-                    "rle_mask": tusk.rle_mask,
-                }
-                for tusk in tusks
-            ]
-
-        # Single tusk
-        tusk = tusks[0]
         trunks: list[Detection] = shared_data["trunks"]
         view = shared_data["view"]
-        side = view if view in ["left", "right"] else "unknown"
+        trunk = trunks[0] if trunks else None
+        trunk_mask = trunk.get_mask() if trunk is not None else None
 
-        if not trunks:
-            logger.warning(f"No trunk found for single tusk in photo {photo}")
-        else:
-            trunk = trunks[0]
-            trunk_mask = trunk.get_mask()
+        if trunk is None:
+            logger.warning(f"No trunk found for tusk analysis in photo {photo}")
+
+        evidence = []
+        for tusk in tusks:
+            side = view if view in ["left", "right"] else "unknown"
+            if trunk_mask is None:
+                evidence.append(
+                    {
+                        "side": side,
+                        "confidence": tusk.confidence,
+                        "area": tusk.area(),
+                        "x1": tusk.x1,
+                        "y1": tusk.y1,
+                        "x2": tusk.x2,
+                        "y2": tusk.y2,
+                        "rle_mask": tusk.rle_mask,
+                    }
+                )
+                continue
+
             y1 = max(0, int(tusk.y1))
             y2 = min(trunk_mask.shape[0], int(tusk.y2))
             trunk_band = trunk_mask[y1:y2, :]
@@ -71,15 +71,17 @@ class TuskFieldAnalyzer:
                 else:
                     logger.warning(f"Unknown view {view} in photo {photo}")
 
-        return [
-            {
-                "side": side,
-                "confidence": tusk.confidence,
-                "area": tusk.area(),
-                "x1": tusk.x1,
-                "y1": tusk.y1,
-                "x2": tusk.x2,
-                "y2": tusk.y2,
-                "rle_mask": tusk.rle_mask,
-            }
-        ]
+            evidence.append(
+                {
+                    "side": side,
+                    "confidence": tusk.confidence,
+                    "area": tusk.area(),
+                    "x1": tusk.x1,
+                    "y1": tusk.y1,
+                    "x2": tusk.x2,
+                    "y2": tusk.y2,
+                    "rle_mask": tusk.rle_mask,
+                }
+            )
+
+        return evidence
