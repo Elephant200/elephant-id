@@ -6,6 +6,7 @@ displayed and saved under ``outputs/analyzer/``.
 
 import argparse
 from pathlib import Path
+from typing import Literal
 
 import cv2
 import matplotlib.pyplot as plt
@@ -15,6 +16,7 @@ from matplotlib.axes import Axes
 from matplotlib.lines import Line2D
 from matplotlib.patches import Rectangle
 
+from elephant_id.coding.ears.tear_profile import polar_directions
 from elephant_id.coding.photo_analyzer import PhotoAnalyzer
 from elephant_id.constants import TEAR_PROFILE_BINS, TEAR_TRIM_DEGREES
 from elephant_id.dataset import Dataset
@@ -47,6 +49,59 @@ def draw_box(
     )
 
 
+def draw_polar_guides(
+    axis: Axes,
+    original_anchor_points: tuple[tuple[float, float], tuple[float, float]],
+    side: Literal["left", "right"],
+    radius: float,
+    spoke_length: float,
+    offset: np.ndarray,
+) -> None:
+    """Draw the polar calibration semicircle, angle rays, and trim boundaries."""
+    upper_anchor = np.asarray(original_anchor_points[0], dtype=float)
+    lower_anchor = np.asarray(original_anchor_points[1], dtype=float)
+    arc_angles = np.linspace(0.0, 180.0, 181)
+    midpoint, arc_directions = polar_directions(
+        upper_anchor,
+        lower_anchor,
+        side,
+        arc_angles,
+    )
+    arc = midpoint + radius * arc_directions
+    axis.plot(*(arc - offset).T, color="gold", linewidth=0.9, alpha=0.8)
+
+    guide_angles = np.arange(0.0, 181.0, 30.0)
+    _, guide_directions = polar_directions(
+        upper_anchor,
+        lower_anchor,
+        side,
+        guide_angles,
+    )
+    for direction in guide_directions:
+        axis.plot(
+            [midpoint[0] - offset[0], midpoint[0] + spoke_length * direction[0] - offset[0]],
+            [midpoint[1] - offset[1], midpoint[1] + spoke_length * direction[1] - offset[1]],
+            color="gold",
+            linewidth=0.7,
+            alpha=0.65,
+        )
+
+    _, trim_directions = polar_directions(
+        upper_anchor,
+        lower_anchor,
+        side,
+        np.array((TEAR_TRIM_DEGREES, 180.0 - TEAR_TRIM_DEGREES)),
+    )
+    for direction in trim_directions:
+        axis.plot(
+            [midpoint[0] - offset[0], midpoint[0] + radius * direction[0] - offset[0]],
+            [midpoint[1] - offset[1], midpoint[1] + radius * direction[1] - offset[1]],
+            color="tab:orange",
+            linestyle="--",
+            linewidth=1.0,
+        )
+
+
 def plot_ear_diagnostic(
     crop_ax: Axes,
     profile_ax: Axes,
@@ -69,7 +124,8 @@ def plot_ear_diagnostic(
         + profile.profile[deepest] * profile.scale * profile.normals[deepest]
     )
 
-    crop_ax.imshow(cv2.cvtColor(apply_crop(image, ear.xyxy), cv2.COLOR_BGR2RGB))
+    ear_image = apply_crop(image, ear.xyxy)
+    crop_ax.imshow(cv2.cvtColor(ear_image, cv2.COLOR_BGR2RGB))
     crop_ax.plot(
         *(ear.resampled_contour(1024) - offset).T,
         color="white",
@@ -81,6 +137,14 @@ def plot_ear_diagnostic(
         color="tab:cyan",
         linewidth=1.4,
         label="reference",
+    )
+    draw_polar_guides(
+        crop_ax,
+        ear.original_anchor_points,
+        ear.side,
+        profile.scale,
+        float(np.hypot(*ear_image.shape[:2])),
+        offset,
     )
     crop_ax.plot(
         [profile.origins[deepest, 0] - offset[0], ray_end[0] - offset[0]],
@@ -102,6 +166,8 @@ def plot_ear_diagnostic(
         bbox={"facecolor": "black", "alpha": 0.45, "pad": 2, "edgecolor": "none"},
     )
     # crop_ax.legend(loc="lower right", fontsize=7, framealpha=0.8)
+    height, width = ear_image.shape[:2]
+    crop_ax.set(xlim=(-0.5, width - 0.5), ylim=(height - 0.5, -0.5))
     crop_ax.set_xticks([])
     crop_ax.set_yticks([])
     for spine in crop_ax.spines.values():
@@ -119,8 +185,10 @@ def plot_ear_diagnostic(
         180,
         color="0.85",
     )
-    profile_ax.set(xlim=(0, 180), ylim=(-0.03, 0.4))
-    profile_ax.set_xticks((0, 45, 90, 135, 180))
+    profile_ax.axvline(TEAR_TRIM_DEGREES, color="tab:orange", linestyle="--", lw=1.0)
+    profile_ax.axvline(180 - TEAR_TRIM_DEGREES, color="tab:orange", linestyle="--", lw=1.0)
+    profile_ax.set(xlim=(0, 183), ylim=(-0.03, 0.4))
+    profile_ax.set_xticks(np.arange(0, 181, 30))
     profile_ax.set_xlabel("angle (degrees)", fontsize=8, labelpad=2)
     profile_ax.set_ylabel("depth / R", fontsize=8, labelpad=2)
     profile_ax.tick_params(axis="both", labelsize=8, pad=2)
@@ -225,8 +293,8 @@ def main() -> None:
     ) or "none"
     status_ax.add_patch(
         Rectangle(
-            (0.25, 0.25),
-            0.5,
+            (0.18, 0.25),
+            0.64,
             0.5,
             transform=status_ax.transAxes,
             fill=False,
