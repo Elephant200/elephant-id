@@ -1,7 +1,7 @@
-"""Show one photo analysis as a fixed Matplotlib dashboard.
+"""Show photo analysis as fixed Matplotlib dashboards.
 
-Run with ``uv run python scripts/visualize_analyzer.py PHOTO_IDENTIFIER``. The figure is
-displayed and saved under ``outputs/analyzer/``.
+Run with ``uv run python scripts/visualize_analyzer.py PHOTO_IDENTIFIER [PHOTO_IDENTIFIER ...]``.
+Figures are displayed and saved under ``outputs/analyzer/``.
 """
 
 import argparse
@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from dotenv import load_dotenv
 from matplotlib.axes import Axes
+from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
 from matplotlib.patches import Rectangle
 
@@ -20,6 +21,7 @@ from elephant_id.coding.ears.tear_profile import polar_directions
 from elephant_id.coding.photo_analyzer import PhotoAnalyzer
 from elephant_id.constants import TEAR_PROFILE_BINS, TEAR_TRIM_DEGREES
 from elephant_id.dataset import Dataset
+from elephant_id.image import BgrImage
 from elephant_id.image.boxes import clip_xyxy
 from elephant_id.image.masks import decode_rle_mask
 from elephant_id.image.transforms import apply_crop
@@ -205,25 +207,12 @@ def plot_ear_diagnostic(
     )
 
 
-def main() -> None:
-    """Analyze one photo and show its feature evidence on one screen."""
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("photo")
-    args = parser.parse_args()
-
-    load_dotenv()
-    configure_logging()
-    repo_root = Path(__file__).resolve().parent.parent
-    dataset = Dataset(
-        dataset_root=repo_root / "dataset/elephants-alive/coded",
-        metadata_path=repo_root / "dataset/elephants-alive/images.csv",
-    )
-    photo = dataset.get_photo(args.photo)
-    analysis = PhotoAnalyzer(dataset=dataset).analyze(photo)
-    if analysis is None:
-        raise RuntimeError(f"Photo analyzer returned no usable evidence for {photo.identifier}")
-
-    image = dataset.read_image(photo)
+def build_analyzer_figure(
+    analysis: dict,
+    photo_identifier: str,
+    image: BgrImage,
+) -> Figure:
+    """Build the analyzer dashboard figure for one analyzed photo."""
     shared_data = analysis["shared_data"]
     body = shared_data["body"]
     annotated = image.copy()
@@ -275,7 +264,7 @@ def main() -> None:
     image_ax.text(
         0.01,
         0.98,
-        f"Photo analysis: {photo.identifier}",
+        f"Photo analysis: {photo_identifier}",
         ha="left",
         va="top",
         fontsize=15,
@@ -335,14 +324,42 @@ def main() -> None:
     figure.add_artist(
         Line2D((0.5, 1), (0.5, 0.5), transform=figure.transFigure, color="black", linewidth=2)
     )
+    return figure
 
+
+def main() -> None:
+    """Analyze photos and show their feature evidence on one screen each."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("photos", nargs="+")
+    args = parser.parse_args()
+
+    load_dotenv()
+    configure_logging()
+    repo_root = Path(__file__).resolve().parent.parent
+    dataset = Dataset(
+        dataset_root=repo_root / "dataset/elephants-alive/coded",
+        metadata_path=repo_root / "dataset/elephants-alive/images.csv",
+    )
     output_dir = repo_root / "outputs" / "analyzer"
     output_dir.mkdir(parents=True, exist_ok=True)
-    output_path = output_dir / f"{photo.identifier}.png"
-    figure.savefig(output_path, dpi=150)
-    print(f"Saved {output_path}")
+
+    for photo_identifier in args.photos:
+        photo = dataset.get_photo(photo_identifier)
+        analysis = PhotoAnalyzer(dataset=dataset).analyze(photo)
+        if analysis is None:
+            raise RuntimeError(
+                f"Photo analyzer returned no usable evidence for {photo.identifier}"
+            )
+
+        image = dataset.read_image(photo)
+        figure = build_analyzer_figure(analysis, photo.identifier, image)
+
+        output_path = output_dir / f"{photo.identifier}.png"
+        figure.savefig(output_path, dpi=150)
+        print(f"Saved {output_path}")
+
     plt.show()
-    plt.close(figure)
+    plt.close("all")
 
 
 if __name__ == "__main__":
