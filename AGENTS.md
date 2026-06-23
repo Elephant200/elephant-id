@@ -2,7 +2,7 @@
 
 ## Project Description
 
-Elephant ID is a human-in-the-loop system for identifying individual African elephants from sighting photo folders. It uses AI, structured SEEK coding, and expert review to produce draft identification records, support matching against known elephants, and efficiently utilize human oversight.
+Elephant ID is a human-in-the-loop system for identifying individual African elephants from sighting photo folders. It uses AI and expert review to produce draft identification records, support matching against known elephants, and efficiently utilize human oversight. The goal of the project is twofold. The first goal is to design a discriminative representation that encodes features such as ear tears and holes. The second is to build and deploy an offline desktop app that processes sightings, identifies the individual elephant, and presents the result for human approval. This app's purpose is to facilitate identification of thousands of elephants.
 
 ## Commands
 
