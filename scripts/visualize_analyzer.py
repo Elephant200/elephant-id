@@ -329,27 +329,28 @@ def build_analyzer_figure(
 
 def main() -> None:
     """Analyze photos and show their feature evidence on one screen each."""
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("photos", nargs="+")
-    args = parser.parse_args()
-
     load_dotenv()
     configure_logging()
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("photos", nargs="*")
+    parser.add_argument("--input", type=Path)
+    parser.add_argument("--output-dir", type=Path, default=Path("outputs/analyzer"))
+    parser.add_argument("--headless", action="store_true")
+    args = parser.parse_args()
     repo_root = Path(__file__).resolve().parent.parent
     dataset = Dataset(
         dataset_root=repo_root / "dataset/elephants-alive/coded",
         metadata_path=repo_root / "dataset/elephants-alive/images.csv",
     )
-    output_dir = repo_root / "outputs" / "analyzer"
+    output_dir = args.output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
 
     for photo_identifier in args.photos:
         photo = dataset.get_photo(photo_identifier)
         analysis = PhotoAnalyzer(dataset=dataset).analyze(photo)
         if analysis is None:
-            raise RuntimeError(
-                f"Photo analyzer returned no usable evidence for {photo.identifier}"
-            )
+            raise RuntimeError(f"Photo analyzer returned no usable evidence for {photo.identifier}")
 
         image = dataset.read_image(photo)
         figure = build_analyzer_figure(analysis, photo.identifier, image)
@@ -358,8 +359,11 @@ def main() -> None:
         figure.savefig(output_path, dpi=150)
         print(f"Saved {output_path}")
 
-    plt.show()
-    plt.close("all")
+    if not args.headless:
+        try:
+            plt.show()
+        finally:
+            plt.close("all")
 
 
 if __name__ == "__main__":
