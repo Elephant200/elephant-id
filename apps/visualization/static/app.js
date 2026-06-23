@@ -34,9 +34,14 @@ const els = {
   imageModal: document.getElementById("imageModal"),
   modalImage: document.getElementById("modalImage"),
   modalTitle: document.getElementById("imageModalTitle"),
-  sam3PresetSeg: document.getElementById("sam3PresetSeg"),
-  sam3Status: document.getElementById("sam3Status"),
-  sam3RunBtn: document.getElementById("sam3RunBtn"),
+  analysisEvidence: document.getElementById("analysisEvidence"),
+  analysisSummary: document.getElementById("analysisSummary"),
+  analysisRawJson: document.getElementById("analysisRawJson"),
+  analysisStatus: document.getElementById("analysisStatus"),
+  analysisRunBtn: document.getElementById("analysisRunBtn"),
+  analysisDownloads: document.getElementById("analysisDownloads"),
+  analysisDownloadBtn: document.getElementById("analysisDownloadBtn"),
+  analysisDownloadItems: document.getElementById("analysisDownloadItems"),
   imageModalClose: document.getElementById("imageModalClose"),
 };
 
@@ -276,51 +281,12 @@ function closeFilterModal(restoreSnapshot) {
   modalFiltersSnapshot = null;
 }
 
-const SAM3_DEFAULT_PRESET = "features";
-let sam3Presets = null; // { presets: string[], default: string }
-let sam3PresetsPromise = null;
-let imageModalCtx = null; // { kind, path, preset, originalUrl, overlayUrl }
-let sam3Running = false;
+let imageModalCtx = null; // { kind, path, originalUrl, runId, analysis }
+let analysisRunning = false;
 let clickTimer = null;
 
-function loadSam3Presets() {
-  if (sam3Presets) return Promise.resolve(sam3Presets);
-  if (sam3PresetsPromise) return sam3PresetsPromise;
-  sam3PresetsPromise = getJson("/api/sam3/presets")
-    .then((data) => {
-      sam3Presets = {
-        presets: Array.isArray(data?.presets) && data.presets.length ? data.presets : [SAM3_DEFAULT_PRESET],
-        default: data?.default || SAM3_DEFAULT_PRESET,
-      };
-      return sam3Presets;
-    })
-    .catch(() => {
-      sam3Presets = { presets: [SAM3_DEFAULT_PRESET, "body"], default: SAM3_DEFAULT_PRESET };
-      return sam3Presets;
-    });
-  return sam3PresetsPromise;
-}
-
-function renderSam3PresetChips() {
-  const host = els.sam3PresetSeg;
-  if (!host || !sam3Presets || !imageModalCtx) return;
-  host.innerHTML = "";
-  for (const p of sam3Presets.presets) {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.className = "seg-btn";
-    b.textContent = p;
-    if (p === imageModalCtx.preset) b.classList.add("seg-on");
-    b.addEventListener("click", () => {
-      imageModalCtx.preset = p;
-      host.querySelectorAll(".seg-btn").forEach((el) => el.classList.toggle("seg-on", el === b));
-    });
-    host.appendChild(b);
-  }
-}
-
-function setSam3Status(text, isError) {
-  const s = els.sam3Status;
+function setAnalysisStatus(text, isError) {
+  const s = els.analysisStatus;
   if (!s) return;
   s.textContent = text || "";
   s.classList.toggle("is-error", !!isError);
@@ -331,54 +297,115 @@ function buildImageUrl(ctx) {
   return `/image?p=${encodeURIComponent(ctx.path)}`;
 }
 
-function revokeImageModalUrls() {
-  if (imageModalCtx?.overlayUrl) {
-    try {
-      URL.revokeObjectURL(imageModalCtx.overlayUrl);
-    } catch {}
-    imageModalCtx.overlayUrl = null;
+function clearAnalysisDisplay() {
+  if (els.analysisEvidence) els.analysisEvidence.hidden = true;
+  if (els.analysisSummary) els.analysisSummary.innerHTML = "";
+  if (els.analysisRawJson) els.analysisRawJson.textContent = "";
+  if (els.analysisDownloads) els.analysisDownloads.hidden = true;
+  if (els.analysisDownloadItems) els.analysisDownloadItems.innerHTML = "";
+  if (els.analysisDownloadBtn) els.analysisDownloadBtn.setAttribute("aria-expanded", "false");
+  if (els.analysisDownloadItems) els.analysisDownloadItems.hidden = true;
+}
+
+function summaryRow(label, value) {
+  const row = document.createElement("div");
+  row.className = "analysis-summary-row";
+  const key = document.createElement("span");
+  key.textContent = label;
+  const val = document.createElement("span");
+  val.textContent = value;
+  row.append(key, val);
+  return row;
+}
+
+function renderAnalysisSummary(analysis) {
+  if (!els.analysisEvidence || !els.analysisSummary || !els.analysisRawJson) return;
+  const host = els.analysisSummary;
+  host.innerHTML = "";
+  host.append(
+    summaryRow("View", analysis.view || "unknown"),
+    summaryRow("Features", `${analysis.featureCounts?.anchoredEars ?? 0} anchored ears · ${analysis.featureCounts?.tusks ?? 0} tusks`)
+  );
+  for (const ear of analysis.ears || []) {
+    const maxDepth = ear.tearProfile?.maxDepth;
+    const maxAngle = ear.tearProfile?.maxAngle;
+    const depthText = maxDepth == null ? "no profile peak" : `${maxDepth.toFixed(3)} at ${maxAngle.toFixed(1)}°`;
+    host.append(summaryRow(`${ear.side} ear`, `${Math.round(ear.area)} px · peak ${depthText}`));
   }
+  const age = analysis.age?.buckets && analysis.age?.probabilities
+    ? analysis.age.buckets.map((bucket, index) => `${bucket}: ${(analysis.age.probabilities[index] * 100).toFixed(0)}%`).join(" · ")
+    : "unavailable";
+  const gender = analysis.gender
+    ? Object.entries(analysis.gender).map(([key, value]) => `${key}: ${(value * 100).toFixed(0)}%`).join(" · ")
+    : "unavailable";
+  host.append(summaryRow("Age", age), summaryRow("Gender", gender));
+  els.analysisRawJson.textContent = JSON.stringify(analysis, null, 2);
+  els.analysisEvidence.hidden = false;
+}
+
+function addDownloadLink(label, href) {
+  if (!els.analysisDownloadItems) return;
+  const link = document.createElement("a");
+  link.href = href;
+  link.textContent = label;
+  link.download = "";
+  els.analysisDownloadItems.appendChild(link);
+}
+
+function renderDownloadMenu(runId, analysis) {
+  if (!els.analysisDownloads) return;
+  if (els.analysisDownloadItems) els.analysisDownloadItems.innerHTML = "";
+  addDownloadLink("Full dashboard PNG", `/api/analyzer/${encodeURIComponent(runId)}/dashboard.png`);
+  addDownloadLink("Full analysis JSON", `/api/analyzer/${encodeURIComponent(runId)}/analysis.json`);
+  for (const ear of analysis.ears || []) {
+    addDownloadLink(
+      `${ear.side[0].toUpperCase()}${ear.side.slice(1)} tear profile (.npy)`,
+      `/api/analyzer/${encodeURIComponent(runId)}/ears/${encodeURIComponent(ear.side)}.npy`
+    );
+  }
+  els.analysisDownloads.hidden = false;
 }
 
 async function openImageModal({ kind, path, label }) {
   if (!els.imageModal) return;
-  await loadSam3Presets();
   imageModalCtx = {
     kind,
     path,
-    preset: sam3Presets?.default || SAM3_DEFAULT_PRESET,
     originalUrl: buildImageUrl({ kind, path }),
-    overlayUrl: null,
+    runId: null,
+    analysis: null,
   };
   if (els.modalTitle) els.modalTitle.textContent = label || path;
   if (els.modalImage) {
+    els.modalImage.onload = null;
+    els.modalImage.onerror = null;
     els.modalImage.alt = label || "";
     els.modalImage.src = imageModalCtx.originalUrl;
   }
-  renderSam3PresetChips();
-  setSam3Status("");
+  clearAnalysisDisplay();
+  setAnalysisStatus("");
   els.imageModal.hidden = false;
 }
 
 function closeImageModal() {
   if (!els.imageModal) return;
-  revokeImageModalUrls();
   els.imageModal.hidden = true;
   imageModalCtx = null;
-  setSam3Status("");
+  clearAnalysisDisplay();
+  setAnalysisStatus("");
 }
 
-async function runSam3() {
-  if (sam3Running || !imageModalCtx) return;
-  sam3Running = true;
-  setSam3Status(`Running SAM3 (${imageModalCtx.preset})...`);
-  if (els.sam3RunBtn) els.sam3RunBtn.disabled = true;
+async function runFullAnalysis() {
+  if (analysisRunning || !imageModalCtx) return;
+  analysisRunning = true;
+  setAnalysisStatus("Running full photo analysis...");
+  if (els.analysisRunBtn) els.analysisRunBtn.disabled = true;
   try {
     const body =
       imageModalCtx.kind === "samples"
-        ? { samplesRel: imageModalCtx.path, preset: imageModalCtx.preset }
-        : { imagePath: imageModalCtx.path, preset: imageModalCtx.preset };
-    const res = await fetch("/api/sam3", {
+        ? { samplesRel: imageModalCtx.path }
+        : { imagePath: imageModalCtx.path };
+    const res = await fetch("/api/analyzer", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -389,20 +416,27 @@ async function runSam3() {
         const j = await res.json();
         if (j?.error) msg = j.error;
       } catch {}
-      setSam3Status(msg, true);
+      setAnalysisStatus(msg, true);
       return;
     }
-    const blob = await res.blob();
-    revokeImageModalUrls();
-    const url = URL.createObjectURL(blob);
-    imageModalCtx.overlayUrl = url;
-    if (els.modalImage) els.modalImage.src = url;
-    setSam3Status(`Overlay: ${imageModalCtx.preset}`);
+    const payload = await res.json();
+    imageModalCtx.runId = payload.runId;
+    imageModalCtx.analysis = payload.analysis;
+    if (els.modalImage) {
+      els.modalImage.onload = () => setAnalysisStatus("Full diagnostic dashboard");
+      els.modalImage.onerror = () => {
+        setAnalysisStatus("Analysis completed, but the dashboard could not render. Downloads remain available.", true);
+      };
+      els.modalImage.src = `/api/analyzer/${encodeURIComponent(payload.runId)}/dashboard.png`;
+    }
+    renderAnalysisSummary(payload.analysis || {});
+    renderDownloadMenu(payload.runId, payload.analysis || {});
+    setAnalysisStatus("Rendering diagnostic dashboard...");
   } catch (e) {
-    setSam3Status(String(e?.message || e), true);
+    setAnalysisStatus(String(e?.message || e), true);
   } finally {
-    sam3Running = false;
-    if (els.sam3RunBtn) els.sam3RunBtn.disabled = false;
+    analysisRunning = false;
+    if (els.analysisRunBtn) els.analysisRunBtn.disabled = false;
   }
 }
 
@@ -954,7 +988,7 @@ document.addEventListener("keydown", (e) => {
     }
     if (e.key === "Enter" && !isEditableTarget(e.target)) {
       e.preventDefault();
-      void runSam3();
+      void runFullAnalysis();
       return;
     }
     if (e.key === "ArrowLeft" && !isEditableTarget(e.target)) {
@@ -1110,8 +1144,15 @@ els.imageModal?.querySelector(".modal-backdrop")?.addEventListener("click", () =
 
 els.imageModalClose?.addEventListener("click", () => closeImageModal());
 
-els.sam3RunBtn?.addEventListener("click", () => {
-  void runSam3();
+els.analysisRunBtn?.addEventListener("click", () => {
+  void runFullAnalysis();
+});
+
+els.analysisDownloadBtn?.addEventListener("click", () => {
+  const expanded = els.analysisDownloadBtn.getAttribute("aria-expanded") === "true";
+  const next = !expanded;
+  els.analysisDownloadBtn.setAttribute("aria-expanded", next ? "true" : "false");
+  if (els.analysisDownloadItems) els.analysisDownloadItems.hidden = !next;
 });
 
 els.elephantToggleBtn?.addEventListener("click", () => {

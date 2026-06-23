@@ -10,42 +10,13 @@ from flask import Flask
 from elephant_id.dataset import Dataset
 from elephant_id.log import configure_logging
 
+from .analyzer import AnalyzerWorkbench
 from .config import CODED_ROOT, CSV_PATH
 from .routes import create_blueprint
 from .samples import reconcile_all_starred
 from .state import ReviewerState
 
 logger = logging.getLogger(__name__)
-
-
-def _build_sam3_service(dataset: Dataset):
-    """Construct Sam3Service when dependencies and API key are ready.
-
-    Returns None when optional ``local`` extras are not installed or
-    ``ROBOFLOW_API_KEY`` is unset. The SAM3 route surfaces a 503 then.
-    """
-    try:
-        from dotenv import load_dotenv
-    except ImportError:
-        load_dotenv = None
-    if load_dotenv is not None:
-        load_dotenv()
-
-    api_key = os.environ.get("ROBOFLOW_API_KEY", "").strip()
-    if not api_key:
-        logger.warning("ROBOFLOW_API_KEY not set; SAM3 endpoint disabled.")
-        return None
-
-    try:
-        from elephant_id.ai import Sam3Service
-    except ImportError:
-        logger.warning(
-            "inference-sdk not installed; SAM3 endpoint disabled. "
-            "Install with `uv sync --extra local`."
-        )
-        return None
-
-    return Sam3Service(dataset=dataset)
 
 
 def create_app() -> Flask:
@@ -64,14 +35,13 @@ def create_app() -> Flask:
     state = ReviewerState()
     state.load(dataset)
     reconcile_all_starred()
-
-    sam3 = _build_sam3_service(dataset)
+    analyzer = AnalyzerWorkbench(dataset)
 
     app = Flask(__name__, template_folder="templates", static_folder="static")
-    app.register_blueprint(create_blueprint(state, dataset=dataset, sam3=sam3))
+    app.register_blueprint(create_blueprint(state, dataset=dataset, analyzer=analyzer))
     app.extensions["reviewer_state"] = state
     app.extensions["dataset"] = dataset
-    app.extensions["sam3"] = sam3
+    app.extensions["analyzer_workbench"] = analyzer
     return app
 
 

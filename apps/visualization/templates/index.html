@@ -182,14 +182,23 @@
         <div class="image-modal-body">
           <img id="modalImage" alt="" />
         </div>
+        <section class="analysis-evidence" id="analysisEvidence" hidden>
+          <div class="analysis-summary" id="analysisSummary"></div>
+          <details class="analysis-raw" id="analysisRaw">
+            <summary>Raw evidence JSON</summary>
+            <pre id="analysisRawJson"></pre>
+          </details>
+        </section>
         <div class="image-modal-foot">
-          <div class="image-modal-presets">
-            <span class="filter-section-label">SAM3 preset</span>
-            <div class="seg" role="group" aria-label="SAM3 preset" id="sam3PresetSeg"></div>
-          </div>
-          <div class="image-modal-status" id="sam3Status"></div>
+          <div class="image-modal-status" id="analysisStatus"></div>
           <div class="image-modal-actions">
-            <button type="button" class="btn btn-primary" id="sam3RunBtn">Run SAM3 (Enter)</button>
+            <div class="download-menu" id="analysisDownloads" hidden>
+              <button type="button" class="btn btn-ghost" id="analysisDownloadBtn" aria-haspopup="true" aria-expanded="false">
+                Download
+              </button>
+              <div class="download-menu-items" id="analysisDownloadItems" hidden></div>
+            </div>
+            <button type="button" class="btn btn-primary" id="analysisRunBtn">Run full analysis (Enter)</button>
           </div>
         </div>
       </div>

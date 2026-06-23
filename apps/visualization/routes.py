@@ -11,13 +11,16 @@ import io
 import logging
 from pathlib import Path
 
-import cv2
 from flask import Blueprint, abort, jsonify, render_template, request, send_file
 
-from elephant_id.constants import SAM3_QUERY_PRESETS
 from elephant_id.dataset import Dataset
-from elephant_id.visualize import visualize_predictions
 
+from .analyzer import (
+    AnalyzerResultNotFoundError,
+    AnalyzerUnavailableError,
+    AnalyzerWorkbench,
+    NoUsableEvidenceError,
+)
 from .config import CODED_ROOT, PAGE_SIZE_DEFAULT, THUMB_MAX_SIZE
 from .filters import FilterConfig
 from .paths import (
@@ -31,10 +34,12 @@ from .thumbs import absolute_thumb, coded_thumb
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_SAM3_PRESET = "features"
-
-
-def create_blueprint(state: ReviewerState, *, dataset: Dataset, sam3=None) -> Blueprint:
+def create_blueprint(
+    state: ReviewerState,
+    *,
+    dataset: Dataset,
+    analyzer: AnalyzerWorkbench,
+) -> Blueprint:
     bp = Blueprint("reviewer", __name__)
 
     def _json_body() -> dict:
@@ -167,7 +172,7 @@ def create_blueprint(state: ReviewerState, *, dataset: Dataset, sam3=None) -> Bl
         except (FileNotFoundError, ValueError):
             abort(404)
 
-    # -------- full-resolution image + SAM3 ----------------------------
+    # -------- full-resolution image + analyzer ------------------------
 
     def _resolve_image_request() -> tuple[Path, str]:
         """Resolve the requested image to ``(abs_path, identifier)``.
@@ -203,62 +208,60 @@ def create_blueprint(state: ReviewerState, *, dataset: Dataset, sam3=None) -> Bl
             abort(404)
         return send_file(path)
 
-    @bp.get("/api/sam3/presets")
-    def api_sam3_presets():
-        return jsonify(
-            {
-                "presets": list(SAM3_QUERY_PRESETS.keys()),
-                "default": DEFAULT_SAM3_PRESET,
-            }
-        )
-
-    @bp.post("/api/sam3")
-    def api_sam3():
-        if sam3 is None:
-            return (
-                jsonify(
-                    {
-                        "error": (
-                            "SAM3 unavailable. Install the `local` extra "
-                            "(`uv sync --extra local`) and set ROBOFLOW_API_KEY."
-                        )
-                    }
-                ),
-                503,
-            )
-
-        data = request.get_json(force=True, silent=True) or {}
-        preset = (data.get("preset") or DEFAULT_SAM3_PRESET).strip()
-        if preset not in SAM3_QUERY_PRESETS:
-            return jsonify({"error": f"Unknown preset: {preset}"}), 400
-
+    @bp.post("/api/analyzer")
+    def api_analyzer():
         try:
             _path, identifier = _resolve_image_request()
         except ValueError as e:
             return jsonify({"error": str(e)}), 400
-
         try:
-            photo = dataset.get_photo(identifier)
+            run = analyzer.run(identifier)
         except KeyError:
-            return (
-                jsonify({"error": f"No photo with identifier: {identifier}"}),
-                404,
-            )
+            return jsonify({"error": f"No photo with identifier: {identifier}"}), 404
+        except AnalyzerUnavailableError as e:
+            return jsonify({"error": str(e)}), 503
+        except NoUsableEvidenceError as e:
+            return jsonify({"error": str(e)}), 422
+        except RuntimeError as e:
+            return jsonify({"error": str(e)}), 500
+        return jsonify({"runId": run.run_id, "analysis": run.summary})
 
+    @bp.get("/api/analyzer/<run_id>/dashboard.png")
+    def api_analyzer_dashboard(run_id: str):
         try:
-            detections = sam3.run(photo, preset)
-        except Exception as e:
-            logger.exception("SAM3 run failed for %s", identifier)
-            return jsonify({"error": f"SAM3 failed: {e}"}), 500
+            png = analyzer.dashboard_png(run_id)
+        except AnalyzerResultNotFoundError:
+            abort(404)
+        except RuntimeError as e:
+            return jsonify({"error": str(e)}), 500
+        return send_file(io.BytesIO(png), mimetype="image/png")
 
+    @bp.get("/api/analyzer/<run_id>/analysis.json")
+    def api_analyzer_json(run_id: str):
         try:
-            image = dataset.read_image(photo)
-            overlay = visualize_predictions(image, detections)
-            _ok, encoded = cv2.imencode(".jpg", overlay, [cv2.IMWRITE_JPEG_QUALITY, 88])
-        except Exception as e:
-            logger.exception("Failed to render SAM3 overlay for %s", identifier)
-            return jsonify({"error": f"Overlay failed: {e}"}), 500
+            contents = analyzer.json_bytes(run_id)
+            identifier = analyzer.get(run_id).photo.identifier
+        except AnalyzerResultNotFoundError:
+            abort(404)
+        return send_file(
+            io.BytesIO(contents),
+            mimetype="application/json",
+            as_attachment=True,
+            download_name=f"{identifier}_analysis.json",
+        )
 
-        return send_file(io.BytesIO(encoded.tobytes()), mimetype="image/jpeg")
+    @bp.get("/api/analyzer/<run_id>/ears/<side>.npy")
+    def api_analyzer_profile(run_id: str, side: str):
+        try:
+            contents = analyzer.profile_npy(run_id, side)
+            identifier = analyzer.get(run_id).photo.identifier
+        except (AnalyzerResultNotFoundError, KeyError, ValueError):
+            abort(404)
+        return send_file(
+            io.BytesIO(contents),
+            mimetype="application/octet-stream",
+            as_attachment=True,
+            download_name=f"{identifier}_{side}_tear_profile.npy",
+        )
 
     return bp
