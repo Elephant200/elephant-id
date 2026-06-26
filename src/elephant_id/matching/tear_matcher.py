@@ -1,7 +1,7 @@
-"""Minimal tear-profile matcher for elephant ear re-identification.
+"""Tear-profile matcher for elephant ear re-identification.
 
 A tear profile is a 1-D depth signal along one ear arc. Larger positive values
-mean deeper inward tears; negative values are clipped away before matching.
+mean deeper inward tears.
 """
 
 from __future__ import annotations
@@ -47,13 +47,14 @@ class TearMatcher:
         self,
         query: np.ndarray,
         candidate: np.ndarray,
-    ) -> dict[str, np.ndarray]:
-        """Match one query/candidate pair and return length-1 result arrays."""
+    ) -> dict[str, float]:
+        """Match one query/candidate pair and return scalar result values."""
         query_rows = self._as_profile_batch(query, "query")
         candidate_rows = self._as_profile_batch(candidate, "candidate")
         if len(query_rows) != 1 or len(candidate_rows) != 1:
             raise ValueError("match_pair expects one query profile and one candidate profile")
-        return self.match_row_pairs(query_rows, candidate_rows)
+        result = self.match_row_pairs(query_rows, candidate_rows)
+        return {key: float(value[0]) for key, value in result.items()}
 
     def match_row_pairs(
         self,
@@ -62,16 +63,12 @@ class TearMatcher:
     ) -> dict[str, np.ndarray]:
         """Match query rows to candidate rows.
 
-        Returns row-aligned arrays for score, distance, IoU, shift, stretch,
-        and shift penalty. A single query row may broadcast to many candidates.
+        Returns row-aligned arrays for score, distance, overlap score, shift,
+        stretch, and shift penalty.
         """
         query_rows = self._as_profile_batch(queries, "queries")
         candidate_rows = self._as_profile_batch(candidates, "candidates")
-        if query_rows.shape[1] != candidate_rows.shape[1]:
-            raise ValueError("queries and candidates must have the same profile length")
-        if len(query_rows) == 1 and len(candidate_rows) > 1:
-            query_rows = np.broadcast_to(query_rows, candidate_rows.shape)
-        elif query_rows.shape != candidate_rows.shape:
+        if query_rows.shape != candidate_rows.shape:
             raise ValueError("queries and candidates must have the same shape")
 
         # Outward bulges are not useful tear evidence for this matcher.
@@ -83,26 +80,29 @@ class TearMatcher:
 
         profile_count = len(query_resampled_profile)
         best_score = np.zeros(profile_count, dtype=np.float64)
-        best_iou = np.zeros(profile_count, dtype=np.float64)
+        best_overlap_score = np.zeros(profile_count, dtype=np.float64)
         best_shift = np.zeros(profile_count, dtype=np.int32)
         best_stretch = np.ones(profile_count, dtype=np.float64)
         best_penalty = np.ones(profile_count, dtype=np.float64)
 
         max_shift = round(self.config.max_shift_fraction * self.config.resampled_bins)
         shifts = np.arange(-max_shift, max_shift + 1, dtype=np.int32)
-        shift_penalties = np.exp(-(np.abs(shifts / self.config.resampled_bins) / self.config.shift_penalty_scale) ** self.config.shift_penalty_power)  # super-Gaussian shift penalty
+        shift_fractions = shifts / self.config.resampled_bins
+        shift_penalties = np.exp(
+            -((np.abs(shift_fractions) / self.config.shift_penalty_scale) ** self.config.shift_penalty_power)
+        )  # flat-topped super-Gaussian shift penalty
 
         for stretch in self.config.stretches:
             stretched = self._stretch_profile(query_resampled_profile, stretch)
 
             for shift, penalty in zip(shifts, shift_penalties, strict=True):
                 shifted = self._shift_profile(stretched, int(shift))
-                iou = self._profile_iou(shifted, candidate_resampled_profile)
-                score = iou * penalty
+                overlap_score = self._profile_overlap(shifted, candidate_resampled_profile)
+                score = overlap_score * penalty
 
                 update = score > best_score
                 best_score[update] = score[update]
-                best_iou[update] = iou[update]
+                best_overlap_score[update] = overlap_score[update]
                 best_shift[update] = shift
                 best_stretch[update] = stretch
                 best_penalty[update] = penalty
@@ -110,7 +110,7 @@ class TearMatcher:
         return {
             "score": best_score,
             "distance": 1.0 - best_score,
-            "iou": best_iou,
+            "overlap_score": best_overlap_score,
             "shift_bins": best_shift,
             "shift_fraction": best_shift / self.config.resampled_bins,
             "stretch": best_stretch,
@@ -131,32 +131,36 @@ class TearMatcher:
         return np.maximum(profile_rows, 0.0)
 
     def _resample_profiles(self, profile_rows: np.ndarray) -> np.ndarray:
-        """Resample profile rows to the matching resolution."""
-        raw_arc = np.linspace(0.0, 1.0, profile_rows.shape[1])
-        resampled_arc = np.linspace(0.0, 1.0, self.config.resampled_bins)
-        return np.vstack(
-            [np.interp(resampled_arc, raw_arc, profile) for profile in profile_rows]
+        """Linearly resample profile rows to the matching resolution."""
+        source_bins = np.linspace(0.0, profile_rows.shape[1] - 1, self.config.resampled_bins)
+        lower_bins = np.floor(source_bins).astype(np.int32)
+        upper_bins = np.minimum(lower_bins + 1, profile_rows.shape[1] - 1)
+        upper_weight = source_bins - lower_bins
+        return (
+            profile_rows[:, lower_bins] * (1.0 - upper_weight)
+            + profile_rows[:, upper_bins] * upper_weight
         )
 
     def _stretch_profile(self, resampled_profile: np.ndarray, stretch: float) -> np.ndarray:
-        """Stretch 2-D resampled profile rows around the middle of the ear arc."""
-        profile_arc = np.linspace(0.0, 1.0, self.config.resampled_bins)
-        source_arc = stretch * (profile_arc - 0.5) + 0.5  # keep arc center fixed
-        source_bin = source_arc * (self.config.resampled_bins - 1)
+        """Sample profiles with a centered stretch transform."""
+        output_arc = np.linspace(0.0, 1.0, self.config.resampled_bins)
+        source_arc = (output_arc - 0.5) / stretch + 0.5  # keep arc center fixed
+        source_bins = source_arc * (self.config.resampled_bins - 1)
         valid_source = (
-            (source_bin >= 0.0)
-            & (source_bin <= self.config.resampled_bins - 1)
+            (source_bins >= 0.0)
+            & (source_bins <= self.config.resampled_bins - 1)
         )
-        lower_bin = np.clip(
-            np.floor(source_bin).astype(np.int32),
+        unclipped_lower_bins = np.floor(source_bins).astype(np.int32)
+        lower_bins = np.clip(
+            unclipped_lower_bins,
             0,
             self.config.resampled_bins - 1,
         )
-        upper_bin = np.minimum(lower_bin + 1, self.config.resampled_bins - 1)
-        upper_weight = source_bin - lower_bin
+        upper_bins = np.minimum(lower_bins + 1, self.config.resampled_bins - 1)
+        upper_weight = source_bins - unclipped_lower_bins
         stretched = (
-            resampled_profile[:, lower_bin] * (1.0 - upper_weight)
-            + resampled_profile[:, upper_bin] * upper_weight
+            resampled_profile[:, lower_bins] * (1.0 - upper_weight)
+            + resampled_profile[:, upper_bins] * upper_weight
         )
         stretched[:, ~valid_source] = 0.0
         return stretched
@@ -172,14 +176,14 @@ class TearMatcher:
             shifted[:, :] = resampled_profile
         return shifted
 
-    def _profile_iou(
+    def _profile_overlap(
         self,
-        query_resampled_profile: np.ndarray,
-        candidate_resampled_profile: np.ndarray,
+        query_profile: np.ndarray,
+        candidate_profile: np.ndarray,
     ) -> np.ndarray:
         """Return area overlap over area union for each profile row."""
-        overlap = np.minimum(query_resampled_profile, candidate_resampled_profile).sum(axis=1)
-        union = np.maximum(query_resampled_profile, candidate_resampled_profile).sum(axis=1)
+        overlap = np.minimum(query_profile, candidate_profile).sum(axis=1)
+        union = np.maximum(query_profile, candidate_profile).sum(axis=1)
         return np.divide(overlap, union, out=np.zeros_like(overlap), where=union > 0)
 
     def match_gallery(
@@ -194,6 +198,8 @@ class TearMatcher:
         gallery_rows = np.asarray(gallery)
         if gallery_rows.ndim != 2:
             raise ValueError("gallery must be a 2-D profile array")
-        result = self.match_row_pairs(query_rows, gallery_rows)
+
+        query_batch = np.broadcast_to(query_rows[None, :], gallery_rows.shape)
+        result = self.match_row_pairs(query_batch, gallery_rows)
         result["order"] = np.argsort(result["score"])[::-1]
         return result
