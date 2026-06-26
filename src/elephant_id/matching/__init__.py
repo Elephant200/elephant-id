@@ -1,5 +1,5 @@
 """Tear-profile matching utilities."""
 
-from elephant_id.matching.matcher import MatcherConfig, TearMatcher
+from elephant_id.matching.tear_matcher import TearMatcher, TearMatcherConfig
 
-__all__ = ["MatcherConfig", "TearMatcher"]
+__all__ = ["TearMatcher", "TearMatcherConfig"]

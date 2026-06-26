@@ -8,7 +8,7 @@ import numpy as np
 
 
 @dataclass(frozen=True)
-class MatcherConfig:
+class TearMatcherConfig:
     """Parameters controlling resampling, shift penalties, and stretch search."""
 
     resampled_bins: int = 120
@@ -23,9 +23,9 @@ class MatcherConfig:
 class TearMatcher:
     """Score sparse tear-depth profiles with centered stretch and penalized shift."""
 
-    def __init__(self, config: MatcherConfig | None = None) -> None:
+    def __init__(self, config: TearMatcherConfig | None = None) -> None:
         """Create a matcher with the settled configuration."""
-        self.config = config or MatcherConfig()
+        self.config = config or TearMatcherConfig()
         if self.config.resampled_bins <= 0:
             raise ValueError("resampled_bins must be positive")
         if self.config.max_shift_fraction < 0:
