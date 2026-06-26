@@ -23,6 +23,21 @@ class TearMatcherConfig:
         default=(0.85, 0.90, 0.95, 1.00, 1.05, 1.10, 1.15)
     )
 
+    def __post_init__(self) -> None:
+        """Validate matcher parameters."""
+        if self.resampled_bins <= 0:
+            raise ValueError("resampled_bins must be positive")
+        if self.max_shift_fraction < 0:
+            raise ValueError("max_shift_fraction must be non-negative")
+        if self.shift_penalty_scale <= 0:
+            raise ValueError("shift_penalty_scale must be positive")
+        if self.shift_penalty_power <= 0:
+            raise ValueError("shift_penalty_power must be positive")
+        if not self.stretches:
+            raise ValueError("stretches must not be empty")
+        if any(stretch <= 0 for stretch in self.stretches):
+            raise ValueError("stretches must all be positive")
+
 
 class TearMatcher:
     """Score sparse tear-depth profiles with centered stretch and penalized shift."""
@@ -30,18 +45,6 @@ class TearMatcher:
     def __init__(self, config: TearMatcherConfig | None = None) -> None:
         """Create a matcher with the default configuration."""
         self.config = config or TearMatcherConfig()
-        if self.config.resampled_bins <= 0:
-            raise ValueError("resampled_bins must be positive")
-        if self.config.max_shift_fraction < 0:
-            raise ValueError("max_shift_fraction must be non-negative")
-        if self.config.shift_penalty_scale <= 0:
-            raise ValueError("shift_penalty_scale must be positive")
-        if self.config.shift_penalty_power <= 0:
-            raise ValueError("shift_penalty_power must be positive")
-        if not self.config.stretches:
-            raise ValueError("stretches must not be empty")
-        if any(stretch <= 0 for stretch in self.config.stretches):
-            raise ValueError("stretches must all be positive")
 
     def match_pair(
         self,
