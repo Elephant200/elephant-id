@@ -39,6 +39,46 @@ class TearMatcherConfig:
             raise ValueError("stretches must all be positive")
 
 
+@dataclass(frozen=True)
+class TearMatch:
+    """Best alignment for one query/candidate pair."""
+
+    score: float
+    distance: float
+    overlap_score: float
+    shift_bins: int
+    shift_fraction: float
+    stretch: float
+    penalty: float
+
+
+@dataclass(frozen=True)
+class TearMatchBatch:
+    """Row-aligned match results for paired query and candidate profiles."""
+
+    score: np.ndarray
+    distance: np.ndarray
+    overlap_score: np.ndarray
+    shift_bins: np.ndarray
+    shift_fraction: np.ndarray
+    stretch: np.ndarray
+    penalty: np.ndarray
+
+
+@dataclass(frozen=True)
+class TearMatchGallery:
+    """Gallery match results plus descending score order."""
+
+    score: np.ndarray
+    distance: np.ndarray
+    overlap_score: np.ndarray
+    shift_bins: np.ndarray
+    shift_fraction: np.ndarray
+    stretch: np.ndarray
+    penalty: np.ndarray
+    order: np.ndarray
+
+
 class TearMatcher:
     """Score sparse tear-depth profiles with centered stretch and penalized shift."""
 
@@ -50,20 +90,28 @@ class TearMatcher:
         self,
         query: np.ndarray,
         candidate: np.ndarray,
-    ) -> dict[str, float]:
+    ) -> TearMatch:
         """Match one query/candidate pair and return scalar result values."""
         query_rows = self._as_profile_batch(query, "query")
         candidate_rows = self._as_profile_batch(candidate, "candidate")
         if len(query_rows) != 1 or len(candidate_rows) != 1:
             raise ValueError("match_pair expects one query profile and one candidate profile")
         result = self.match_row_pairs(query_rows, candidate_rows)
-        return {key: float(value[0]) for key, value in result.items()}
+        return TearMatch(
+            score=float(result.score[0]),
+            distance=float(result.distance[0]),
+            overlap_score=float(result.overlap_score[0]),
+            shift_bins=int(result.shift_bins[0]),
+            shift_fraction=float(result.shift_fraction[0]),
+            stretch=float(result.stretch[0]),
+            penalty=float(result.penalty[0]),
+        )
 
     def match_row_pairs(
         self,
         queries: np.ndarray,
         candidates: np.ndarray,
-    ) -> dict[str, np.ndarray]:
+    ) -> TearMatchBatch:
         """Match query rows to candidate rows.
 
         Returns row-aligned arrays for score, distance, overlap score, shift,
@@ -110,15 +158,15 @@ class TearMatcher:
                 best_stretch[update] = stretch
                 best_penalty[update] = penalty
 
-        return {
-            "score": best_score,
-            "distance": 1.0 - best_score,
-            "overlap_score": best_overlap_score,
-            "shift_bins": best_shift,
-            "shift_fraction": best_shift / self.config.resampled_bins,
-            "stretch": best_stretch,
-            "penalty": best_penalty,
-        }
+        return TearMatchBatch(
+            score=best_score,
+            distance=1.0 - best_score,
+            overlap_score=best_overlap_score,
+            shift_bins=best_shift,
+            shift_fraction=best_shift / self.config.resampled_bins,
+            stretch=best_stretch,
+            penalty=best_penalty,
+        )
 
     def _as_profile_batch(self, profile: np.ndarray, name: str) -> np.ndarray:
         """Return one or more profiles as a 2-D float array."""
@@ -193,7 +241,7 @@ class TearMatcher:
         self,
         query: np.ndarray,
         gallery: np.ndarray,
-    ) -> dict[str, np.ndarray]:
+    ) -> TearMatchGallery:
         """Score one query profile against every gallery row and return rank order."""
         query_rows = np.asarray(query)
         if query_rows.ndim != 1:
@@ -204,5 +252,13 @@ class TearMatcher:
 
         query_batch = np.broadcast_to(query_rows[None, :], gallery_rows.shape)
         result = self.match_row_pairs(query_batch, gallery_rows)
-        result["order"] = np.argsort(result["score"])[::-1]
-        return result
+        return TearMatchGallery(
+            score=result.score,
+            distance=result.distance,
+            overlap_score=result.overlap_score,
+            shift_bins=result.shift_bins,
+            shift_fraction=result.shift_fraction,
+            stretch=result.stretch,
+            penalty=result.penalty,
+            order=np.argsort(result.score)[::-1],
+        )
