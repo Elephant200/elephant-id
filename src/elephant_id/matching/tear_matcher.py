@@ -93,9 +93,7 @@ class TearMatcher:
 
             for shift, penalty in zip(shifts, shift_penalties, strict=True):
                 shifted = self._shift_profile(stretched, int(shift))
-                overlap = np.minimum(shifted, candidate_resampled_profile).sum(axis=1)
-                union = np.maximum(shifted, candidate_resampled_profile).sum(axis=1)
-                iou = np.divide(overlap, union, out=np.zeros_like(overlap), where=union > 0)
+                iou = self._profile_iou(shifted, candidate_resampled_profile)
                 score = iou * penalty
 
                 update = score > best_score
@@ -170,6 +168,16 @@ class TearMatcher:
         else:
             shifted[:, :] = resampled_profile
         return shifted
+
+    def _profile_iou(
+        self,
+        query_resampled_profile: np.ndarray,
+        candidate_resampled_profile: np.ndarray,
+    ) -> np.ndarray:
+        """Return area overlap over area union for each profile row."""
+        overlap = np.minimum(query_resampled_profile, candidate_resampled_profile).sum(axis=1)
+        union = np.maximum(query_resampled_profile, candidate_resampled_profile).sum(axis=1)
+        return np.divide(overlap, union, out=np.zeros_like(overlap), where=union > 0)
 
     def match_gallery(
         self,
