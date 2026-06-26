@@ -74,6 +74,10 @@ class TearMatcher:
         elif query_rows.shape != candidate_rows.shape:
             raise ValueError("queries and candidates must have the same shape")
 
+        # Outward bulges are not useful tear evidence for this matcher.
+        query_rows = self._clip_negative_depths(query_rows)
+        candidate_rows = self._clip_negative_depths(candidate_rows)
+
         query_resampled_profile = self._resample_profiles(query_rows)
         candidate_resampled_profile = self._resample_profiles(candidate_rows)
 
@@ -122,18 +126,17 @@ class TearMatcher:
             raise ValueError(f"{name} must be a non-empty 1-D or 2-D array")
         return rows
 
+    def _clip_negative_depths(self, profile_rows: np.ndarray) -> np.ndarray:
+        """Discard outward-depth signal before matching."""
+        return np.maximum(profile_rows, 0.0)
+
     def _resample_profiles(self, profile_rows: np.ndarray) -> np.ndarray:
-        """Clip negative depths and average raw bins into matching bins."""
-        if profile_rows.shape[1] % self.config.resampled_bins:
-            raise ValueError(
-                "profile length must be divisible by resampled_bins for even averaging"
-            )
-        raw_bins_per_resampled_bin = profile_rows.shape[1] // self.config.resampled_bins
-        return np.maximum(profile_rows, 0.0).reshape(
-            len(profile_rows),
-            self.config.resampled_bins,
-            raw_bins_per_resampled_bin,
-        ).mean(axis=2)
+        """Resample profile rows to the matching resolution."""
+        raw_arc = np.linspace(0.0, 1.0, profile_rows.shape[1])
+        resampled_arc = np.linspace(0.0, 1.0, self.config.resampled_bins)
+        return np.vstack(
+            [np.interp(resampled_arc, raw_arc, profile) for profile in profile_rows]
+        )
 
     def _stretch_profile(self, resampled_profile: np.ndarray, stretch: float) -> np.ndarray:
         """Stretch 2-D resampled profile rows around the middle of the ear arc."""
