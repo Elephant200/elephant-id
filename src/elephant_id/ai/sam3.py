@@ -69,7 +69,7 @@ class Sam3Runner:
     ) -> None:
         resolved_api_key = api_key or os.getenv("ROBOFLOW_API_KEY")
         if not resolved_api_key:
-            logger.warning("ROBOFLOW_API_KEY is not set; SAM3 unavailable")
+            logger.error("ROBOFLOW_API_KEY is not set; SAM3 unavailable")
             raise ValueError("ROBOFLOW_API_KEY is not set")
         self.client = InferenceHTTPClient(
             api_url=ROBOFLOW_API_URL,
@@ -107,8 +107,8 @@ class Sam3Runner:
         )
 
         if not response or not response[0] or "predictions" not in response[0] or "predictions" not in response[0]["predictions"]:
-            logger.warning(f"SAM3 returned no predictions for preset {query_preset!r}")
-            raise ValueError(f"Unexpected response from SAM3: {response}")
+            logger.error(f"Unexpected response from SAM3: {response} for preset {query_preset!r}")
+            raise ValueError(f"Unexpected response from SAM3: {response} for preset {query_preset!r}")
 
         return [
             detection_from_prediction(prediction)
