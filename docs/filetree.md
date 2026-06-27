@@ -18,6 +18,8 @@ elephant-id/
 │   └── Interpreter pin (~matches `pyproject.toml` `>=3.12,<3.14`).
 ├── AGENTS.md
 │   └── Agent and contributor guidelines (commands, boundaries, code style, logging).
+├── CLAUDE.md
+│   └── Claude Code pointer to `AGENTS.md`.
 ├── LICENSE · README.md
 │   └── License and project intro.
 ├── pyproject.toml · uv.lock
@@ -30,6 +32,8 @@ elephant-id/
 ├── .cursor/
 │   └── rules/ [summarized]
 │       └── Agent rules (dataset safety, `ruff`, `uv run python`).
+├── .vscode/
+│   └── settings.json
 ├── .curvrank_ref/
 │   └── Reference Curvrank implementation (algo, curv, functional, stich.pyx, utils) used while porting ear-contour matching.
 ├── .git/ [summarized]
@@ -65,8 +69,12 @@ elephant-id/
 │   │   │   └── Package marker and module entry for `uv run python -m apps.visualization`.
 │   │   ├── actions.py
 │   │   │   └── Mutating visualization actions such as saving review state or interacting with dataset-derived records.
+│   │   ├── analyzer.py
+│   │   │   └── Session-only `AnalyzerWorkbench`: runs optional `PhotoAnalyzer`, retains results, and exports JSON/dashboard/profile artifacts.
+│   │   ├── analyzer_render.py
+│   │   │   └── Matplotlib dashboard renderer for full-photo analyzer diagnostics (`dashboard_png`).
 │   │   ├── app.py
-│   │   │   └── Flask app factory/runtime wiring that connects routes, configuration, and state for the local viewer.
+│   │   │   └── Flask app factory wiring routes, `ReviewerState`, and `AnalyzerWorkbench` for the local viewer.
 │   │   ├── config.py
 │   │   │   └── Visualization configuration values such as dataset paths and server defaults used by `app.py`.
 │   │   ├── filters.py
@@ -74,7 +82,7 @@ elephant-id/
 │   │   ├── paths.py
 │   │   │   └── Filesystem path helpers shared by visualization routes, thumbnail generation, and dataset access.
 │   │   ├── routes.py
-│   │   │   └── Flask route definitions that serve the index, images, thumbnails, and related viewer endpoints.
+│   │   │   └── Flask routes for the index, images, thumbnails, saved sightings, and analyzer API (`/api/analyzer`, dashboard PNG, JSON export).
 │   │   ├── samples.py
 │   │   │   └── Utilities for finding and presenting curated sample sightings from `dataset/samples`.
 │   │   ├── seek_codes.py
@@ -104,7 +112,7 @@ elephant-id/
 │   ├── goals.md
 │   │   └── Product and research goals for the Elephant ID system, referenced by architecture and implementation planning.
 │   ├── papers/ [summarized]
-│   │   └── Curvrank and SEEK reference PDFs plus `curvrank 1.tex`.
+│   │   └── Curvrank and SEEK reference PDFs plus `curvrank 1.tex` (including `SEEK_ System for Elephant Ear-pattern Knowledge ...pdf`).
 │   ├── pipeline.md
 │   │   └── Intended production pipeline: import, per-photo analysis, human-in-the-loop review, SEEK coding, and matching.
 │   ├── sam3_sample_response.json
@@ -175,9 +183,9 @@ elephant-id/
 │   │   │           └── Angular tear-depth profile: `tear_profile()` / `embed()` -> `TearProfile` or 1-D array.
 │   │   ├── matching/
 │   │   │   ├── __init__.py
-│   │   │   │   └── Matching subpackage stub.
-│   │   │   └── matcher.py
-│   │   │       └── Similarity computation stub for future matching workflow.
+│   │   │   │   └── Public tear-matching exports: `TearMatcher`, `TearMatcherConfig`, `TearMatch`, `TearMatchGallery`.
+│   │   │   └── tear_matcher.py
+│   │   │       └── Sparse tear-depth profile matcher: penalized shift, stretch search, pair scoring, and gallery ranking.
 │   │   ├── domain/
 │   │   │   ├── __init__.py
 │   │   │   │   └── Public data-model exports for `SeekCode`, `Photo`, and `Sighting`.
@@ -221,7 +229,7 @@ elephant-id/
 │   └── tear_doc_figures.py
 │       └── Regenerates decision-record diagrams for `docs/tear-embedding.md`.
 ├── model_weights/ [summarized]
-│   ├── anchor_extraction_yolo26/ · anchor_extraction_yolov11/
+│   ├── anchor_extraction_yolo26/ · anchor_extraction_yolo26_v2/ · anchor_extraction_yolov11/
 │   ├── ear_detection_yolo26/ · ear_segmentation_yolo26/
 │   ├── face_detection_yolov11/
 │   ├── sam3/
@@ -238,6 +246,10 @@ elephant-id/
 │   │   └── Visual QA: per-photo ear image beside its 1-D tear profile with detected events.
 │   ├── holes.py
 │   │   └── Ear-notch/hole contour exploration on masked ear crops via Laplacian-of-Gaussian filtering.
+│   ├── matching.py
+│   │   └── Database-vs-query tear-matching experiment: enroll/query split, retrieval metrics, and alignment-audit case figures.
+│   ├── quality.py
+│   │   └── Exploratory ear-image quality heuristic on `outputs/ear_segmentation_filtered` crops.
 │   ├── view.py
 │   │   └── Local script that runs SAM3, anchor, and ear analyzers across named preset photos with OpenCV display.
 │   ├── visualize_analyzer.py
