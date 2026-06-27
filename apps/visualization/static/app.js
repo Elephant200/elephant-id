@@ -39,6 +39,7 @@ const els = {
   analysisRawJson: document.getElementById("analysisRawJson"),
   analysisStatus: document.getElementById("analysisStatus"),
   analysisRunBtn: document.getElementById("analysisRunBtn"),
+  sam3RunBtn: document.getElementById("sam3RunBtn"),
   analysisDownloads: document.getElementById("analysisDownloads"),
   analysisDownloadBtn: document.getElementById("analysisDownloadBtn"),
   analysisDownloadItems: document.getElementById("analysisDownloadItems"),
@@ -281,7 +282,7 @@ function closeFilterModal(restoreSnapshot) {
   modalFiltersSnapshot = null;
 }
 
-let imageModalCtx = null; // { kind, path, originalUrl, runId, analysis }
+let imageModalCtx = null; // { kind, path, originalUrl, runId, analysis, sam3RunId, sam3 }
 let analysisRunning = false;
 let clickTimer = null;
 
@@ -295,6 +296,18 @@ function setAnalysisStatus(text, isError) {
 function buildImageUrl(ctx) {
   if (ctx.kind === "samples") return `/image?samplesRel=${encodeURIComponent(ctx.path)}`;
   return `/image?p=${encodeURIComponent(ctx.path)}`;
+}
+
+function modalImageRequestBody() {
+  if (!imageModalCtx) return {};
+  return imageModalCtx.kind === "samples"
+    ? { samplesRel: imageModalCtx.path }
+    : { imagePath: imageModalCtx.path };
+}
+
+function setModalActionButtonsDisabled(disabled) {
+  if (els.analysisRunBtn) els.analysisRunBtn.disabled = disabled;
+  if (els.sam3RunBtn) els.sam3RunBtn.disabled = disabled;
 }
 
 function clearAnalysisDisplay() {
@@ -343,6 +356,24 @@ function renderAnalysisSummary(analysis) {
   els.analysisEvidence.hidden = false;
 }
 
+function renderSam3Summary(sam3) {
+  if (!els.analysisEvidence || !els.analysisSummary || !els.analysisRawJson) return;
+  const host = els.analysisSummary;
+  host.innerHTML = "";
+  const presetCounts = sam3.presetCounts || {};
+  const classes = Object.entries(sam3.classCounts || {})
+    .map(([name, count]) => `${name}: ${count}`)
+    .join(" · ") || "none";
+  host.append(
+    summaryRow("Mode", "SAM3 overlay"),
+    summaryRow("Detections", `${sam3.totalDetections ?? 0} total`),
+    summaryRow("Presets", Object.entries(presetCounts).map(([name, count]) => `${name}: ${count}`).join(" · ") || "none"),
+    summaryRow("Classes", classes)
+  );
+  els.analysisRawJson.textContent = JSON.stringify(sam3, null, 2);
+  els.analysisEvidence.hidden = false;
+}
+
 function addDownloadLink(label, href) {
   if (!els.analysisDownloadItems) return;
   const link = document.createElement("a");
@@ -374,6 +405,8 @@ async function openImageModal({ kind, path, label }) {
     originalUrl: buildImageUrl({ kind, path }),
     runId: null,
     analysis: null,
+    sam3RunId: null,
+    sam3: null,
   };
   if (els.modalTitle) els.modalTitle.textContent = label || path;
   if (els.modalImage) {
@@ -395,20 +428,58 @@ function closeImageModal() {
   setAnalysisStatus("");
 }
 
+async function runSam3() {
+  if (analysisRunning || !imageModalCtx) return;
+  analysisRunning = true;
+  setAnalysisStatus("Running SAM3 overlay...");
+  setModalActionButtonsDisabled(true);
+  clearAnalysisDisplay();
+  try {
+    const res = await fetch("/api/sam3", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(modalImageRequestBody()),
+    });
+    if (!res.ok) {
+      let msg = `Request failed (${res.status})`;
+      try {
+        const j = await res.json();
+        if (j?.error) msg = j.error;
+      } catch {}
+      setAnalysisStatus(msg, true);
+      return;
+    }
+    const payload = await res.json();
+    imageModalCtx.sam3RunId = payload.runId;
+    imageModalCtx.sam3 = payload.sam3;
+    if (els.modalImage) {
+      els.modalImage.onload = () => setAnalysisStatus("SAM3 overlay");
+      els.modalImage.onerror = () => {
+        setAnalysisStatus("SAM3 completed, but the overlay could not render.", true);
+      };
+      els.modalImage.src = `/api/sam3/${encodeURIComponent(payload.runId)}/overlay.png`;
+    }
+    renderSam3Summary(payload.sam3 || {});
+    setAnalysisStatus("Rendering SAM3 overlay...");
+  } catch (e) {
+    setAnalysisStatus(String(e?.message || e), true);
+  } finally {
+    analysisRunning = false;
+    setModalActionButtonsDisabled(false);
+  }
+}
+
 async function runFullAnalysis() {
   if (analysisRunning || !imageModalCtx) return;
   analysisRunning = true;
   setAnalysisStatus("Running full photo analysis...");
-  if (els.analysisRunBtn) els.analysisRunBtn.disabled = true;
+  setModalActionButtonsDisabled(true);
+  clearAnalysisDisplay();
   try {
-    const body =
-      imageModalCtx.kind === "samples"
-        ? { samplesRel: imageModalCtx.path }
-        : { imagePath: imageModalCtx.path };
     const res = await fetch("/api/analyzer", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+      body: JSON.stringify(modalImageRequestBody()),
     });
     if (!res.ok) {
       let msg = `Request failed (${res.status})`;
@@ -436,7 +507,7 @@ async function runFullAnalysis() {
     setAnalysisStatus(String(e?.message || e), true);
   } finally {
     analysisRunning = false;
-    if (els.analysisRunBtn) els.analysisRunBtn.disabled = false;
+    setModalActionButtonsDisabled(false);
   }
 }
 
@@ -988,7 +1059,7 @@ document.addEventListener("keydown", (e) => {
     }
     if (e.key === "Enter" && !isEditableTarget(e.target)) {
       e.preventDefault();
-      void runFullAnalysis();
+      void runSam3();
       return;
     }
     if (e.key === "ArrowLeft" && !isEditableTarget(e.target)) {
@@ -1146,6 +1217,10 @@ els.imageModalClose?.addEventListener("click", () => closeImageModal());
 
 els.analysisRunBtn?.addEventListener("click", () => {
   void runFullAnalysis();
+});
+
+els.sam3RunBtn?.addEventListener("click", () => {
+  void runSam3();
 });
 
 els.analysisDownloadBtn?.addEventListener("click", () => {

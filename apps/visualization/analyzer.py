@@ -32,6 +32,10 @@ class AnalyzerResultNotFoundError(KeyError):
     """Raised when an in-memory analyzer result no longer exists."""
 
 
+class AnalyzerPhotoNotFoundError(KeyError):
+    """Raised when an analyzer request names a photo outside the dataset."""
+
+
 class NoUsableEvidenceError(RuntimeError):
     """Raised when a photo produces no usable analyzer evidence."""
 
@@ -110,6 +114,7 @@ def _profile_summary(profile: TearProfile) -> dict[str, Any]:
 def summarize_analysis(photo: Photo, analysis: dict[str, Any]) -> dict[str, Any]:
     """Create compact, user-facing evidence from a full analyzer result."""
     shared = analysis["shared_data"]
+    raw_ears = shared.get("raw_ears", shared.get("ears", []))
     ears = []
     for ear_data in analysis["ears"]:
         ear = ear_data["ear"]
@@ -130,7 +135,7 @@ def summarize_analysis(photo: Photo, analysis: dict[str, Any]) -> dict[str, Any]
         "gender": _json_value(analysis["gender"]),
         "featureCounts": {
             "trunks": len(shared["trunks"]),
-            "rawEars": len(shared["raw_ears"]),
+            "rawEars": len(raw_ears),
             "anchoredEars": len(analysis["ears"]),
             "tusks": len(analysis["tusks"]),
         },
@@ -157,7 +162,10 @@ class AnalyzerWorkbench:
         try:
             photo = self._dataset.get_photo(identifier)
         except KeyError:
-            raise
+            logger.error("No photo with identifier: %s", identifier)
+            raise AnalyzerPhotoNotFoundError(
+                f"No photo with identifier: {identifier}"
+            ) from None
 
         analyzer = self._get_analyzer()
         with self._run_lock:

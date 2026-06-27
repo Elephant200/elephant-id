@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from io import BytesIO
-from typing import Literal
+from typing import Any, Literal
 
 import cv2
 import matplotlib.pyplot as plt
@@ -42,6 +42,14 @@ def draw_box(
         2,
         cv2.LINE_AA,
     )
+
+
+def _feature_area(feature: Any) -> float:
+    """Return an area from either a detection method or geometry property."""
+    area = feature.area
+    if callable(area):
+        return float(area())
+    return float(area)
 
 
 def draw_polar_guides(
@@ -263,11 +271,11 @@ def build_analyzer_figure(
     tusks = ", ".join(
         f"{tusk['side']} {tusk['confidence']:.0%}" for tusk in analysis["tusks"]
     ) or "none"
-    raw_ears = shared_data["raw_ears"]
+    raw_ears = shared_data.get("raw_ears", shared_data.get("ears", []))
     ear_area_ratio_text = ""
     if len(raw_ears) == 2:
         larger_area, smaller_area = sorted(
-            (ear.area() for ear in raw_ears),
+            (_feature_area(ear) for ear in raw_ears),
             reverse=True,
         )
         ear_area_ratio_text = f"Ear area ratio: {larger_area / smaller_area:.2f}   |   "

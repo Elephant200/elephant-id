@@ -13,6 +13,7 @@ from elephant_id.log import configure_logging
 from .analyzer import AnalyzerWorkbench
 from .config import CODED_ROOT, CSV_PATH
 from .routes import create_blueprint
+from .sam3 import Sam3Workbench
 from .samples import reconcile_all_starred
 from .state import ReviewerState
 
@@ -36,12 +37,16 @@ def create_app() -> Flask:
     state.load(dataset)
     reconcile_all_starred()
     analyzer = AnalyzerWorkbench(dataset)
+    sam3 = Sam3Workbench(dataset)
 
     app = Flask(__name__, template_folder="templates", static_folder="static")
-    app.register_blueprint(create_blueprint(state, dataset=dataset, analyzer=analyzer))
+    app.register_blueprint(
+        create_blueprint(state, dataset=dataset, analyzer=analyzer, sam3=sam3)
+    )
     app.extensions["reviewer_state"] = state
     app.extensions["dataset"] = dataset
     app.extensions["analyzer_workbench"] = analyzer
+    app.extensions["sam3_workbench"] = sam3
     return app
 
 

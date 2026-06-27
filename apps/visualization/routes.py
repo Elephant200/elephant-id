@@ -16,6 +16,7 @@ from flask import Blueprint, abort, jsonify, render_template, request, send_file
 from elephant_id.dataset import Dataset
 
 from .analyzer import (
+    AnalyzerPhotoNotFoundError,
     AnalyzerResultNotFoundError,
     AnalyzerUnavailableError,
     AnalyzerWorkbench,
@@ -28,6 +29,12 @@ from .paths import (
     safe_saved_sighting_dir,
     safe_saved_sighting_file,
 )
+from .sam3 import (
+    Sam3PhotoNotFoundError,
+    Sam3ResultNotFoundError,
+    Sam3UnavailableError,
+    Sam3Workbench,
+)
 from .samples import first_priority_or_any_image, plain_basename
 from .state import ReviewerState, list_saved_sighting_entries
 from .thumbs import absolute_thumb, coded_thumb
@@ -39,6 +46,7 @@ def create_blueprint(
     *,
     dataset: Dataset,
     analyzer: AnalyzerWorkbench,
+    sam3: Sam3Workbench,
 ) -> Blueprint:
     bp = Blueprint("reviewer", __name__)
 
@@ -145,6 +153,7 @@ def create_blueprint(
             path = safe_saved_sighting_file(rel)
             return send_file(absolute_thumb(path, size), mimetype="image/jpeg")
         except ValueError:
+            logger.error("Error getting saved file thumb for rel: %s", rel)
             abort(404)
 
     @bp.get("/api/saved/thumb")
@@ -152,14 +161,17 @@ def create_blueprint(
         kind = (request.args.get("kind") or "sighting").strip()
         size = int(request.args.get("s", THUMB_MAX_SIZE))
         if kind != "sighting":
+            logger.error("Invalid kind: %s", kind)
             abort(404)
         rel = (request.args.get("rel") or "").strip()
         try:
             folder = safe_saved_sighting_dir(rel)
         except ValueError:
+            logger.error("Error getting saved sighting dir for rel: %s", rel)
             abort(404)
         first = first_priority_or_any_image(folder)
         if first is None:
+            logger.error("No first priority image found for rel: %s", rel)
             abort(404)
         return send_file(absolute_thumb(first, size), mimetype="image/jpeg")
 
@@ -170,6 +182,7 @@ def create_blueprint(
         try:
             return send_file(coded_thumb(rel, size), mimetype="image/jpeg")
         except (FileNotFoundError, ValueError):
+            logger.error("Error getting coded thumb for rel: %s", rel)
             abort(404)
 
     # -------- full-resolution image + analyzer ------------------------
@@ -205,8 +218,38 @@ def create_blueprint(
         try:
             path, _identifier = _resolve_image_request()
         except ValueError:
+            logger.error("Error resolving image request")
             abort(404)
         return send_file(path)
+
+    @bp.post("/api/sam3")
+    def api_sam3():
+        try:
+            _path, identifier = _resolve_image_request()
+        except ValueError as e:
+            return jsonify({"error": str(e)}), 400
+        try:
+            run = sam3.run(identifier)
+        except Sam3PhotoNotFoundError:
+            logger.error("No photo with identifier: %s", identifier)
+            return jsonify({"error": f"No photo with identifier: {identifier}"}), 404
+        except Sam3UnavailableError as e:
+            return jsonify({"error": str(e)}), 503
+        except RuntimeError as e:
+            return jsonify({"error": str(e)}), 500
+        return jsonify({"runId": run.run_id, "sam3": run.summary})
+
+    @bp.get("/api/sam3/<run_id>/overlay.png")
+    def api_sam3_overlay(run_id: str):
+        try:
+            png = sam3.overlay_png(run_id)
+        except Sam3ResultNotFoundError:
+            logger.error("SAM3 result not found for run ID: %s", run_id)
+            return jsonify({"error": f"SAM3 result not found for run ID: {run_id}"}), 404
+        except RuntimeError as e:
+            logger.error("Error rendering SAM3 overlay for run ID %s: %s", run_id, str(e))
+            return jsonify({"error": str(e)}), 500
+        return send_file(io.BytesIO(png), mimetype="image/png")
 
     @bp.post("/api/analyzer")
     def api_analyzer():
@@ -216,7 +259,8 @@ def create_blueprint(
             return jsonify({"error": str(e)}), 400
         try:
             run = analyzer.run(identifier)
-        except KeyError:
+        except AnalyzerPhotoNotFoundError:
+            logger.error("No photo with identifier: %s", identifier)
             return jsonify({"error": f"No photo with identifier: {identifier}"}), 404
         except AnalyzerUnavailableError as e:
             return jsonify({"error": str(e)}), 503
@@ -231,8 +275,10 @@ def create_blueprint(
         try:
             png = analyzer.dashboard_png(run_id)
         except AnalyzerResultNotFoundError:
-            abort(404)
+            logger.error("Analyzer result not found for run ID: %s", run_id)
+            return jsonify({"error": f"Analyzer result not found for run ID: {run_id}"}), 404
         except RuntimeError as e:
+            logger.error("Error rendering analyzer dashboard for run ID: %s: %s", run_id, str(e))
             return jsonify({"error": str(e)}), 500
         return send_file(io.BytesIO(png), mimetype="image/png")
 
@@ -242,7 +288,8 @@ def create_blueprint(
             contents = analyzer.json_bytes(run_id)
             identifier = analyzer.get(run_id).photo.identifier
         except AnalyzerResultNotFoundError:
-            abort(404)
+            logger.error("Analyzer result not found for run ID: %s", run_id)
+            return jsonify({"error": f"Analyzer result not found for run ID: {run_id}"}), 404
         return send_file(
             io.BytesIO(contents),
             mimetype="application/json",
@@ -256,7 +303,8 @@ def create_blueprint(
             contents = analyzer.profile_npy(run_id, side)
             identifier = analyzer.get(run_id).photo.identifier
         except (AnalyzerResultNotFoundError, KeyError, ValueError):
-            abort(404)
+            logger.error("Analyzer result not found for run ID: %s", run_id)
+            return jsonify({"error": f"Analyzer result not found for run ID: {run_id}"}), 404
         return send_file(
             io.BytesIO(contents),
             mimetype="application/octet-stream",
