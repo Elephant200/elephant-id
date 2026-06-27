@@ -334,7 +334,6 @@ def main() -> None:
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("photos", nargs="*")
-    parser.add_argument("--input", type=Path)
     parser.add_argument("--output-dir", type=Path, default=Path("outputs/analyzer"))
     parser.add_argument("--headless", action="store_true")
     args = parser.parse_args()
