@@ -129,83 +129,81 @@ elephant-id/
 
 ```text
 ├── src/
-│   ├── elephant_id/
-│   │   ├── __init__.py
-│   │   │   └── Package marker for `elephant_id`, enabling imports from code, scripts, and tests.
-│   │   ├── cache.py
-│   │   │   └── JSON cache manager used by AI services to persist expensive model responses under `.cache`.
-│   │   ├── constants.py
-│   │   │   └── Shared constants for SAM3 query presets, cache paths, thresholds, and Roboflow workflow identifiers.
-│   │   ├── dataset.py
-│   │   │   └── Dataset abstraction that loads `images.csv`, resolves `Photo` paths, groups `Sighting`s, and reads images with caching.
-│   │   ├── log.py
-│   │   │   └── Entry-point loguru configuration (`configure_logging()`); library code logs via `logger` only.
-│   │   ├── visualize.py
-│   │   │   └── Mask decoding and drawing utilities that convert model predictions into annotated `BgrImage`s.
-│   │   ├── ai/
-│   │   │   ├── __init__.py
-│   │   │   │   └── Public AI subpackage exports: `AgeService`, `AnchorService`, `Detection`, `GenderService`, `Sam3Service`.
-│   │   │   ├── age.py
-│   │   │   │   └── Age regression CNN runner and cached `AgeService` (local PyTorch; stub runner).
-│   │   │   ├── anchor.py
-│   │   │   │   └── Anchor keypoint YOLO26 runner and cached `AnchorService` (local ultralytics).
-│   │   │   ├── detection.py
-│   │   │   │   └── Typed `Detection` dataclass shared across AI services (box, mask, keypoints, serialization).
-│   │   │   ├── gender.py
-│   │   │   │   └── Gender classification CNN runner and cached `GenderService` (local PyTorch; stub runner).
-│   │   │   └── sam3.py
-│   │   │       └── Roboflow SAM3 workflow wrapper and cached `Sam3Service` that operates on `Dataset` and `Photo` objects.
-│   │   ├── coding/
-│   │   │   ├── __init__.py
-│   │   │   │   └── Public coding exports (`SeekCoder`).
-│   │   │   ├── coder.py
-│   │   │   │   └── `SeekCoder` orchestrates per-photo analysis into a sighting-level result dict (preview SEEK aggregation is still a stub).
-│   │   │   ├── photo_analyzer.py
-│   │   │   │   └── Runs SAM3, anchor, gender, and age models on a photo and delegates field evidence to per-field analyzers.
-│   │   │   ├── age.py
-│   │   │   │   └── `AgeFieldAnalyzer`; runs `AgeService` on the masked body crop.
-│   │   │   ├── gender.py
-│   │   │   │   └── `GenderFieldAnalyzer`; runs `GenderService` on the masked body crop.
-│   │   │   ├── tusks.py
-│   │   │   │   └── `TuskFieldAnalyzer`; infers tusk presence and side from tusk, trunk, and view evidence.
-│   │   │   └── ears/
-│   │   │       ├── __init__.py
-│   │   │       │   └── Public ear-field exports: `AnchoredEar`, `EarFieldAnalyzer`.
-│   │   │       ├── analyzer.py
-│   │   │       │   └── `EarFieldAnalyzer`: per-ear diagnostics, tear profiles, and tear/hole placeholders.
-│   │   │       ├── anchored_ear.py
-│   │   │       │   └── `AnchoredEar` and mask-to-anchor-contour preparation helpers.
-│   │   │       ├── geometry.py
-│   │   │       │   └── Ear-margin geometry primitives: densify, ring side paths, alpha shape, inward normals, nearest-crossing ray scans.
-│   │   │       └── tear_profile.py
-│   │   │           └── Angular tear-depth profile: `tear_profile()` / `embed()` -> `TearProfile` or 1-D array.
-│   │   ├── matching/
-│   │   │   ├── __init__.py
-│   │   │   │   └── Public tear-matching exports: `TearMatcher`, `TearMatcherConfig`, `TearMatch`, `TearMatchGallery`.
-│   │   │   └── tear_matcher.py
-│   │   │       └── Sparse tear-depth profile matcher: penalized shift, stretch search, pair scoring, and gallery ranking.
-│   │   ├── domain/
-│   │   │   ├── __init__.py
-│   │   │   │   └── Public data-model exports for `SeekCode`, `Photo`, and `Sighting`.
-│   │   │   ├── photo.py
-│   │   │   │   └── Immutable `Photo` dataclass validating identifier, path, elephant name, and sighting relationships.
-│   │   │   ├── seek_code.py
-│   │   │   │   └── Immutable SEEK code parser/formatter and validator used by datasets and tests.
-│   │   │   └── sighting.py
-│   │   │       └── Immutable `Sighting` dataclass that groups photos for one elephant/date and validates consistency.
-│   │   └── image/
-│   │       ├── __init__.py
-│   │       │   └── Re-exports canonical `BgrImage` type alias.
-│   │       ├── bgr.py
-│   │       │   └── `BgrImage` type alias (OpenCV HWC BGR uint8 convention).
-│   │       ├── boxes.py
-│   │       │   └── Bounding-box coordinate utilities (center/xyxy conversion, clipping; half-open float boxes).
-│   │       ├── masks.py
-│   │       │   └── COCO RLE mask decoding and mask geometry helpers.
-│   │       └── transforms.py
-│   │           └── Pixel-space crop/mask transforms producing `BgrImage` outputs.
-│   └── elephant_id.egg-info/ [summarized]
-│       └── Setuptools metadata generated during an editable/local build.
+│   └── elephant_id/
+│       ├── __init__.py
+│       │   └── Package marker for `elephant_id`, enabling imports from code, scripts, and tests.
+│       ├── cache.py
+│       │   └── JSON cache manager used by AI services to persist expensive model responses under `.cache`.
+│       ├── constants.py
+│       │   └── Shared constants for SAM3 query presets, cache paths, thresholds, and Roboflow workflow identifiers.
+│       ├── dataset.py
+│       │   └── Dataset abstraction that loads `images.csv`, resolves `Photo` paths, groups `Sighting`s, and reads images with caching.
+│       ├── log.py
+│       │   └── Entry-point loguru configuration (`configure_logging()`); library code logs via `logger` only.
+│       ├── visualize.py
+│       │   └── Mask decoding and drawing utilities that convert model predictions into annotated `BgrImage`s.
+│       ├── ai/
+│       │   ├── __init__.py
+│       │   │   └── Public AI subpackage exports: `AgeService`, `AnchorService`, `Detection`, `GenderService`, `Sam3Service`.
+│       │   ├── age.py
+│       │   │   └── Age regression CNN runner and cached `AgeService` (local PyTorch; stub runner).
+│       │   ├── anchor.py
+│       │   │   └── Anchor keypoint YOLO26 runner and cached `AnchorService` (local ultralytics).
+│       │   ├── detection.py
+│       │   │   └── Typed `Detection` dataclass shared across AI services (box, mask, keypoints, serialization).
+│       │   ├── gender.py
+│       │   │   └── Gender classification CNN runner and cached `GenderService` (local PyTorch; stub runner).
+│       │   └── sam3.py
+│       │       └── Roboflow SAM3 workflow wrapper and cached `Sam3Service` that operates on `Dataset` and `Photo` objects.
+│       ├── coding/
+│       │   ├── __init__.py
+│       │   │   └── Public coding exports (`SeekCoder`).
+│       │   ├── coder.py
+│       │   │   └── `SeekCoder` orchestrates per-photo analysis into a sighting-level result dict (preview SEEK aggregation is still a stub).
+│       │   ├── photo_analyzer.py
+│       │   │   └── Runs SAM3, anchor, gender, and age models on a photo and delegates field evidence to per-field analyzers.
+│       │   ├── age.py
+│       │   │   └── `AgeFieldAnalyzer`; runs `AgeService` on the masked body crop.
+│       │   ├── gender.py
+│       │   │   └── `GenderFieldAnalyzer`; runs `GenderService` on the masked body crop.
+│       │   ├── tusks.py
+│       │   │   └── `TuskFieldAnalyzer`; infers tusk presence and side from tusk, trunk, and view evidence.
+│       │   └── ears/
+│       │       ├── __init__.py
+│       │       │   └── Public ear-field exports: `AnchoredEar`, `EarFieldAnalyzer`.
+│       │       ├── analyzer.py
+│       │       │   └── `EarFieldAnalyzer`: per-ear diagnostics, tear profiles, and tear/hole placeholders.
+│       │       ├── anchored_ear.py
+│       │       │   └── `AnchoredEar` and mask-to-anchor-contour preparation helpers.
+│       │       ├── geometry.py
+│       │       │   └── Ear-margin geometry primitives: densify, ring side paths, alpha shape, inward normals, nearest-crossing ray scans.
+│       │       └── tear_profile.py
+│       │           └── Angular tear-depth profile: `tear_profile()` / `embed()` -> `TearProfile` or 1-D array.
+│       ├── matching/
+│       │   ├── __init__.py
+│       │   │   └── Public tear-matching exports: `TearMatcher`, `TearMatcherConfig`, `TearMatch`, `TearMatchGallery`.
+│       │   └── tear_matcher.py
+│       │       └── Sparse tear-depth profile matcher: penalized shift, stretch search, pair scoring, and gallery ranking.
+│       ├── domain/
+│       │   ├── __init__.py
+│       │   │   └── Public data-model exports for `SeekCode`, `Photo`, and `Sighting`.
+│       │   ├── photo.py
+│       │   │   └── Immutable `Photo` dataclass validating identifier, path, elephant name, and sighting relationships.
+│       │   ├── seek_code.py
+│       │   │   └── Immutable SEEK code parser/formatter and validator used by datasets and tests.
+│       │   └── sighting.py
+│       │       └── Immutable `Sighting` dataclass that groups photos for one elephant/date and validates consistency.
+│       └── image/
+│           ├── __init__.py
+│           │   └── Re-exports canonical `BgrImage` type alias.
+│           ├── bgr.py
+│           │   └── `BgrImage` type alias (OpenCV HWC BGR uint8 convention).
+│           ├── boxes.py
+│           │   └── Bounding-box coordinate utilities (center/xyxy conversion, clipping; half-open float boxes).
+│           ├── masks.py
+│           │   └── COCO RLE mask decoding and mask geometry helpers.
+│           └── transforms.py
+│               └── Pixel-space crop/mask transforms producing `BgrImage` outputs.
 ```
 
 ## Scripts, Legacy Code, Models, And Tests
