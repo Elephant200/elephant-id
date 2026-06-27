@@ -34,8 +34,6 @@ elephant-id/
 │       └── Agent rules (dataset safety, `ruff`, `uv run python`).
 ├── .vscode/
 │   └── settings.json
-├── .curvrank_ref/
-│   └── Reference Curvrank implementation (algo, curv, functional, stich.pyx, utils) used while porting ear-contour matching.
 ├── .git/ [summarized]
 │   └── Git internals.
 ├── .venv/ [summarized]
