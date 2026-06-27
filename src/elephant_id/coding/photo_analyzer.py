@@ -55,92 +55,33 @@ class PhotoAnalyzer:
         self.tusk_analyzer = TuskFieldAnalyzer()
 
     def analyze(self, photo: Photo) -> dict | None:
+        """Analyze one photo into flexible per-field evidence dictionaries."""
         body_detections = self.sam3.run(photo, "body")
         feature_detections = self.sam3.run(photo, "features")
 
-        # If nothing visible in the photo, return None; it's useless to analyze.
         if not body_detections or not feature_detections:
             return None
 
-        if len(body_detections) == 1:
-            body = body_detections[0]
-        else:
-            body_detections.sort(key=lambda d: d.area(), reverse=True)
-            # If largest elephant body is more than double the area of the second largest, use the largest; otherwise, flag.
-            if body_detections[0].area() / body_detections[1].area() > MIN_MULTIPLE_BODY_AREA_RATIO: # Arbitrary cutoff
-                body = body_detections[0]
-            else:
-                logger.warning(f"Multiple elephant bodies found in photo {photo}: {len(body_detections)}")
-                # TODO: FLAG FOR REVIEW
-                return None # for now; later, implement manual review process
+        body = self._choose_body(photo, body_detections)
+        if body is None:
+            return None
 
-        # Filter for features on the body itself
-        features_on_body: list[Detection] = []
-        for feature in feature_detections:
-            feature_area = feature.area()
-            if feature_area == 0.0:
-                continue
-            # Fraction of the feature's mask that lies on the body (not IoU).
-            overlap = feature.intersection_area(body) / feature_area
-            if overlap > MIN_FEATURE_BODY_OVERLAP:
-                features_on_body.append(feature)
-
-        # Categorize features
-        trunks: list[Detection] = []
-        ears: list[Detection] = []
-        tusks: list[Detection] = []
-        tails: list[Detection] = []
-        for feature in features_on_body:
-            if feature.class_name == "elephant trunk":
-                trunks.append(feature)
-            elif feature.class_name == "ear":
-                ears.append(feature)
-            elif feature.class_name == "tusk":
-                tusks.append(feature)
-            elif feature.class_name == "tail":
-                tails.append(feature)
-            else:
-                logger.warning(f"Unknown feature found in photo {photo}: {feature.class_name}")
-
-        if len(ears) > 2:
-            # TODO: flag for manual review
-            logger.warning(f"Multiple ears found in photo {photo}: {len(ears)}")
-            ears.sort(key=lambda d: d.area(), reverse=True)
-            ears = ears[:2] # placeholder for now
-
-        if len(ears) == 2:
-            # Compare sizes; if one is much larger than the other, ignore the smaller one
-            if ears[0].area() / ears[1].area() > MIN_MULTIPLE_EAR_AREA_RATIO:
-                ears = [ears[0]] # If one ear is much smaller, it's essentially not there.
-            elif ears[1].area() / ears[0].area() > MIN_MULTIPLE_EAR_AREA_RATIO:
-                ears = [ears[1]] # If one ear is much smaller, it's essentially not there.
-            # Leave both ears if they are similar size.
-
-        anchored_ears: list[AnchoredEar] = []
-        for ear in ears:
-            anchor_dets = self.anchor_model.run(photo, crop_xyxy=ear.xyxy)
-            if len(anchor_dets) == 0:
-                logger.warning(f"No anchor detections found for ear on {photo} (ear coords: {ear.xyxy})")
-                continue
-            elif len(anchor_dets) > 1:
-                logger.warning(f"Multiple anchor detections found for ear on {photo} (ear coords: {ear.xyxy}): {len(anchor_dets)}")
-                anchor_dets = sorted(anchor_dets, key=lambda d: d.confidence, reverse=True)
-            anchored_ears.append(AnchoredEar(ear, anchor_dets[0]))
+        features_on_body = self._features_on_body(body, feature_detections)
+        trunks, ears, tusks = self._group_features(photo, features_on_body)
+        ears = self._choose_usable_ears(photo, ears)
+        anchored_ears = self._anchor_ears(photo, ears)
 
         if len(anchored_ears) == 0:
             logger.warning(f"No good ears found in photo {photo}")
-            # Cancel ear analysis ONLY; continue with other analyses.
 
-        # Now, compute the view
-        view = self.compute_view(
+        view = self._estimate_view(
             body=body,
             ears=anchored_ears,
             trunks=trunks,
             tusks=tusks,
         )
 
-        # Prepare shared data for field analyzers
-        shared_data = {
+        feature_context = {
             "view": view,
             "body": body,
             "trunks": trunks,
@@ -148,15 +89,14 @@ class PhotoAnalyzer:
             "tusks": tusks,
         }
 
-        # Run specific field analyzers
-        age_evidence = self.age_analyzer.analyze(photo, shared_data)
-        gender_evidence = self.gender_analyzer.analyze(photo, shared_data)
-        ear_evidence = self.ear_analyzer.analyze(photo, shared_data)
-        tusk_evidence = self.tusk_analyzer.analyze(photo, shared_data)
+        age_evidence = self.age_analyzer.analyze(photo, feature_context)
+        gender_evidence = self.gender_analyzer.analyze(photo, feature_context)
+        ear_evidence = self.ear_analyzer.analyze(photo, feature_context)
+        tusk_evidence = self.tusk_analyzer.analyze(photo, feature_context)
 
         return {
             "view": view,
-            "shared_data": { # note: this is not json serializable
+            "shared_data": {
                 "body": body,
                 "trunks": trunks,
                 "ears": anchored_ears,
@@ -168,44 +108,139 @@ class PhotoAnalyzer:
             "tusks": tusk_evidence,
         }
 
-    def compute_view(self,
+    def _choose_body(
+        self,
+        photo: Photo,
+        body_detections: list[Detection],
+    ) -> Detection | None:
+        """Choose the body detection to analyze, or defer ambiguous photos."""
+        if len(body_detections) == 1:
+            return body_detections[0]
+
+        bodies_by_area = sorted(body_detections, key=lambda d: d.area(), reverse=True)
+        area_ratio = bodies_by_area[0].area() / bodies_by_area[1].area()
+        if area_ratio > MIN_MULTIPLE_BODY_AREA_RATIO:
+            return bodies_by_area[0]
+
+        logger.warning(
+            f"Multiple elephant bodies found in photo {photo}: {len(body_detections)}"
+        )
+        return None
+
+    def _features_on_body(
+        self,
+        body: Detection,
+        feature_detections: list[Detection],
+    ) -> list[Detection]:
+        """Keep feature detections mostly inside the selected body."""
+        features_on_body: list[Detection] = []
+        for feature in feature_detections:
+            feature_area = feature.area()
+            if feature_area == 0.0:
+                continue
+            # Body overlap is feature coverage, not IoU.
+            overlap = feature.intersection_area(body) / feature_area
+            if overlap > MIN_FEATURE_BODY_OVERLAP:
+                features_on_body.append(feature)
+        return features_on_body
+
+    def _group_features(
+        self,
+        photo: Photo,
+        features: list[Detection],
+    ) -> tuple[list[Detection], list[Detection], list[Detection]]:
+        """Split SAM3 feature detections into trunks, ears, and tusks."""
+        trunks: list[Detection] = []
+        ears: list[Detection] = []
+        tusks: list[Detection] = []
+        for feature in features:
+            if feature.class_name == "elephant trunk":
+                trunks.append(feature)
+            elif feature.class_name == "ear":
+                ears.append(feature)
+            elif feature.class_name == "tusk":
+                tusks.append(feature)
+            elif feature.class_name != "tail":
+                logger.warning(
+                    f"Unknown feature found in photo {photo}: {feature.class_name}"
+                )
+        return trunks, ears, tusks
+
+    def _choose_usable_ears(self, photo: Photo, ears: list[Detection]) -> list[Detection]:
+        """Keep the usable ear detections for downstream anchoring."""
+        if len(ears) > 2:
+            logger.warning(f"Multiple ears found in photo {photo}: {len(ears)}")
+            ears = sorted(ears, key=lambda d: d.area(), reverse=True)[:2]
+
+        if len(ears) != 2:
+            return ears
+
+        if ears[0].area() / ears[1].area() > MIN_MULTIPLE_EAR_AREA_RATIO:
+            return [ears[0]]
+        if ears[1].area() / ears[0].area() > MIN_MULTIPLE_EAR_AREA_RATIO:
+            return [ears[1]]
+        return ears
+
+    def _anchor_ears(self, photo: Photo, ears: list[Detection]) -> list[AnchoredEar]:
+        """Attach the best anchor detection to each usable ear."""
+        anchored_ears: list[AnchoredEar] = []
+        for ear in ears:
+            anchor_detections = self.anchor_model.run(photo, crop_xyxy=ear.xyxy)
+            if len(anchor_detections) == 0:
+                logger.warning(
+                    f"No anchor detections found for ear on {photo} "
+                    f"(ear coords: {ear.xyxy})"
+                )
+                continue
+            if len(anchor_detections) > 1:
+                logger.warning(
+                    f"Multiple anchor detections found for ear on {photo} "
+                    f"(ear coords: {ear.xyxy}): {len(anchor_detections)}"
+                )
+                anchor_detections = sorted(
+                    anchor_detections,
+                    key=lambda d: d.confidence,
+                    reverse=True,
+                )
+            anchored_ears.append(AnchoredEar(ear, anchor_detections[0]))
+        return anchored_ears
+
+    def _estimate_view(
+        self,
         body: Detection,
         ears: list[AnchoredEar],
         trunks: list[Detection],
         tusks: list[Detection],
     ) -> Literal["left", "right", "front", "unknown"]:
-        view = "unknown"
+        """Estimate elephant view from ears, then trunk/tusk horizontal position."""
         if len(ears) > 0:
             if len(ears) == 1:
-                view = ears[0].side
-            elif len(ears) == 2:
-                if ears[0].side == ears[1].side:
-                    logger.warning("Both ears are on the same side")
-                    view = "front" # fallback; may be wrong, but better than "unknown"
-                else:
-                    view = "front"
+                return ears[0].side
+            if ears[0].side == ears[1].side:
+                logger.warning("Both ears are on the same side")
+            return "front"
 
-        elif len(trunks) > 0: # Fallback to trunk positioning
-            relative_trunk_x = (trunks[0].xyxy[0] + trunks[0].xyxy[2]) / 2 - body.xyxy[0] # Center of trunk relative to body
-            body_width = body.xyxy[2] - body.xyxy[0]
-            ratio = relative_trunk_x / body_width
-            if ratio > 0.667:
-                view = "right"
-            elif ratio < 0.333:
-                view = "left"
-            else:
-                view = "front"
+        elif len(trunks) > 0:
+            trunk_center_x = (trunks[0].xyxy[0] + trunks[0].xyxy[2]) / 2
+            return self._view_from_horizontal_position(body, trunk_center_x)
 
-        elif len(tusks) > 0: # Fallback to tusk positioning
-            relative_tusk_x = sum((tusk.xyxy[0] + tusk.xyxy[2]) / 2 for tusk in tusks) / len(tusks) - body.xyxy[0]
-            # Center of tusks relative to body
-            body_width = body.xyxy[2] - body.xyxy[0]
-            ratio = relative_tusk_x / body_width
-            if ratio > 0.667:
-                view = "right"
-            elif ratio < 0.333:
-                view = "left"
-            else:
-                view = "front"
+        elif len(tusks) > 0:
+            tusk_center_x = sum(
+                (tusk.xyxy[0] + tusk.xyxy[2]) / 2 for tusk in tusks
+            ) / len(tusks)
+            return self._view_from_horizontal_position(body, tusk_center_x)
 
-        return view
+        return "unknown"
+
+    def _view_from_horizontal_position(
+        self,
+        body: Detection,
+        feature_center_x: float,
+    ) -> Literal["left", "right", "front"]:
+        """Map a feature center to left/front/right body thirds."""
+        ratio = (feature_center_x - body.xyxy[0]) / (body.xyxy[2] - body.xyxy[0])
+        if ratio > 0.667:
+            return "right"
+        if ratio < 0.333:
+            return "left"
+        return "front"
