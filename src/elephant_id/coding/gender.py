@@ -1,6 +1,6 @@
 """Gender field analyzer."""
 
-from elephant_id.ai import GenderService
+from elephant_id.ai.gender import GenderService
 from elephant_id.domain import Photo
 
 

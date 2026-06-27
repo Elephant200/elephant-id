@@ -3,7 +3,7 @@
 import numpy as np
 from loguru import logger
 
-from elephant_id.ai import Detection
+from elephant_id.ai.detection import Detection
 from elephant_id.domain import Photo
 
 

@@ -1,6 +1,6 @@
 """Age field analyzer."""
 
-from elephant_id.ai import AgeService
+from elephant_id.ai.age import AgeService
 from elephant_id.domain import Photo
 
 

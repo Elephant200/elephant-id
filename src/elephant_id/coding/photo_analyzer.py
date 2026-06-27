@@ -5,13 +5,11 @@ from typing import Literal
 
 from loguru import logger
 
-from elephant_id.ai import (
-    AgeService,
-    AnchorService,
-    Detection,
-    GenderService,
-    Sam3Service,
-)
+from elephant_id.ai.age import AgeService
+from elephant_id.ai.anchor import AnchorService
+from elephant_id.ai.detection import Detection
+from elephant_id.ai.gender import GenderService
+from elephant_id.ai.sam3 import Sam3Service
 from elephant_id.coding.age import AgeFieldAnalyzer
 from elephant_id.coding.ears import AnchoredEar, EarFieldAnalyzer
 from elephant_id.coding.gender import GenderFieldAnalyzer
