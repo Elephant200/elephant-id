@@ -459,11 +459,13 @@ source = { editable = "." }
 dependencies = [
     { name = "coverage" },
     { name = "loguru" },
+    { name = "matplotlib" },
     { name = "numpy" },
     { name = "opencv-python" },
     { name = "pandas" },
     { name = "pillow" },
     { name = "pycocotools" },
+    { name = "shapely" },
     { name = "tqdm" },
 ]
 
@@ -478,7 +480,6 @@ local = [
     { name = "inference-sdk" },
     { name = "python-dotenv" },
     { name = "roboflow" },
-    { name = "shapely" },
     { name = "timm" },
     { name = "torch" },
     { name = "torchvision" },
@@ -486,18 +487,19 @@ local = [
 ]
 visualization = [
     { name = "flask" },
-    { name = "matplotlib" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "coverage", specifier = ">=7.14.1" },
     { name = "loguru", specifier = ">=0.7.3" },
+    { name = "matplotlib", specifier = ">=3.10.0" },
     { name = "numpy", specifier = ">=2.0.0" },
     { name = "opencv-python", specifier = ">=4.8.1.78" },
     { name = "pandas", specifier = ">=3.0.3" },
     { name = "pillow", specifier = ">=12.2.0" },
     { name = "pycocotools", specifier = ">=2.0.11" },
+    { name = "shapely", specifier = ">=2.1.2" },
     { name = "tqdm", specifier = ">=4.67.3" },
 ]
 
@@ -512,16 +514,12 @@ local = [
     { name = "inference-sdk", specifier = ">=1.2.7" },
     { name = "python-dotenv", specifier = ">=1.2.2" },
     { name = "roboflow", specifier = ">=1.3.8" },
-    { name = "shapely", specifier = ">=2.1.2" },
     { name = "timm", specifier = ">=1.0.27" },
     { name = "torch", specifier = ">=2.12.0" },
     { name = "torchvision", specifier = ">=0.27.0" },
     { name = "ultralytics", specifier = ">=8.4.51" },
 ]
-visualization = [
-    { name = "flask", specifier = ">=3.1.3" },
-    { name = "matplotlib", specifier = ">=3.10.0" },
-]
+visualization = [{ name = "flask", specifier = ">=3.1.3" }]
 
 [[package]]
 name = "filelock"
