@@ -12,7 +12,9 @@ from dotenv import load_dotenv
 from loguru import logger
 from tqdm import tqdm
 
-from elephant_id.ai import AnchorService, Detection, Sam3Service
+from elephant_id.ai.anchor import AnchorService
+from elephant_id.ai.detection import Detection
+from elephant_id.ai.sam3 import Sam3Service
 from elephant_id.coding.ears import AnchoredEar
 from elephant_id.constants import (
     MIN_FEATURE_BODY_OVERLAP,

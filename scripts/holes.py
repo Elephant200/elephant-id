@@ -3,7 +3,8 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from elephant_id.ai import AnchorService, Sam3Service
+from elephant_id.ai.anchor import AnchorService
+from elephant_id.ai.sam3 import Sam3Service
 from elephant_id.coding.ears import AnchoredEar
 from elephant_id.dataset import Dataset
 from elephant_id.image.transforms import apply_crop, apply_mask
@@ -55,7 +56,6 @@ def trim_binary_mask(
 if __name__ == "__main__":
     from dotenv import load_dotenv
 
-    from elephant_id.ai import Sam3Service
     from elephant_id.dataset import Dataset
     from elephant_id.log import configure_logging
 
