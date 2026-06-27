@@ -18,7 +18,7 @@ class TearMatcherConfig:
     resampled_bins: int = 120
     max_shift_fraction: float = 0.15  # fraction of the resampled profile length
     shift_penalty_scale: float = 0.08
-    shift_penalty_power: float = 8.0
+    shift_penalty_power: float = 4.0
     stretches: tuple[float, ...] = field(
         default=(0.85, 0.90, 0.95, 1.00, 1.05, 1.10, 1.15)
     )
