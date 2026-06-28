@@ -3,8 +3,10 @@ import pytest
 
 from elephant_id.ai.detection import Detection
 from elephant_id.visualize import (
+    align_tear_profile_for_plot,
     apply_alpha_mask,
     draw_rle_mask_overlay,
+    tear_profile_ymax,
     visualize_predictions,
 )
 
@@ -58,6 +60,37 @@ def test_apply_alpha_mask_rejects_shape_mismatch():
 
     with pytest.raises(ValueError, match="mask shape"):
         apply_alpha_mask(image, mask)
+
+
+def test_align_tear_profile_for_plot_shifts_profile():
+    profile = np.array([0.0, 1.0, 0.0, 0.0])
+
+    aligned = align_tear_profile_for_plot(profile, shift_fraction=0.25, stretch=1.0)
+
+    assert np.array_equal(aligned, np.array([0.0, 0.0, 1.0, 0.0]))
+
+
+def test_align_tear_profile_for_plot_stretches_profile():
+    profile = np.array([0.0, 0.0, 1.0, 0.0, 0.0])
+
+    aligned = align_tear_profile_for_plot(profile, shift_fraction=0.0, stretch=2.0)
+
+    assert np.allclose(aligned, np.array([0.0, 0.5, 1.0, 0.5, 0.0]))
+
+
+def test_align_tear_profile_for_plot_rejects_invalid_stretch():
+    with pytest.raises(ValueError, match="stretch"):
+        align_tear_profile_for_plot(np.zeros(3), shift_fraction=0.0, stretch=0.0)
+
+
+def test_tear_profile_ymax_uses_robust_positive_limit():
+    profiles = np.array([[0.0, 1.0], [0.0, 2.0]])
+
+    assert 2.1 < tear_profile_ymax(profiles) < 2.2
+
+
+def test_tear_profile_ymax_has_minimum_for_flat_profiles():
+    assert tear_profile_ymax(np.zeros((2, 4))) == 0.08
 
 
 def test_visualize_predictions_draws_box_and_preserves_shape():
