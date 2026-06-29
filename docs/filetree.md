@@ -83,6 +83,8 @@ elephant-id/
 │   │   │   └── Flask routes for the index, images, thumbnails, saved sightings, and analyzer API (`/api/analyzer`, dashboard PNG, JSON export).
 │   │   ├── samples.py
 │   │   │   └── Utilities for finding and presenting curated sample sightings from `dataset/samples`.
+│   │   ├── sam3.py
+│   │   │   └── Session-only SAM3 overlay runs for the visualization app (body/features presets, in-memory job state).
 │   │   ├── seek_codes.py
 │   │   │   └── SEEK-code presentation and parsing helpers for the visualization UI.
 │   │   ├── state.py
@@ -141,7 +143,7 @@ elephant-id/
 │       ├── log.py
 │       │   └── Entry-point loguru configuration (`configure_logging()`); library code logs via `logger` only.
 │       ├── visualize.py
-│       │   └── Mask decoding and drawing utilities that convert model predictions into annotated `BgrImage`s.
+│       │   └── Mask decoding, prediction overlays, and tear-profile diagnostic plotting helpers (OpenCV + Matplotlib).
 │       ├── ai/
 │       │   ├── __init__.py
 │       │   │   └── Public AI subpackage exports: `AgeService`, `AnchorService`, `Detection`, `GenderService`, `Sam3Service`.
@@ -240,6 +242,8 @@ elephant-id/
 │   │   └── Generate, augment, and export anchor keypoint training data from dataset photos.
 │   ├── ear_embedding.py
 │   │   └── Visual QA: per-photo ear image beside its 1-D tear profile with detected events.
+│   ├── evaluation.py
+│   │   └── Evaluate tear-profile retrieval on the filtered good-ear set: metrics, case figures, and gallery ranking.
 │   ├── holes.py
 │   │   └── Ear-notch/hole contour exploration on masked ear crops via Laplacian-of-Gaussian filtering.
 │   ├── matching.py
