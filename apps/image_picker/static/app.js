@@ -3,6 +3,7 @@ const els = {
   progress: document.getElementById("progress"),
   identityName: document.getElementById("identityName"),
   identityMeta: document.getElementById("identityMeta"),
+  doneBanner: document.getElementById("doneBanner"),
   statusLine: document.getElementById("statusLine"),
   grid: document.getElementById("grid"),
   prevBtn: document.getElementById("prevBtn"),
@@ -69,17 +70,15 @@ function syncChrome() {
     `Right ${right.doneIdentities || 0}/${right.targetDoneIdentities || 100}`;
   const pool = appState?.pool || {};
   const scan = appState?.queueScan || {};
-  const scanState = scan.running
-    ? `scanning ${scan.processed || 0}/${scan.queueSize || 0}`
-    : `scan complete ${scan.processed || scan.pairCached || 0}/${scan.queueSize || 0}`;
+  const scanState = scan.running ? "scanning" : "scan complete";
   const current = scan.current ? ` · current ${scan.current}` : "";
   const errors = scan.futureError || (scan.errors || [])[0];
   const errorText = errors ? ` · latest error ${errors}` : "";
   els.subtitle.textContent =
-    `${pool.eligibleIdentities || 0} eligible identities · ` +
-    `${scan.pairReady || 0}/${scan.queueSize || 0} ready pairs · ` +
-    `${scan.pairCached || 0}/${scan.queueSize || 0} cached pairs · ` +
-    `${scanState}${current}${errorText} · manifest ${appState?.manifestPath || ""}`;
+    `${pool.eligibleIdentities || 0} eligible · ` +
+    `${scan.ready || 0} ready collected · ` +
+    `${scanState} ${scan.scanned || 0}/${scan.poolSize || 0}${current}${errorText} · ` +
+    `manifest ${appState?.manifestPath || ""}`;
 }
 
 async function loadState() {
@@ -101,22 +100,30 @@ function renderIdentity(payload) {
   clearTimeout(waitPollTimer);
   currentIdentity = payload.identity;
   els.identityName.textContent = `${payload.identity || ""} · ${payload.side}`;
-  const minSelections = payload.minSelections || 4;
-  const maxSelections = payload.maxSelections || 5;
+  const minSelections = payload.minSelections;
+  const maxSelections = payload.maxSelections;
+  const selectionRange = selectionRangeText(minSelections, maxSelections);
   els.identityMeta.textContent =
     payload.pairReady
       ? `${payload.candidateCount || 0} accepted crops · ` +
-        `${payload.selectedCount || 0}/${minSelections} selected`
+        `${payload.selectedCount || 0} selected, need ${selectionRange}`
       : pairWaitingText(payload);
   els.footerLeft.textContent = !payload.pairReady
-    ? "Waiting for a 25-left / 25-right ready elephant."
+    ? `Waiting for an elephant with enough images and sightings on both sides.`
     : payload.done
-      ? "Exported"
-      : `Select exactly ${minSelections} images.`;
+      ? `Exported. Adjust picks and click Overwrite to replace.`
+      : `Select ${selectionRange} images.`;
   els.footerRight.textContent = payload.status;
   const selectionReady =
     payload.selectedCount >= minSelections && payload.selectedCount <= maxSelections;
-  els.doneBtn.disabled = !payload.pairReady || payload.done || !selectionReady;
+  els.doneBtn.disabled = !payload.pairReady || !selectionReady;
+  els.doneBtn.textContent = payload.done ? "Overwrite" : "Done";
+
+  els.doneBanner.hidden = !payload.bothDone;
+  if (payload.bothDone) {
+    els.doneBanner.textContent =
+      "✓ This elephant is done — left and right are exported. Editing a side and clicking Overwrite replaces the saved selection.";
+  }
 
   if (!payload.pairReady) {
     els.statusLine.textContent = pairWaitingText(payload);
@@ -128,8 +135,8 @@ function renderIdentity(payload) {
       `Fewer than ${minSelections} accepted crops for this side. Move to another identity.`;
   } else {
     els.statusLine.textContent = payload.done
-      ? "This identity is already in the high-quality manifest."
-      : `Review crops and check exactly ${minSelections} images.`;
+      ? `This side is exported. Re-check ${selectionRange} images and click Overwrite to replace it.`
+      : `Review crops and check ${selectionRange} images.`;
   }
 
   els.grid.innerHTML = "";
@@ -144,7 +151,6 @@ function renderIdentity(payload) {
     const input = document.createElement("input");
     input.type = "checkbox";
     input.checked = !!candidate.selected;
-    input.disabled = !!payload.done;
     input.addEventListener("change", async () => {
       try {
         setBusy(true, "Updating selection...");
@@ -179,11 +185,28 @@ function renderIdentity(payload) {
 
 function pairWaitingText(payload) {
   const pair = payload.pairStatus || {};
-  const left = pair.leftCount == null ? "loading" : String(pair.leftCount);
-  const right = pair.rightCount == null ? "loading" : String(pair.rightCount);
-  const min = payload.minSideCandidates || 25;
-  if (pair.loading) return `Loading candidates · left ${left}/${min} · right ${right}/${min}`;
-  return `Not enough candidates · left ${left}/${min} · right ${right}/${min}`;
+  const left = sideReadinessText(pair.left);
+  const right = sideReadinessText(pair.right);
+  const rule = readinessRuleText(payload.readinessRule);
+  if (pair.loading) return `Loading candidates · left ${left} · right ${right} · ${rule}`;
+  return `Not enough candidates · left ${left} · right ${right} · ${rule}`;
+}
+
+function sideReadinessText(counts) {
+  if (!counts) return "loading";
+  return `${counts.imageCount} images, ${counts.sightingCount} sightings`;
+}
+
+function readinessRuleText(rule) {
+  const minSightings = rule?.minSightings ?? 4;
+  const minImages = rule?.minImages ?? 15;
+  const fallbackImages = rule?.fallbackImages ?? 25;
+  return `need at least ${minSightings} sightings and ${minImages} images, or ${fallbackImages} images`;
+}
+
+function selectionRangeText(minSelections, maxSelections) {
+  if (minSelections === maxSelections) return String(minSelections);
+  return `${minSelections}-${maxSelections}`;
 }
 
 async function refreshWhileWaiting() {

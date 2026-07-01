@@ -12,13 +12,10 @@ from elephant_id.domain import Photo
 
 from .config import (
     CSV_PATH,
-    FILTERED_CROPS_ROOT,
-    IMAGE_EXTENSIONS,
-    MIN_IDENTITY_PHOTOS,
-    MIN_SIGHTINGS,
+    FALLBACK_READY_IMAGES,
+    MIN_READY_IMAGES,
+    MIN_READY_SIGHTINGS,
     QUEUE_SEED,
-    QUEUE_SIZE,
-    SIDES,
 )
 
 
@@ -45,10 +42,9 @@ class PhotoRecord:
 class PhotoCatalog:
     """Read-only metadata index used by the picker."""
 
-    def __init__(self, records: list[PhotoRecord], filtered_sides: dict[str, set[str]]) -> None:
+    def __init__(self, records: list[PhotoRecord]) -> None:
         """Build secondary indexes over dataset rows."""
         self.records = records
-        self.filtered_sides = filtered_sides
         self.by_identifier = {record.identifier: record for record in records}
         self.by_identity: dict[str, list[PhotoRecord]] = defaultdict(list)
         self.sightings_by_identity: dict[str, set[str]] = defaultdict(set)
@@ -57,12 +53,8 @@ class PhotoCatalog:
             self.sightings_by_identity[record.name].add(record.date)
 
     @classmethod
-    def from_paths(
-        cls,
-        csv_path: Path = CSV_PATH,
-        filtered_root: Path = FILTERED_CROPS_ROOT,
-    ) -> PhotoCatalog:
-        """Load the dataset metadata and filtered-crop side hints."""
+    def from_paths(cls, csv_path: Path = CSV_PATH) -> PhotoCatalog:
+        """Load the dataset metadata."""
         records: list[PhotoRecord] = []
         with csv_path.open(newline="") as file:
             for row in csv.DictReader(file):
@@ -75,85 +67,41 @@ class PhotoCatalog:
                         seek_code=row.get("seek_code") or "",
                     )
                 )
-        return cls(records=records, filtered_sides=_read_filtered_sides(filtered_root))
+        return cls(records=records)
 
     def eligible_identities(self) -> list[str]:
         """Return identities with enough source photos and sightings."""
         return [
             name
             for name, records in self.by_identity.items()
-            if len(records) >= MIN_IDENTITY_PHOTOS
-            and len(self.sightings_by_identity[name]) >= MIN_SIGHTINGS
+            if identity_is_ready(
+                image_count=len({record.identifier for record in records}),
+                sighting_count=len(self.sightings_by_identity[name]),
+            )
         ]
 
-    def shared_queue(self, size: int = QUEUE_SIZE) -> list[str]:
-        """Return one deterministic identity queue shared by both sides."""
-        eligible = set(self.eligible_identities())
-        both = [
-            name for name in eligible
-            if {"left", "right"}.issubset(self.filtered_sides.get(name, set()))
-        ]
-        one_side = [
-            name for name in eligible
-            if self.filtered_sides.get(name, set()) and name not in both
-        ]
-        remaining = [name for name in eligible if name not in both and name not in one_side]
+    def scan_pool(self) -> list[str]:
+        """Return every eligible identity in a deterministic shuffled scan order.
 
-        ordered: list[str] = []
-        for label, group in (("both", both), ("one", one_side), ("rest", remaining)):
-            shuffled = sorted(group)
-            random.Random(f"{QUEUE_SEED}:shared:{label}").shuffle(shuffled)
-            ordered.extend(shuffled)
-        return ordered[:size]
-
-    def queue_for_side(self, side: str, size: int = QUEUE_SIZE) -> list[str]:
-        """Return the shared identity queue for compatibility with callers."""
-        if side not in SIDES:
-            raise ValueError(f"Invalid side: {side}")
-        return self.shared_queue(size=size)
+        The picker scans this pool in order and keeps the first identities that
+        clear the per-side candidate bar, so all eligible identities are
+        reachable rather than only a fixed prefix.
+        """
+        pool = sorted(self.eligible_identities())
+        random.Random(f"{QUEUE_SEED}:scan-pool").shuffle(pool)
+        return pool
 
     def summary(self) -> dict:
         """Return aggregate candidate-pool counts for UI diagnostics."""
-        eligible = set(self.eligible_identities())
         return {
             "datasetIdentities": len(self.by_identity),
-            "eligibleIdentities": len(eligible),
-            "filteredIdentities": len(self.filtered_sides),
-            "bothFilteredSideHints": sum(
-                1
-                for name in eligible
-                if {"left", "right"}.issubset(self.filtered_sides.get(name, set()))
-            ),
-            "leftFilteredSideHints": sum(
-                1 for name in eligible if "left" in self.filtered_sides.get(name, set())
-            ),
-            "rightFilteredSideHints": sum(
-                1 for name in eligible if "right" in self.filtered_sides.get(name, set())
-            ),
+            "eligibleIdentities": len(self.eligible_identities()),
         }
 
 
-def _read_filtered_sides(filtered_root: Path) -> dict[str, set[str]]:
-    """Read side hints from existing filtered crop filenames."""
-    by_name: dict[str, set[str]] = defaultdict(set)
-    if not filtered_root.is_dir():
-        return by_name
-    for path in filtered_root.iterdir():
-        if not path.is_file() or path.suffix not in IMAGE_EXTENSIONS:
-            continue
-        identifier, side = parse_crop_filename(path)
-        if identifier is None or side is None:
-            continue
-        # Identifiers end in _YYYY-MM-DD_sequence; rsplit preserves names with spaces/underscores.
-        name = identifier.rsplit("_", maxsplit=2)[0]
-        by_name[name].add(side)
-    return by_name
-
-
-def parse_crop_filename(path: Path) -> tuple[str | None, str | None]:
-    """Return ``(photo_identifier, side)`` for a side crop filename."""
-    if path.stem.endswith("_left"):
-        return path.stem[:-5], "left"
-    if path.stem.endswith("_right"):
-        return path.stem[:-6], "right"
-    return None, None
+def identity_is_ready(*, image_count: int, sighting_count: int) -> bool:
+    """Return whether counts pass the picker diversity-or-volume rule."""
+    return (
+        sighting_count >= MIN_READY_SIGHTINGS
+        and image_count >= MIN_READY_IMAGES
+    ) or image_count >= FALLBACK_READY_IMAGES

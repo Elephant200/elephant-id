@@ -124,16 +124,31 @@ main {
   margin-bottom: 12px;
 }
 
+.done-banner {
+  margin-bottom: 12px;
+  padding: 9px 12px;
+  border: 1px solid var(--good);
+  border-radius: 8px;
+  background: rgba(101, 214, 138, 0.12);
+  color: var(--good);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.done-banner[hidden] {
+  display: none;
+}
+
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  grid-template-columns: repeat(3, 1fr);
   gap: 12px;
 }
 
 .tile {
   position: relative;
   display: block;
-  min-height: 260px;
+  min-height: 420px;
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -158,7 +173,7 @@ main {
 
 .tile img {
   width: 100%;
-  height: 260px;
+  height: 420px;
   object-fit: contain;
   display: block;
   background: #050607;
