@@ -295,7 +295,9 @@ def update_hand_annotated_data(input_dir: Path, output_dir: Path) -> None:
             filename = image["extra"]["name"]
             del image["extra"]
             del image["date_captured"]
-            filename = "_".join([filename.split("_")[0].replace("-", " ")] + filename.split("_")[1:])
+            filename = "_".join(
+                [filename.split("_")[0].replace("-", " "), *filename.split("_")[1:]]
+            )
 
             # Change the coco data to match the canonical filename, and rename the file to match the canonical filename.
             shutil.copy2(input_dir / dataset_name / roboflow_filename, output_dir / dataset_name / filename)
