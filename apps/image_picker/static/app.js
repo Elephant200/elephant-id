@@ -103,16 +103,16 @@ function renderIdentity(payload) {
   const minSelections = payload.minSelections;
   const maxSelections = payload.maxSelections;
   const selectionRange = selectionRangeText(minSelections, maxSelections);
+  const selectionSummary = sideSelectionSummary(payload);
   els.identityMeta.textContent =
     payload.pairReady
-      ? `${payload.candidateCount || 0} accepted crops · ` +
-        `${payload.selectedCount || 0} selected, need ${selectionRange}`
+      ? `${payload.candidateCount || 0} accepted crops`
       : pairWaitingText(payload);
   els.footerLeft.textContent = !payload.pairReady
     ? `Waiting for an elephant with enough images and sightings on both sides.`
     : payload.done
-      ? `Exported. Adjust picks and click Overwrite to replace.`
-      : `Select ${selectionRange} images.`;
+      ? `${selectionSummary} · Exported. Adjust picks and click Overwrite to replace.`
+      : `${selectionSummary} · Select ${selectionRange} images.`;
   els.footerRight.textContent = payload.status;
   const selectionReady =
     payload.selectedCount >= minSelections && payload.selectedCount <= maxSelections;
@@ -207,6 +207,13 @@ function readinessRuleText(rule) {
 function selectionRangeText(minSelections, maxSelections) {
   if (minSelections === maxSelections) return String(minSelections);
   return `${minSelections}-${maxSelections}`;
+}
+
+function sideSelectionSummary(payload) {
+  const selections = payload.sideSelections || {};
+  const left = selections.left ?? 0;
+  const right = selections.right ?? 0;
+  return `Left ${left} selected · Right ${right} selected`;
 }
 
 async function refreshWhileWaiting() {

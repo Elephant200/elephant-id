@@ -176,6 +176,7 @@ class PickerState:
             done = identity in self._done[side]
             both_done = self._identity_fully_done_unlocked(identity)
             pair = self._pair_status_unlocked(identity)
+            side_selections = self._side_selection_counts_unlocked(identity)
         candidates = result.candidates[:MAX_PHOTOS_PER_IDENTITY_ANALYSIS] if pair["ready"] else ()
         return {
             "side": side,
@@ -190,6 +191,7 @@ class PickerState:
                 for candidate in result.candidates
                 if candidate.candidate_id in selected
             }),
+            "sideSelections": side_selections,
             "done": done,
             "bothDone": both_done,
             "pairReady": pair["ready"],
@@ -353,6 +355,25 @@ class PickerState:
     def _identity_fully_done_unlocked(self, identity: str) -> bool:
         """Return whether an identity is exported on both sides."""
         return all(identity in self._done[side] for side in SIDES)
+
+    def _side_selection_counts_unlocked(self, identity: str) -> dict[str, int]:
+        """Return selected unique-photo counts for each side of an identity."""
+        return {
+            side: self._selected_photo_count_unlocked(side, identity)
+            for side in SIDES
+        }
+
+    def _selected_photo_count_unlocked(self, side: str, identity: str) -> int:
+        """Return selected unique-photo count for one side of an identity."""
+        result = self._identity_cache.get((side, identity))
+        if result is None:
+            return len(self._manifest_exports.get((side, identity), set()))
+        selected_ids = self._selected.get((side, identity), set())
+        return len({
+            candidate.photo_identifier
+            for candidate in result.candidates
+            if candidate.candidate_id in selected_ids
+        })
 
     def _pair_status_unlocked(self, identity: str) -> dict:
         """Return whether an identity has enough cached candidates on both sides."""
