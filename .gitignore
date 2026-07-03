@@ -214,3 +214,7 @@ dataset/
 
 # Outputs
 outputs/
+
+# Desktop app / browser tooling
+node_modules/
+.playwright-mcp/
