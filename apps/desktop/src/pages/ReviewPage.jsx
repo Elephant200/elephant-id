@@ -1,87 +1,251 @@
-import { imageUrl } from '../api.js';
+import { useEffect, useState } from 'react';
+import { approveEvidence, getAnalysis, imageUrl } from '../api.js';
+import ContourEditor from '../components/ContourEditor.jsx';
 import { ZoomImage } from '../components/Lightbox.jsx';
 import PhotoEvidenceCard from '../components/PhotoEvidenceCard.jsx';
 
-export default function ReviewPage({ sighting, setRoute }) {
+const SIDES = ['left', 'right'];
+
+export default function ReviewPage({
+  sighting,
+  setSighting,
+  refreshSightings,
+  setStage,
+  setPendingDecision,
+  onEditContour,
+}) {
+  const [analysis, setAnalysis] = useState(null);
+  const [selected, setSelected] = useState({ left: null, right: null });
+  const [error, setError] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [editingContour, setEditingContour] = useState(null); // { side, candidate }
+
+  const openContourEditor = (side, candidate) => {
+    if (onEditContour) onEditContour(side, candidate);
+    else setEditingContour({ side, candidate });
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!sighting || sighting.status !== 'ready') {
+      setAnalysis(null);
+      return undefined;
+    }
+    getAnalysis(sighting.sighting_id)
+      .then((payload) => {
+        if (cancelled) return;
+        setAnalysis(payload);
+        setSelected({
+          left: payload.approved_evidence?.left?.candidate_id || null,
+          right: payload.approved_evidence?.right?.candidate_id || null,
+        });
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err.message);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [sighting]);
+
   if (!sighting || sighting.status !== 'ready') {
     return (
       <div>
-        <h1 className="screen-title">Review evidence</h1>
+        <h1 className="screen-title">Evidence review</h1>
         <div className="empty-note">ANALYZE A SIGHTING FIRST</div>
       </div>
     );
   }
 
-  const bySide = { left: [], right: [] };
-  sighting.photos.forEach((photo) => {
-    photo.ears.forEach((ear) => {
-      if (ear.crop_path && bySide[ear.side]) {
-        bySide[ear.side].push({ photo_id: photo.photo_id, crop_path: ear.crop_path });
-      }
-    });
-  });
+  const candidates = analysis?.ear_candidates || { left: [], right: [] };
+  const canApprove = SIDES.every((side) => selected[side]);
+  const missingSides = SIDES.filter((side) => candidates[side].length === 0);
+
+  const selectedCandidateFor = (side) =>
+    candidates[side].find((item) => item.candidate_id === selected[side]) || null;
+
+  const approve = async () => {
+    setError(null);
+    setBusy(true);
+    try {
+      const updated = await approveEvidence(sighting.sighting_id, selected.left, selected.right);
+      setSighting(updated);
+      refreshSightings();
+      setStage('match');
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const leaveUnresolved = () => {
+    setPendingDecision({ action: 'unresolved', elephantName: null });
+    setStage('confirm');
+  };
 
   return (
     <div>
-      <h1 className="screen-title">Review evidence</h1>
+      <h1 className="screen-title">Evidence review</h1>
       <p className="screen-sub">
-        Check what the models saw before matching. Each photo shows its
-        detections (body, ears, tusks, anchors), the anchored ear crops, and
-        the tear-depth embedding along the outer ear margin — the signal the
-        matcher compares. Click any image to view it full size.
+        Select one left ear and one right ear for the analysis package, then
+        approve the evidence to continue to matching.
       </p>
 
-      <div className="panel">
-        <div className="panel-title">
-          BEST EAR EVIDENCE
-          <span className="badge ok">{sighting.profile_count} PROFILES</span>
+      {error && (
+        <div className="error-note" data-testid="error-note">
+          {error}
         </div>
-        <div className="side-columns">
-          {['left', 'right'].map((side) => (
-            <div key={side} className="side-column">
-              <div className={`badge ${side}`} style={{ marginBottom: 8 }}>
-                {side} ear · {bySide[side].length} photo
-                {bySide[side].length === 1 ? '' : 's'}
+      )}
+
+      {missingSides.length > 0 && (
+        <div className="error-note" data-testid="missing-side-blocker">
+          V1 matching requires approved evidence for both sides. No valid{' '}
+          {missingSides.join(' or ')} ear candidate passed the preview filter, so
+          this sighting can only be saved as unresolved.
+        </div>
+      )}
+
+      <div className="side-columns review-candidate-grid">
+        {SIDES.map((side) => {
+          const contour = selectedCandidateFor(side);
+          return (
+            <section className="panel" key={side}>
+              <div className="panel-title">
+                {side} ear
+                <span className={`badge ${side}`}>
+                  {candidates[side].length} candidate{candidates[side].length === 1 ? '' : 's'}
+                </span>
               </div>
-              {bySide[side].length === 0 ? (
-                <div className="empty-note">NO {side.toUpperCase()} EAR FOUND</div>
+              {candidates[side].length === 0 ? (
+                <div className="empty-note">NO VALID {side.toUpperCase()} EAR CANDIDATES</div>
               ) : (
-                <div className="repr-row">
-                  {bySide[side].map((ear, index) => (
-                    <figure className="repr-ear" key={`${ear.photo_id}-${index}`}>
+                <>
+                  <div className="panel-footnote">
+                    Ranking is a temporary preview heuristic based on crop aspect
+                    ratio and pixel area.
+                  </div>
+                  <div className="candidate-tiles">
+                    {candidates[side].map((candidate) => (
+                      <button
+                        type="button"
+                        key={candidate.candidate_id}
+                        className={`ear-candidate ${
+                          selected[side] === candidate.candidate_id ? 'selected' : ''
+                        }`}
+                        data-testid={`candidate-${side}-${candidate.profile_row_index}`}
+                        onClick={() =>
+                          setSelected((current) => ({
+                            ...current,
+                            [side]: candidate.candidate_id,
+                          }))
+                        }
+                      >
+                        <span className="candidate-crop">
+                          <ZoomImage
+                            src={imageUrl(candidate.crop_path)}
+                            alt={`${side} ear candidate`}
+                            caption={`${candidate.file_name} - ${side} ear candidate`}
+                          />
+                        </span>
+                        <span className="candidate-detail">
+                          <span className="candidate-name">{candidate.file_name}</span>
+                          <span className="candidate-sub">
+                            aspect {candidate.aspect_ratio.toFixed(2)} ·{' '}
+                            {candidate.pixel_area.toLocaleString()} px
+                          </span>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                  {contour && contour.contour && (
+                    <div className="contour-hook">
                       <ZoomImage
-                        src={imageUrl(ear.crop_path)}
-                        alt={`${side} ear ${ear.photo_id}`}
-                        caption={`${ear.photo_id} — ${side} ear`}
+                        src={imageUrl(contour.crop_path)}
+                        alt={`${side} selected crop`}
+                        caption={`${contour.file_name} - selected ${side} ear`}
                       />
-                      <figcaption>{ear.photo_id}</figcaption>
-                    </figure>
-                  ))}
-                </div>
+                      <div className="contour-hook-detail">
+                        <span className="candidate-name">{contour.file_name}</span>
+                        <span className="mono-dim">
+                          Adjust the approved crop and ear outline before matching.
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        className="btn"
+                        data-testid={`edit-contour-${side}`}
+                        onClick={() => openContourEditor(side, contour)}
+                      >
+                        Open contour editor
+                      </button>
+                    </div>
+                  )}
+                </>
               )}
-            </div>
+            </section>
+          );
+        })}
+      </div>
+
+      <details className="disclosure">
+        <summary>Source photos &amp; full analysis ({sighting.photos.length} photos)</summary>
+        <div className="disclosure-body">
+          {sighting.photos.map((photo) => (
+            <PhotoEvidenceCard key={photo.file_name} photo={photo} />
           ))}
         </div>
-      </div>
+      </details>
 
-      <div className="panel-title" style={{ marginBottom: 12 }}>
-        PHOTO DRILL-DOWN · {sighting.photos.length} PHOTOS
-      </div>
-      {sighting.photos.map((photo) => (
-        <PhotoEvidenceCard key={photo.file_name} photo={photo} />
-      ))}
-
-      <div className="page-actions">
+      <div className="action-bar" data-testid="review-action-bar">
+        <div className="action-bar-status">
+          <div className="action-bar-line">
+            {SIDES.map((side, index) => {
+              const candidate = selectedCandidateFor(side);
+              return (
+                <span key={side}>
+                  {index > 0 && <span className="side-tag"> · </span>}
+                  <span className="side-tag">{side.toUpperCase()} </span>
+                  {candidate ? (
+                    <>
+                      <span className="ok-tick">✓</span> {candidate.file_name}
+                    </>
+                  ) : (
+                    <span className="missing">— not selected</span>
+                  )}
+                </span>
+              );
+            })}
+          </div>
+          <div className="action-bar-hint">
+            {canApprove
+              ? 'Both ears selected — ready to approve'
+              : 'Select one left and one right ear'}
+          </div>
+        </div>
+        {missingSides.length > 0 && (
+          <button type="button" className="btn ghost" onClick={leaveUnresolved}>
+            Leave unresolved
+          </button>
+        )}
         <button
           type="button"
           className="btn primary"
-          data-testid="to-match"
-          disabled={sighting.profile_count === 0}
-          onClick={() => setRoute('match')}
+          data-testid="approve-evidence"
+          disabled={busy || !canApprove}
+          onClick={approve}
         >
-          Continue to matching
+          {busy ? 'Approving evidence...' : 'Approve evidence'}
         </button>
       </div>
+
+      {editingContour && (
+        <ContourEditor
+          side={editingContour.side}
+          candidate={editingContour.candidate}
+          onClose={() => setEditingContour(null)}
+        />
+      )}
     </div>
   );
 }

@@ -37,7 +37,12 @@ MODERATE_IMPOSTOR_PERCENTILE = 90.0
 
 @dataclass(frozen=True)
 class SideEvidence:
-    """Best same-side profile pair supporting one candidate elephant."""
+    """Best same-side profile pair supporting one candidate elephant.
+
+    ``query_profile`` and ``gallery_profile`` are exported after alignment
+    (best-match stretch and shift applied to the query) so genuine matches
+    plot as visually overlapping curves.
+    """
 
     side: str
     score: float
@@ -48,6 +53,8 @@ class SideEvidence:
     query_profile: tuple[float, ...] = ()
     gallery_profile: tuple[float, ...] = ()
     strength: str = ""
+    alignment_shift_degrees: float = 0.0
+    alignment_stretch: float = 1.0
 
 
 @dataclass(frozen=True)
@@ -228,6 +235,11 @@ class MatchingEngine:
                     best = int(np.argmax(calibrated))
                     best_query = query_rows[best // len(gallery_rows)]
                     best_gallery = gallery_rows[best % len(gallery_rows)]
+                    aligned_query, aligned_gallery, pair_match = (
+                        self._matcher.align_pair(
+                            query[best_query], self._profiles[best_gallery]
+                        )
+                    )
                     evidence.append(
                         SideEvidence(
                             side=side,
@@ -236,9 +248,13 @@ class MatchingEngine:
                             gallery_photo_id=self._photo_ids[best_gallery],
                             gallery_date=self._dates[best_gallery],
                             gallery_crop_path=self._crop_paths[best_gallery],
-                            query_profile=plot_profile(query[best_query]),
-                            gallery_profile=plot_profile(self._profiles[best_gallery]),
+                            query_profile=plot_profile(aligned_query),
+                            gallery_profile=plot_profile(aligned_gallery),
                             strength=self._strength_label(float(calibrated[best])),
+                            alignment_shift_degrees=round(
+                                pair_match.shift_fraction * 180.0, 1
+                            ),
+                            alignment_stretch=round(pair_match.stretch, 3),
                         )
                     )
                 if not evidence:

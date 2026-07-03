@@ -1,4 +1,4 @@
-export default function AnalyzePage({ sighting, setRoute }) {
+export default function AnalyzePage({ sighting, setStage }) {
   if (!sighting) {
     return <EmptyState message="IMPORT A SIGHTING FOLDER FIRST" />;
   }
@@ -14,8 +14,8 @@ export default function AnalyzePage({ sighting, setRoute }) {
     <div>
       <h1 className="screen-title">Analyze photos</h1>
       <p className="screen-sub">
-        Each photo is segmented for body and ears, anchored at stable keypoints,
-        and traced into a tear-depth profile along the outer ear margin.
+        Each source photo is analyzed into an analysis package with suggested
+        ear evidence and tear profiles for reviewer approval.
       </p>
 
       {sighting.status === 'failed' && (
@@ -66,7 +66,7 @@ export default function AnalyzePage({ sighting, setRoute }) {
               type="button"
               className="btn primary"
               data-testid="to-review"
-              onClick={() => setRoute('review')}
+              onClick={() => setStage('review')}
             >
               Continue to review
             </button>

@@ -1,56 +1,29 @@
 import { useCallback, useEffect, useState } from 'react';
+import elephantsAliveLogo from '../src/assets/elephants-alive.png';
 import { getHealth, getSighting, listSightings } from './api.js';
 import { LightboxProvider } from './components/Lightbox.jsx';
-import AnalyzePage from './pages/AnalyzePage.jsx';
 import CatalogPage from './pages/CatalogPage.jsx';
-import FilePage from './pages/FilePage.jsx';
 import ImportPage from './pages/ImportPage.jsx';
 import LabPage from './pages/LabPage.jsx';
-import MatchPage from './pages/MatchPage.jsx';
-import ReviewPage from './pages/ReviewPage.jsx';
+import QueuePage from './pages/QueuePage.jsx';
+import SettingsPage from './pages/SettingsPage.jsx';
 
-// Sidebar pages follow the user-facing pipeline steps in docs/pipeline.md:
-// import a folder, analyze photos, review evidence, match, file the decision.
-const WORKFLOW_STEPS = [
+const NAV_ITEMS = [
+  { id: 'queue', label: 'Queue' },
   { id: 'import', label: 'Import' },
-  { id: 'analyze', label: 'Analyze' },
-  { id: 'review', label: 'Review' },
-  { id: 'match', label: 'Match' },
-  { id: 'file', label: 'File' },
+  { id: 'catalog', label: 'Catalog' },
+  { id: 'lab', label: 'Lab' },
+  { id: 'settings', label: 'Settings' },
 ];
-
-function stepEnabled(stepId, sighting) {
-  switch (stepId) {
-    case 'import':
-      return true;
-    case 'analyze':
-      return Boolean(sighting);
-    case 'review':
-      return Boolean(sighting && sighting.status === 'ready');
-    case 'match':
-      return Boolean(sighting && sighting.status === 'ready' && sighting.profile_count > 0);
-    case 'file':
-      return Boolean(sighting && (sighting.match || sighting.decision));
-    default:
-      return false;
-  }
-}
-
-function stepForSighting(sighting) {
-  if (!sighting) return 'import';
-  if (sighting.status === 'analyzing' || sighting.status === 'failed') return 'analyze';
-  if (sighting.decision) return 'file';
-  if (sighting.match) return 'match';
-  return 'review';
-}
 
 export default function App() {
   const [health, setHealth] = useState(null);
-  const [route, setRoute] = useState('import');
+  const [route, setRoute] = useState('queue');
   const [sightings, setSightings] = useState([]);
   const [activeSightingId, setActiveSightingId] = useState(null);
   const [sighting, setSighting] = useState(null);
   const [selectedCandidate, setSelectedCandidate] = useState(null);
+  const [pendingDecision, setPendingDecision] = useState(null);
 
   const refreshSightings = useCallback(async () => {
     try {
@@ -114,13 +87,15 @@ export default function App() {
   const openSighting = (record) => {
     setActiveSightingId(record.sighting_id);
     setSelectedCandidate(null);
-    setRoute(stepForSighting(record));
+    setPendingDecision(null);
+    setRoute('queue');
   };
 
   const startNewSighting = () => {
     setActiveSightingId(null);
     setSighting(null);
     setSelectedCandidate(null);
+    setPendingDecision(null);
     setRoute('import');
   };
 
@@ -138,14 +113,26 @@ export default function App() {
   const engineReady = health.engine_ready;
   const pageProps = {
     engineReady,
+    health,
+    sightings,
     sighting,
     setSighting,
+    activeSightingId,
     setActiveSightingId,
     refreshSightings,
     setRoute,
     selectedCandidate,
     setSelectedCandidate,
+    pendingDecision,
+    setPendingDecision,
     startNewSighting,
+  };
+
+  const clearActive = () => {
+    setActiveSightingId(null);
+    setSighting(null);
+    setSelectedCandidate(null);
+    setPendingDecision(null);
   };
 
   return (
@@ -167,85 +154,42 @@ export default function App() {
 
       <aside className="sidebar">
         <div className="side-section">
-          <div className="side-label">Workflow</div>
-          {WORKFLOW_STEPS.map((step, index) => {
-            const enabled = stepEnabled(step.id, sighting);
-            return (
-              <button
-                key={step.id}
-                type="button"
-                className={`nav-btn ${route === step.id ? 'active' : ''}`}
-                disabled={!enabled}
-                data-testid={`nav-${step.id}`}
-                onClick={() => setRoute(step.id)}
-              >
-                <span className="num">{String(index + 1).padStart(2, '0')}</span>
-                {step.label}
-              </button>
-            );
-          })}
-        </div>
-
-        <div className="side-section">
-          <div className="side-label">Reference</div>
-          <button
-            type="button"
-            className={`nav-btn ${route === 'catalog' ? 'active' : ''}`}
-            data-testid="nav-catalog"
-            onClick={() => setRoute('catalog')}
-          >
-            <span className="num">◆</span> Catalog
-          </button>
-          <button
-            type="button"
-            className={`nav-btn ${route === 'lab' ? 'active' : ''}`}
-            data-testid="nav-lab"
-            onClick={() => setRoute('lab')}
-          >
-            <span className="num">⚗</span> Lab
-          </button>
-        </div>
-
-        <div className="side-section">
-          <div className="side-label">Sightings</div>
-          {sightings.length === 0 && (
-            <div className="mono-dim">none yet — import a folder to begin</div>
-          )}
-          {sightings.map((record) => (
+          <div className="side-label">Navigation</div>
+          {NAV_ITEMS.map((item, index) => (
             <button
-              key={record.sighting_id}
+              key={item.id}
               type="button"
-              className={`sighting-item ${
-                record.sighting_id === activeSightingId ? 'active' : ''
-              }`}
-              title={record.folder}
-              onClick={() => openSighting(record)}
+              className={`nav-btn ${route === item.id ? 'active' : ''}`}
+              data-testid={`nav-${item.id}`}
+              onClick={() => {
+                if (item.id === 'queue') {
+                  clearActive();
+                }
+                setRoute(item.id);
+              }}
             >
-              <span className="row1">
-                <span>{record.folder_name}</span>
-                <span className={`badge ${record.decision ? 'ok' : ''}`}>
-                  {record.decision
-                    ? record.decision.elephant_name || 'unresolved'
-                    : record.status}
-                </span>
-              </span>
-              <span className="row2">
-                {new Date(record.created_at).toLocaleDateString()} ·{' '}
-                {record.profile_count} profiles
-              </span>
+              <span className="num">{String(index + 1).padStart(2, '0')}</span>
+              {item.label}
             </button>
           ))}
+        </div>
+
+        <div className="sidebar-brand">
+          <img
+            className="sidebar-brand-logo"
+            src={elephantsAliveLogo}
+            alt="Elephants Alive"
+          />
+          <div className="sidebar-brand-caption">Field ID Console · v0.1.0</div>
         </div>
       </aside>
 
       <main className="main">
         {route === 'import' && <ImportPage {...pageProps} />}
-        {route === 'analyze' && <AnalyzePage {...pageProps} />}
-        {route === 'review' && <ReviewPage {...pageProps} />}
-        {route === 'match' && <MatchPage {...pageProps} />}
-        {route === 'file' && <FilePage {...pageProps} />}
+        {route === 'queue' && <QueuePage {...pageProps} openSighting={openSighting} />}
         {route === 'catalog' && <CatalogPage />}
         {route === 'lab' && <LabPage engineReady={engineReady} />}
+        {route === 'settings' && <SettingsPage health={health} />}
       </main>
     </div>
     </LightboxProvider>

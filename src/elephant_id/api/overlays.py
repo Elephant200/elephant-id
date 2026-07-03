@@ -50,14 +50,36 @@ def annotate_photo(image: BgrImage, analysis: dict) -> BgrImage:
     return annotated
 
 
-def annotate_ear_crop(image: BgrImage, ear: object) -> BgrImage:
-    """Return a padded ear crop with the anchored contour and anchors drawn."""
+def ear_crop_box(image: BgrImage, ear: object) -> tuple[int, int, int, int]:
+    """Return the padded, clipped crop box used for all ear-crop exports."""
     height, width = image.shape[:2]
     x1, y1, x2, y2 = ear.xyxy
     pad = EAR_CROP_PAD_FRACTION * max(x2 - x1, y2 - y1)
-    cx1, cy1, cx2, cy2 = clip_xyxy(
-        x1 - pad, y1 - pad, x2 + pad, y2 + pad, width, height
-    )
+    return clip_xyxy(x1 - pad, y1 - pad, x2 + pad, y2 + pad, width, height)
+
+
+def clean_ear_crop(image: BgrImage, ear: object) -> BgrImage:
+    """Return the padded ear crop without any annotations drawn on it."""
+    cx1, cy1, cx2, cy2 = ear_crop_box(image, ear)
+    return image[cy1:cy2, cx1:cx2].copy()
+
+
+def ear_contour_in_crop(image: BgrImage, ear: object) -> list[list[float]] | None:
+    """Return the ear contour in crop-local coordinates, or None if missing."""
+    try:
+        cx1, cy1, _, _ = ear_crop_box(image, ear)
+        contour = np.asarray(ear.contour, dtype=np.float64) - np.array(
+            [float(cx1), float(cy1)]
+        )
+        return [[round(float(x), 2), round(float(y), 2)] for x, y in contour]
+    except Exception as error:
+        logger.warning(f"Could not extract ear contour: {error}")
+        return None
+
+
+def annotate_ear_crop(image: BgrImage, ear: object) -> BgrImage:
+    """Return a padded ear crop with the anchored contour and anchors drawn."""
+    cx1, cy1, cx2, cy2 = ear_crop_box(image, ear)
     crop = image[cy1:cy2, cx1:cx2].copy()
     _draw_ear_contour(crop, ear, origin=(float(cx1), float(cy1)))
     return crop

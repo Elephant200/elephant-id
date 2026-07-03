@@ -21,10 +21,10 @@ export default function Catalog() {
 
   return (
     <div>
-      <h1 className="screen-title">Known individuals</h1>
+      <h1 className="screen-title">Known-elephant catalog</h1>
       <p className="screen-sub">
-        The catalog of identified elephants and their ear-profile evidence. New
-        individuals appear here after you enroll a sighting.
+        The reference set of known elephants and their approved ear evidence.
+        New known elephants appear here after an identity decision is confirmed.
       </p>
 
       {error && <div className="error-note">{error}</div>}
@@ -59,7 +59,7 @@ export default function Catalog() {
       {detail && (
         <div className="detail-overlay" onClick={() => setDetail(null)}>
           <div className="detail-card" onClick={(event) => event.stopPropagation()}>
-            <div className="panel-title">CATALOG RECORD</div>
+            <div className="panel-title">KNOWN-ELEPHANT RECORD</div>
             <h2 className="screen-title">{detail.name}</h2>
             <p className="screen-sub">
               {detail.photos.length} ear record{detail.photos.length === 1 ? '' : 's'} on

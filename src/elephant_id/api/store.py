@@ -24,7 +24,7 @@ class SightingStore:
 
     def create(self, folder: Path) -> dict:
         """Create a new sighting record for a folder ingest."""
-        sighting_id = f"{folder.name}-{uuid.uuid4().hex[:8]}"
+        sighting_id = f"S-{uuid.uuid4().hex[:10]}"
         record = {
             "sighting_id": sighting_id,
             "folder": str(folder),
@@ -35,6 +35,7 @@ class SightingStore:
             "photos": [],
             "profile_count": 0,
             "sides": [],
+            "approved_evidence": None,
             "match": None,
             "decision": None,
         }
@@ -96,6 +97,28 @@ class SightingStore:
             photo_ids=np.asarray(photo_ids),
             crop_paths=np.asarray([path or "" for path in crop_paths]),
         )
+
+    def save_row_geometry(
+        self, sighting_id: str, row_geometry: tuple[dict, ...]
+    ) -> None:
+        """Persist per-row crop geometry (clean crop path, contour) as JSON."""
+        directory = self.sighting_dir(sighting_id)
+        directory.mkdir(parents=True, exist_ok=True)
+        payload = json.dumps({"rows": list(row_geometry)})
+        temp_path = directory / "geometry.json.tmp"
+        temp_path.write_text(payload)
+        temp_path.replace(directory / "geometry.json")
+
+    def load_row_geometry(self, sighting_id: str) -> "list[dict]":
+        """Load per-row crop geometry, tolerating older sightings without it."""
+        path = self.sighting_dir(sighting_id) / "geometry.json"
+        if not path.exists():
+            return []
+        try:
+            return json.loads(path.read_text())["rows"]
+        except (json.JSONDecodeError, KeyError) as error:
+            logger.warning(f"Could not read {path}: {error}; ignoring geometry")
+            return []
 
     def load_profiles(
         self, sighting_id: str

@@ -3,9 +3,9 @@
 // series for query-vs-catalog comparison.
 
 const WIDTH = 300;
-const HEIGHT = 84;
+const HEIGHT = 118;
 const PAD_LEFT = 6;
-const PAD_BOTTOM = 14;
+const PAD_BOTTOM = 18;
 const TRIM_DEGREES = 5;
 
 function pathFor(values, yMax, close) {

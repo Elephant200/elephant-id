@@ -33,7 +33,8 @@ export default function LabPage({ engineReady }) {
       <p className="screen-sub">
         Drop in a single photo and run the full analysis pipeline on it — body
         and feature segmentation, view estimate, age and gender suggestions,
-        tusk sides, anchored ear contours, and tear embeddings. Photos named
+        tusk sides, anchored ear contours, and tear profiles. This is a
+        development/demo page, separate from the reviewer queue. Photos named
         like dataset photos use the local cache; anything else needs the live
         model services.
       </p>
@@ -55,7 +56,7 @@ export default function LabPage({ engineReady }) {
           }}
         >
           <h3>{busy ? `Analyzing ${fileName}…` : 'Analyze one photo'}</h3>
-          <p>Drag an image here or choose a file. Nothing is added to the catalog.</p>
+          <p>Drag an image here or choose a file. Nothing is added to the known-elephant catalog.</p>
           <input
             ref={inputRef}
             type="file"

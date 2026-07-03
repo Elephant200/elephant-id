@@ -26,8 +26,17 @@ export const getCatalog = () => request('/catalog');
 export const getElephant = (name) => request(`/catalog/${encodeURIComponent(name)}`);
 export const listSightings = () => request('/sightings');
 export const getSighting = (id) => request(`/sightings/${encodeURIComponent(id)}`);
+export const getAnalysis = (id) => request(`/sightings/${encodeURIComponent(id)}/analysis`);
 export const createSighting = (folder) =>
   request('/sightings', { method: 'POST', body: JSON.stringify({ folder }) });
+export const approveEvidence = (id, leftCandidateId, rightCandidateId) =>
+  request(`/sightings/${encodeURIComponent(id)}/approve-evidence`, {
+    method: 'POST',
+    body: JSON.stringify({
+      left_candidate_id: leftCandidateId,
+      right_candidate_id: rightCandidateId,
+    }),
+  });
 export const matchSighting = (id, topN = 8) =>
   request(`/sightings/${encodeURIComponent(id)}/match`, {
     method: 'POST',

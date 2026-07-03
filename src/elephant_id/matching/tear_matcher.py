@@ -123,6 +123,30 @@ class TearMatcher:
             penalty=float(result.penalty[0]),
         )
 
+    def align_pair(
+        self,
+        query: np.ndarray,
+        candidate: np.ndarray,
+    ) -> tuple[np.ndarray, np.ndarray, TearMatch]:
+        """Return display-ready aligned profiles plus the match that aligned them.
+
+        Both profiles are clipped to inward depths and resampled to the
+        matching resolution; the query additionally receives the best-match
+        stretch and shift so the pair can be plotted overlaid. Depth
+        compression is not applied, so displayed amplitudes stay true to the
+        stored profiles.
+        """
+        match = self.match_pair(query, candidate)
+        query_rows = self._clip_negative_depths(self._as_profile_batch(query, "query"))
+        candidate_rows = self._clip_negative_depths(
+            self._as_profile_batch(candidate, "candidate")
+        )
+        aligned_query = self._shift_profile(
+            self._stretch_profile(self._resample_profiles(query_rows), match.stretch),
+            match.shift_bins,
+        )
+        return aligned_query[0], self._resample_profiles(candidate_rows)[0], match
+
     def match_row_pairs(
         self,
         queries: np.ndarray,

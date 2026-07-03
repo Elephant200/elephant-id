@@ -14,7 +14,7 @@ export default function ImportPage({ setActiveSightingId, refreshSightings, setR
       const record = await createSighting(folder);
       setActiveSightingId(record.sighting_id);
       refreshSightings();
-      setRoute('analyze');
+      setRoute('queue');
     } catch (err) {
       setError(err.message);
     } finally {
@@ -32,7 +32,8 @@ export default function ImportPage({ setActiveSightingId, refreshSightings, setR
       <h1 className="screen-title">Import a sighting</h1>
       <p className="screen-sub">
         Select one folder of photos from one elephant sighting. Every photo in
-        the folder is treated as evidence about the same individual.
+        the folder is treated as evidence about the same individual. Originals
+        stay in place and are not modified by this preview workflow.
       </p>
 
       {error && (
@@ -46,8 +47,9 @@ export default function ImportPage({ setActiveSightingId, refreshSightings, setR
         <div className="dropzone">
           <h3>One folder. One elephant.</h3>
           <p>
-            The folder is indexed in place — nothing is moved or modified. All
-            analysis runs locally; no internet needed.
+            Choose an already grouped sighting folder. This preview reads from
+            the source folder and writes derived analysis artifacts to the local
+            app workspace; source photos are not moved or edited.
           </p>
           {native ? (
             <button

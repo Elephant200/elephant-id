@@ -25,18 +25,20 @@ export default function MatchPage({
   engineReady,
   sighting,
   setSighting,
-  setRoute,
+  setStage,
   selectedCandidate,
   setSelectedCandidate,
+  setPendingDecision,
 }) {
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [newName, setNewName] = useState('');
 
-  if (!sighting || sighting.status !== 'ready' || sighting.profile_count === 0) {
+  if (!sighting || sighting.status !== 'ready' || !sighting.approved_evidence) {
     return (
       <div>
-        <h1 className="screen-title">Match against catalog</h1>
-        <div className="empty-note">REVIEW A SIGHTING WITH EAR PROFILES FIRST</div>
+        <h1 className="screen-title">Match against known-elephant catalog</h1>
+        <div className="empty-note">APPROVE LEFT AND RIGHT EAR EVIDENCE FIRST</div>
       </div>
     );
   }
@@ -47,6 +49,7 @@ export default function MatchPage({
     try {
       setSighting(await matchSighting(sighting.sighting_id));
       setSelectedCandidate(null);
+      setPendingDecision(null);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -54,19 +57,38 @@ export default function MatchPage({
     }
   };
 
-  const queryCrops = new Map();
-  sighting.photos.forEach((photo) =>
-    photo.ears.forEach((ear) => queryCrops.set(`${photo.photo_id}:${ear.side}`, ear.crop_path)),
+  const queryCrops = new Map(
+    ['left', 'right'].map((side) => {
+      const evidence = sighting.approved_evidence?.[side];
+      return [`${evidence?.photo_id}:${side}`, evidence?.crop_path];
+    }),
+  );
+  // Approved query evidence carries a human-readable file name; prefer it over
+  // the opaque generated photo id in query-side captions.
+  const queryLabels = new Map(
+    ['left', 'right'].map((side) => {
+      const evidence = sighting.approved_evidence?.[side];
+      return [side, evidence?.file_name || evidence?.photo_id || ''];
+    }),
   );
   const candidates = sighting.match?.candidates ?? null;
+  const selectedMatch = candidates?.find(
+    (candidate) => candidate.identity === selectedCandidate,
+  );
+
+  const chooseDecision = (decision) => {
+    setPendingDecision(decision);
+    setStage('confirm');
+  };
 
   return (
     <div>
-      <h1 className="screen-title">Match against catalog</h1>
+      <h1 className="screen-title">Match against known-elephant catalog</h1>
       <p className="screen-sub">
         The engine compares this sighting&apos;s ear tear patterns against every
-        known elephant and ranks the catalog. Select the candidate you judge to
-        be the match — or continue to filing to enroll a new individual.
+        known elephant and ranks the known-elephant catalog. Select an existing
+        known elephant, create a new known elephant, or leave the sighting
+        unresolved.
       </p>
 
       {error && (
@@ -81,8 +103,8 @@ export default function MatchPage({
           <p className="screen-sub" style={{ marginBottom: 14 }}>
             {sighting.profile_count} ear profile
             {sighting.profile_count === 1 ? '' : 's'}
-            {sighting.sides.length > 0 && ` (${sighting.sides.join(' + ')})`} will be ranked
-            against the catalog.
+            {' '}were extracted. Only the approved left and right tear profiles
+            will be ranked against the known-elephant catalog.
           </p>
           <button
             type="button"
@@ -91,7 +113,7 @@ export default function MatchPage({
             disabled={busy || !engineReady}
             onClick={runMatch}
           >
-            {busy ? 'Matching…' : engineReady ? 'Rank catalog matches' : 'Engine warming up…'}
+            {busy ? 'Matching…' : engineReady ? 'Rank known-elephant matches' : 'Engine warming up…'}
           </button>
         </div>
       )}
@@ -119,29 +141,47 @@ export default function MatchPage({
                     setSelectedCandidate(selected ? null : candidate.identity)
                   }
                 >
-                  <div className="rank">{String(index + 1).padStart(2, '0')}</div>
-                  <div>
-                    <div className="candidate-name">{candidate.identity}</div>
-                    <div className="candidate-sub">
-                      MATCH STRENGTH {(candidate.confidence * 100).toFixed(1)}%
-                      <span className="rationale"> — {rationale(candidate.evidence)}</span>
-                    </div>
-                    <div
-                      className="meter"
-                      title={`combined calibrated score ${candidate.score.toFixed(2)}`}
-                    >
-                      <div className="meter-track">
-                        <div
-                          className="meter-fill"
-                          style={{ width: `${Math.round(candidate.confidence * 100)}%` }}
-                        />
+                  <div className="candidate-head">
+                    <div className="rank">{String(index + 1).padStart(2, '0')}</div>
+                    <div className="candidate-headline">
+                      <div className="candidate-name">{candidate.identity}</div>
+                      <div className="candidate-sub">
+                        MATCH STRENGTH {(candidate.confidence * 100).toFixed(1)}%
+                        <span className="rationale"> — {rationale(candidate.evidence)}</span>
+                      </div>
+                      <div
+                        className="meter"
+                        title={`combined calibrated score ${candidate.score.toFixed(2)}`}
+                      >
+                        <div className="meter-track">
+                          <div
+                            className="meter-fill"
+                            style={{ width: `${Math.round(candidate.confidence * 100)}%` }}
+                          />
+                        </div>
                       </div>
                     </div>
-                    <div className="evidence-row">
+                    <div className="candidate-select">
+                      <button
+                        type="button"
+                        className={`btn ${selected ? 'ok' : ''}`}
+                        data-testid={`select-${candidate.identity}`}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setSelectedCandidate(selected ? null : candidate.identity);
+                        }}
+                      >
+                        {selected ? '✓ Selected' : 'Select'}
+                      </button>
+                    </div>
+                  </div>
+                  <div className="evidence-row">
                       {candidate.evidence.map((evidence) => {
                         const queryCrop = queryCrops.get(
                           `${evidence.query_photo_id}:${evidence.side}`,
                         );
+                        const queryLabel =
+                          queryLabels.get(evidence.side) || evidence.query_photo_id;
                         return (
                           <div className="evidence" key={evidence.side}>
                             <div className="evidence-pair">
@@ -150,24 +190,24 @@ export default function MatchPage({
                                   <ZoomImage
                                     src={imageUrl(queryCrop)}
                                     alt={`query ${evidence.side}`}
-                                    caption={`This sighting — ${evidence.query_photo_id} (${evidence.side} ear)`}
+                                    caption={`This sighting — ${queryLabel} (${evidence.side} ear)`}
                                   />
                                 ) : (
                                   <div className="noimg">NO CROP</div>
                                 )}
-                                <figcaption>THIS SIGHTING · {evidence.query_photo_id}</figcaption>
+                                <figcaption>THIS SIGHTING · {queryLabel}</figcaption>
                               </figure>
                               <figure>
                                 {evidence.gallery_crop_path ? (
                                   <ZoomImage
                                     src={imageUrl(evidence.gallery_crop_path)}
                                     alt={`catalog ${evidence.side}`}
-                                    caption={`Catalog — ${evidence.gallery_photo_id} (${evidence.side} ear, ${evidence.gallery_date})`}
+                                    caption={`Known-elephant catalog - ${evidence.gallery_photo_id} (${evidence.side} ear, ${evidence.gallery_date})`}
                                   />
                                 ) : (
                                   <div className="noimg">NO CROP</div>
                                 )}
-                                <figcaption>CATALOG · {evidence.gallery_photo_id}</figcaption>
+                                <figcaption>KNOWN-ELEPHANT CATALOG · {evidence.gallery_photo_id}</figcaption>
                               </figure>
                             </div>
                             {evidence.query_profile?.length > 0 && (
@@ -181,12 +221,12 @@ export default function MatchPage({
                                       fill: true,
                                     },
                                     {
-                                      label: 'catalog',
+                                      label: 'known-elephant catalog',
                                       values: evidence.gallery_profile,
                                       color: CATALOG_COLOR,
                                     },
                                   ]}
-                                  height={72}
+                                  height={84}
                                 />
                                 <div className="chart-legend">
                                   <span
@@ -198,7 +238,12 @@ export default function MatchPage({
                                     className="legend-swatch"
                                     style={{ background: CATALOG_COLOR }}
                                   />
-                                  catalog
+                                  known-elephant catalog
+                                  <span className="legend-note">
+                                    {typeof evidence.alignment_shift_degrees === 'number'
+                                      ? `aligned (shift ${evidence.alignment_shift_degrees.toFixed(1)}°, stretch ×${(evidence.alignment_stretch ?? 1).toFixed(2)})`
+                                      : 'aligned tear profiles'}
+                                  </span>
                                 </div>
                               </div>
                             )}
@@ -215,41 +260,72 @@ export default function MatchPage({
                       })}
                     </div>
                   </div>
-                  <div className="candidate-actions">
-                    <button
-                      type="button"
-                      className={`btn ${selected ? 'ok' : ''}`}
-                      data-testid={`select-${candidate.identity}`}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        setSelectedCandidate(selected ? null : candidate.identity);
-                      }}
-                    >
-                      {selected ? '✓ Selected' : 'Select'}
-                    </button>
-                  </div>
-                </div>
               );
             })}
           </div>
 
-          <div className="panel" style={{ marginTop: 8 }}>
-            <div className="decision-bar">
-              <span className="mono-dim">
-                {selectedCandidate
-                  ? `SELECTED: ${selectedCandidate} — CONFIRM IT ON THE FILING PAGE`
-                  : 'NO CANDIDATE SELECTED — YOU CAN ENROLL A NEW INDIVIDUAL OR LEAVE THE SIGHTING UNRESOLVED AT FILING'}
-              </span>
-              <span style={{ flex: 1 }} />
-              <button
-                type="button"
-                className="btn primary"
-                data-testid="to-file"
-                onClick={() => setRoute('file')}
-              >
-                Continue to filing
-              </button>
+          <div className="action-bar" data-testid="match-action-bar">
+            <div className="action-bar-status">
+              <div className="action-bar-line">
+                {selectedCandidate ? (
+                  <>
+                    <span className="side-tag">SELECTED </span>
+                    <span className="ok-tick">✓</span> {selectedCandidate}
+                  </>
+                ) : (
+                  <span className="missing">No existing known elephant selected</span>
+                )}
+              </div>
+              <div className="action-bar-hint">
+                Choose an existing match, enrol a new elephant, or leave unresolved
+              </div>
             </div>
+            <button
+              type="button"
+              className="btn ok"
+              data-testid="choose-existing"
+              disabled={!selectedMatch}
+              onClick={() =>
+                chooseDecision({
+                  action: 'existing_known_elephant',
+                  elephantName: selectedMatch.identity,
+                  candidate: selectedMatch,
+                })
+              }
+            >
+              Existing known elephant
+            </button>
+            <input
+              className="enroll-input"
+              placeholder="New known elephant name"
+              value={newName}
+              onChange={(event) => setNewName(event.target.value)}
+              data-testid="new-elephant-name"
+            />
+            <button
+              type="button"
+              className="btn primary"
+              disabled={!newName.trim()}
+              data-testid="choose-new"
+              onClick={() =>
+                chooseDecision({
+                  action: 'new_known_elephant',
+                  elephantName: newName.trim(),
+                })
+              }
+            >
+              New known elephant
+            </button>
+            <button
+              type="button"
+              className="btn ghost"
+              data-testid="choose-unresolved"
+              onClick={() =>
+                chooseDecision({ action: 'unresolved', elephantName: null })
+              }
+            >
+              Unresolved
+            </button>
           </div>
         </>
       )}

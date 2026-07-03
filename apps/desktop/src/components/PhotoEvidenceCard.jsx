@@ -61,7 +61,7 @@ export default function PhotoEvidenceCard({ photo }) {
                   <ZoomImage
                     src={imageUrl(ear.crop_path)}
                     alt={`${ear.side} ear`}
-                    caption={`${photo.photo_id} — ${ear.side} ear (anchored contour)`}
+                    caption={`${photo.file_name} — ${ear.side} ear (anchored contour)`}
                     className="ear-crop"
                   />
                 ) : (

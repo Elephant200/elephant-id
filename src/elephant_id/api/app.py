@@ -1,32 +1,35 @@
-"""FastAPI application for the Alphaphant desktop sidecar."""
+"""FastAPI application for the Alphaphant desktop sidecar.
+
+Routes parse requests, delegate to :class:`SightingWorkflow`, and translate
+workflow errors into HTTP status codes; business logic lives in
+``elephant_id.api.workflow``.
+"""
 
 import hashlib
 import mimetypes
 import threading
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from loguru import logger
 from pydantic import BaseModel
 
 from elephant_id.api import ingest, paths
+from elephant_id.api.analysis import decorate_record
 from elephant_id.api.engine import MatchingEngine
 from elephant_id.api.gallery import GalleryData, load_gallery
 from elephant_id.api.store import SightingStore
+from elephant_id.api.workflow import (
+    SightingWorkflow,
+    WorkflowConflict,
+    WorkflowInvalid,
+)
 
-DECISION_ACTIONS = ("confirm", "enroll", "unresolved")
-
-
-def _sighting_date(photo_ids: tuple[str, ...], fallback: str) -> str:
-    """Derive the sighting date from photo identifiers, not the filing time."""
-    for photo_id in photo_ids:
-        match = ingest.PHOTO_STEM_PATTERN.match(photo_id)
-        if match:
-            return match["date"]
-    return fallback
+EngineFactory = Callable[[GalleryData, Path], MatchingEngine]
 
 
 class IngestRequest(BaseModel):
@@ -41,6 +44,13 @@ class MatchRequest(BaseModel):
     top_n: int = 12
 
 
+class EvidenceApprovalRequest(BaseModel):
+    """Request body for approving one left and one right ear candidate."""
+
+    left_candidate_id: str
+    right_candidate_id: str
+
+
 class DecisionRequest(BaseModel):
     """Request body for filing a review decision."""
 
@@ -48,54 +58,54 @@ class DecisionRequest(BaseModel):
     elephant_name: str | None = None
 
 
-class AppState:
-    """Mutable sidecar state shared across requests."""
+def _default_engine_factory(gallery: GalleryData, cache_path: Path) -> MatchingEngine:
+    """Build the production matching engine."""
+    return MatchingEngine(gallery, cache_path)
 
-    def __init__(self, data_dir: Path) -> None:
-        """Load the gallery and store; the engine is built in the background."""
+
+class AppState:
+    """Mutable sidecar state shared across requests.
+
+    Args:
+        data_dir: Writable state directory.
+        store: Sighting persistence; a real store is created when omitted.
+        gallery: Known-elephant catalog data; loaded from disk when omitted.
+        engine_factory: Builds the matching engine; production factory when
+            omitted. The engine is always built on a background thread.
+    """
+
+    def __init__(
+        self,
+        data_dir: Path,
+        store: SightingStore | None = None,
+        gallery: GalleryData | None = None,
+        engine_factory: EngineFactory | None = None,
+    ) -> None:
+        """Wire dependencies and start the background engine build."""
         self.data_dir = data_dir
-        self.store = SightingStore(data_dir)
-        self.gallery: GalleryData = load_gallery(
+        self.store = store or SightingStore(data_dir)
+        self.gallery = gallery or load_gallery(
             paths.gallery_profiles_path(), paths.GALLERY_MANIFEST_CSV
+        )
+        self.workflow = SightingWorkflow(
+            self.store, self.gallery, paths.MODEL_CACHE_ROOT
         )
         self.engine: MatchingEngine | None = None
         self.engine_error: str | None = None
+        self._engine_factory = engine_factory or _default_engine_factory
         threading.Thread(target=self._build_engine, daemon=True).start()
 
     def _build_engine(self) -> None:
         """Build the matching engine, then refile previously decided sightings."""
         try:
-            engine = MatchingEngine(
+            engine = self._engine_factory(
                 self.gallery, self.data_dir / "gallery_pairwise.npy"
             )
-            self._refile_decisions(engine)
+            self.workflow.refile_decisions(engine)
             self.engine = engine
         except Exception as error:
             logger.exception(f"Matching engine failed to initialize: {error}")
             self.engine_error = str(error)
-
-    def _refile_decisions(self, engine: MatchingEngine) -> None:
-        """Re-apply confirmed and enrolled sightings from previous sessions."""
-        for record in reversed(self.store.list()):
-            decision = record.get("decision")
-            if not decision or decision["action"] not in ("confirm", "enroll"):
-                continue
-            try:
-                profiles, sides, photo_ids, crop_paths = self.store.load_profiles(
-                    record["sighting_id"]
-                )
-                engine.extend(
-                    profiles,
-                    sides,
-                    decision["elephant_name"],
-                    _sighting_date(photo_ids, decision["decided_at"][:10]),
-                    photo_ids,
-                    crop_paths,
-                )
-            except Exception as error:
-                logger.warning(
-                    f"Could not refile sighting {record['sighting_id']}: {error}"
-                )
 
     def allowed_image_roots(self) -> list[Path]:
         """Directories the image endpoint may serve from."""
@@ -108,16 +118,19 @@ class AppState:
         return roots
 
 
-def create_app(data_dir: Path | None = None) -> FastAPI:
+def create_app(data_dir: Path | None = None, state: AppState | None = None) -> FastAPI:
     """Build the sidecar application.
 
     Args:
         data_dir: Writable state directory; defaults to the repo-local
             Alphaphant outputs directory.
+        state: Prebuilt state (with injected store/gallery/engine) for tests.
     """
-    resolved_data_dir = data_dir or paths.default_data_dir()
-    resolved_data_dir.mkdir(parents=True, exist_ok=True)
-    state = AppState(resolved_data_dir)
+    if state is None:
+        resolved_data_dir = data_dir or paths.default_data_dir()
+        resolved_data_dir.mkdir(parents=True, exist_ok=True)
+        state = AppState(resolved_data_dir)
+    workflow = state.workflow
 
     app = FastAPI(title="Alphaphant Sidecar")
     app.add_middleware(
@@ -126,6 +139,14 @@ def create_app(data_dir: Path | None = None) -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    @app.exception_handler(WorkflowInvalid)
+    def _invalid(request: object, error: WorkflowInvalid) -> JSONResponse:
+        return JSONResponse(status_code=400, content={"detail": str(error)})
+
+    @app.exception_handler(WorkflowConflict)
+    def _conflict(request: object, error: WorkflowConflict) -> JSONResponse:
+        return JSONResponse(status_code=409, content={"detail": str(error)})
 
     @app.get("/health")
     def health() -> dict:
@@ -137,6 +158,7 @@ def create_app(data_dir: Path | None = None) -> FastAPI:
             "engine_error": state.engine_error,
             "elephants": engine.elephant_count if engine else None,
             "profiles": engine.profile_count if engine else None,
+            "data_dir": str(state.data_dir),
         }
 
     @app.get("/catalog")
@@ -169,90 +191,55 @@ def create_app(data_dir: Path | None = None) -> FastAPI:
             record["sighting_id"], progress={"processed": 0, "total": len(files)}
         )
         threading.Thread(
-            target=_run_analysis,
+            target=workflow.run_analysis,
             args=(record["sighting_id"], folder),
             daemon=True,
         ).start()
-        return state.store.get(record["sighting_id"])
+        return decorate_record(state.store.get(record["sighting_id"]))
 
     @app.get("/sightings")
     def list_sightings() -> list[dict]:
         """List all sightings, newest first."""
-        return state.store.list()
+        return [decorate_record(record) for record in state.store.list()]
 
     @app.get("/sightings/{sighting_id}")
     def get_sighting(sighting_id: str) -> dict:
         """Return one sighting record."""
-        return _get_record(sighting_id)
+        return decorate_record(_get_record(sighting_id))
+
+    @app.get("/sightings/{sighting_id}/analysis")
+    def get_analysis(sighting_id: str) -> dict:
+        """Return the V1-preview analysis package for evidence review."""
+        _get_record(sighting_id)
+        return workflow.analysis_package(sighting_id)
+
+    @app.post("/sightings/{sighting_id}/approve-evidence")
+    def approve_evidence(sighting_id: str, request: EvidenceApprovalRequest) -> dict:
+        """Approve exactly one left and one right ear candidate for matching."""
+        _get_record(sighting_id)
+        return decorate_record(
+            workflow.approve_evidence(
+                sighting_id, request.left_candidate_id, request.right_candidate_id
+            )
+        )
 
     @app.post("/sightings/{sighting_id}/match")
     def match_sighting(sighting_id: str, request: MatchRequest) -> dict:
         """Rank catalog elephants against an analyzed sighting."""
-        record = _get_record(sighting_id)
-        if record["status"] != "ready":
-            raise HTTPException(
-                status_code=409, detail=f"Sighting is {record['status']}, not ready"
-            )
-        if record["profile_count"] == 0:
-            raise HTTPException(
-                status_code=409, detail="Sighting has no usable ear profiles"
-            )
-        engine = _require_engine()
-        profiles, sides, photo_ids, _ = state.store.load_profiles(sighting_id)
-        ranked = engine.rank(profiles, sides, photo_ids, top_n=request.top_n)
-        match = {
-            "matched_at": datetime.now(UTC).isoformat(),
-            "candidates": [candidate.to_dict() for candidate in ranked],
-        }
-        return state.store.update(sighting_id, match=match)
+        _get_record(sighting_id)
+        return decorate_record(
+            workflow.match(sighting_id, _require_engine(), request.top_n)
+        )
 
     @app.post("/sightings/{sighting_id}/decision")
     def decide_sighting(sighting_id: str, request: DecisionRequest) -> dict:
         """File the reviewer's identity decision for a sighting."""
-        record = _get_record(sighting_id)
-        if record.get("decision"):
-            raise HTTPException(status_code=409, detail="Sighting already decided")
-        if request.action not in DECISION_ACTIONS:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Action must be one of {DECISION_ACTIONS}",
+        _get_record(sighting_id)
+        return decorate_record(
+            workflow.decide(
+                sighting_id, _require_engine, request.action, request.elephant_name
             )
-
-        decision = {
-            "action": request.action,
-            "elephant_name": None,
-            "decided_at": datetime.now(UTC).isoformat(),
-        }
-        if request.action in ("confirm", "enroll"):
-            name = (request.elephant_name or "").strip()
-            engine = _require_engine()
-            if not name:
-                raise HTTPException(status_code=400, detail="elephant_name is required")
-            if request.action == "confirm" and not engine.has_identity(name):
-                raise HTTPException(
-                    status_code=400, detail=f"Unknown elephant: {name}"
-                )
-            if request.action == "enroll" and engine.has_identity(name):
-                raise HTTPException(
-                    status_code=400, detail=f"Elephant already exists: {name}"
-                )
-            profiles, sides, photo_ids, crop_paths = state.store.load_profiles(
-                sighting_id
-            )
-            if len(profiles) == 0:
-                raise HTTPException(
-                    status_code=409, detail="Sighting has no usable ear profiles"
-                )
-            engine.extend(
-                profiles,
-                sides,
-                name,
-                _sighting_date(photo_ids, decision["decided_at"][:10]),
-                photo_ids,
-                crop_paths,
-            )
-            decision["elephant_name"] = name
-        return state.store.update(sighting_id, decision=decision)
+        )
 
     @app.post("/dev/analyze")
     def dev_analyze(file: UploadFile) -> dict:
@@ -318,35 +305,5 @@ def create_app(data_dir: Path | None = None) -> FastAPI:
             raise HTTPException(
                 status_code=404, detail=f"Unknown sighting: {sighting_id}"
             ) from error
-
-    def _run_analysis(sighting_id: str, folder: Path) -> None:
-        """Background ingest: extract profiles and mark the sighting ready."""
-        try:
-            result = ingest.ingest_sighting(
-                folder,
-                state.store.sighting_dir(sighting_id),
-                state.gallery,
-                paths.MODEL_CACHE_ROOT,
-                progress=lambda processed, total: state.store.update(
-                    sighting_id, progress={"processed": processed, "total": total}
-                ),
-            )
-            state.store.save_profiles(
-                sighting_id,
-                result.profiles,
-                result.sides,
-                result.photo_ids,
-                result.crop_paths,
-            )
-            state.store.update(
-                sighting_id,
-                status="ready",
-                photos=[photo.to_dict() for photo in result.photos],
-                profile_count=len(result.profiles),
-                sides=sorted(set(result.sides)),
-            )
-        except Exception as error:
-            logger.exception(f"Ingest failed for sighting {sighting_id}: {error}")
-            state.store.update(sighting_id, status="failed", error=str(error))
 
     return app

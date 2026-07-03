@@ -1,19 +1,18 @@
-"""Turn a folder of sighting photos into tear profiles for matching.
+"""Turn a grouped sighting folder into a preview analysis package.
 
-Photos are indexed in place (never copied or modified). Analysis prefers the
-real ``PhotoAnalyzer`` pipeline, which is served from the on-disk model cache
-for dataset photos; when the analyzer is unavailable or fails on a photo, the
-precomputed gallery profile for that photo identifier is used instead so the
-demo path stays fully offline.
+Analysis prefers the real ``PhotoAnalyzer`` pipeline, which is served from the
+on-disk model cache for dataset photos; when the analyzer is unavailable or
+fails on a photo, the precomputed known-elephant catalog profile for that photo
+identifier is used instead so the demo path stays fully offline.
 
-Besides the tear profiles used for matching, ingest exports the review
-evidence described in docs/pipeline.md §4.2: an annotated overlay of every
-model detection, per-photo view/age/gender/tusk suggestions, and the per-ear
-tear-depth profile (the matching embedding) for plotting.
+Besides the tear profiles used for matching, ingest exports evidence-review
+artifacts: annotated overlays, per-photo view/age/gender/tusk suggestions, and
+per-ear tear profiles for plotting.
 """
 
 import csv
 import re
+import uuid
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -31,6 +30,11 @@ from elephant_id.matching import tear_mass
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png"}
 PHOTO_STEM_PATTERN = re.compile(r"^(?P<name>.+)_(?P<date>\d{4}-\d{2}-\d{2})_(?P<seq>\d+)$")
+
+# One profile row: (side, profile, crop_path, clean_crop_path, contour).
+ProfileRow = tuple[
+    str, np.ndarray, str | None, str | None, list[list[float]] | None
+]
 
 
 @dataclass(frozen=True)
@@ -51,6 +55,7 @@ class PhotoResult:
     photo_id: str | None
     status: str  # "analyzed" | "precomputed" | "skipped"
     detail: str
+    date: str | None = None
     photo_path: str | None = None
     overlay_path: str | None = None
     view: str | None = None
@@ -73,6 +78,7 @@ class SightingProfiles:
     photo_ids: tuple[str, ...]
     crop_paths: tuple[str | None, ...]
     photos: tuple[PhotoResult, ...]
+    row_geometry: tuple[dict, ...] = field(default=())
 
 
 def list_photo_files(folder: Path) -> list[Path]:
@@ -122,15 +128,22 @@ def ingest_sighting(
     sides: list[str] = []
     photo_ids: list[str] = []
     crop_paths: list[str | None] = []
+    row_geometry: list[dict] = []
     photos: list[PhotoResult] = []
     for index, path in enumerate(files):
-        result, rows = _ingest_photo(path, parsed[path], dataset, analyzer, fallback, work_dir)
+        product_id = f"P-{uuid.uuid4().hex[:10]}"
+        result, rows = _ingest_photo(
+            path, parsed[path], product_id, dataset, analyzer, fallback, work_dir
+        )
         photos.append(result)
-        for side, profile, crop_path in rows:
+        for side, profile, crop_path, clean_crop_path, contour in rows:
             profiles.append(profile)
             sides.append(side)
-            photo_ids.append(result.photo_id or path.stem)
+            photo_ids.append(result.photo_id or product_id)
             crop_paths.append(crop_path)
+            row_geometry.append(
+                {"clean_crop_path": clean_crop_path, "contour": contour}
+            )
         if progress is not None:
             progress(index + 1, len(files))
 
@@ -146,6 +159,7 @@ def ingest_sighting(
         photo_ids=tuple(photo_ids),
         crop_paths=tuple(crop_paths),
         photos=tuple(photos),
+        row_geometry=tuple(row_geometry),
     )
 
 
@@ -180,19 +194,28 @@ def analyze_single_photo(
         ) from error
     if analysis is None:
         raise ValueError("No usable elephant evidence found in the photo")
-    result, _ = _photo_result_from_analysis(path, path.stem, analysis, dataset, work_dir)
+    # Dev-only Lab path: photo_id stays the cache-keyed stem on purpose.
+    result, _ = _photo_result_from_analysis(
+        path, path.stem, path.stem, stem_match["date"], analysis, dataset, work_dir
+    )
     return result
 
 
 def _ingest_photo(
     path: Path,
     stem_match: re.Match[str] | None,
+    photo_id: str,
     dataset: Dataset | None,
     analyzer: object | None,
-    fallback: dict[str, list[tuple[str, np.ndarray, str | None]]],
+    fallback: dict[str, list[ProfileRow]],
     work_dir: Path,
-) -> tuple[PhotoResult, list[tuple[str, np.ndarray, str | None]]]:
-    """Extract (side, profile, crop path) rows for one photo file."""
+) -> tuple[PhotoResult, list[ProfileRow]]:
+    """Extract profile rows for one photo file.
+
+    ``photo_id`` is the generated, identity-free product identifier used in the
+    result and derived asset names. ``path.stem`` stays an internal detail for
+    cache/dataset lookups and the precomputed fallback only.
+    """
     if stem_match is None or dataset is None:
         return (
             PhotoResult(
@@ -205,17 +228,20 @@ def _ingest_photo(
             [],
         )
 
-    photo_id = path.stem
+    stem = path.stem
+    date = stem_match["date"]
     if analyzer is not None:
         try:
-            analysis = analyzer.analyze(dataset.get_photo(photo_id))
+            analysis = analyzer.analyze(dataset.get_photo(stem))
         except Exception as error:
-            logger.warning(f"Analysis failed for {photo_id}: {error}")
+            logger.warning(f"Analysis failed for {stem}: {error}")
             analysis = None
         if analysis is not None and analysis["ears"]:
-            return _photo_result_from_analysis(path, photo_id, analysis, dataset, work_dir)
+            return _photo_result_from_analysis(
+                path, photo_id, stem, date, analysis, dataset, work_dir
+            )
 
-    precomputed = fallback.get(photo_id, [])
+    precomputed = fallback.get(stem, [])
     if precomputed:
         ears = tuple(
             EarResult(
@@ -224,14 +250,15 @@ def _ingest_photo(
                 profile=plot_profile(profile),
                 mass=float(tear_mass(profile)[0]),
             )
-            for side, profile, crop in precomputed
+            for side, profile, crop, _, _ in precomputed
         )
         return (
             PhotoResult(
                 file_name=path.name,
                 photo_id=photo_id,
                 status="precomputed",
-                detail=f"{_plural(len(precomputed), 'profile')} from the gallery cache",
+                detail=f"{_plural(len(precomputed), 'profile')} from the known-elephant cache",
+                date=date,
                 photo_path=str(path),
                 ears=ears,
             ),
@@ -244,6 +271,7 @@ def _ingest_photo(
             photo_id=photo_id,
             status="skipped",
             detail="No usable ear evidence found",
+            date=date,
             photo_path=str(path),
         ),
         [],
@@ -253,22 +281,28 @@ def _ingest_photo(
 def _photo_result_from_analysis(
     path: Path,
     photo_id: str,
+    stem: str,
+    date: str | None,
     analysis: dict,
     dataset: Dataset,
     work_dir: Path,
-) -> tuple[PhotoResult, list[tuple[str, np.ndarray, str | None]]]:
-    """Build the full review evidence package for one analyzed photo."""
-    image = dataset.read_image(dataset.get_photo(photo_id))
+) -> tuple[PhotoResult, list[ProfileRow]]:
+    """Build the full review evidence package for one analyzed photo.
+
+    ``stem`` keys the dataset/cache lookups; ``photo_id`` names the exported
+    overlay and crop files so derived assets carry no elephant identity.
+    """
+    image = dataset.read_image(dataset.get_photo(stem))
     overlay_path = _export_image(
         overlays.annotate_photo(image, analysis), work_dir / "overlays", f"{photo_id}.jpg"
     )
 
-    rows: list[tuple[str, np.ndarray, str | None]] = []
+    rows: list[ProfileRow] = []
     ears: list[EarResult] = []
     for ear_data in analysis["ears"]:
         profile = np.asarray(ear_data["tear_profile"].profile, dtype=np.float64)
         if profile.shape != (TEAR_PROFILE_BINS,):
-            logger.warning(f"Unexpected profile shape for {photo_id}: {profile.shape}")
+            logger.warning(f"Unexpected profile shape for {stem}: {profile.shape}")
             continue
         ear = ear_data["ear"]
         crop_path = _export_image(
@@ -276,7 +310,13 @@ def _photo_result_from_analysis(
             work_dir / "crops",
             f"{photo_id}_{ear.side}.jpg",
         )
-        rows.append((str(ear.side), profile, crop_path))
+        clean_crop_path = _export_image(
+            overlays.clean_ear_crop(image, ear),
+            work_dir / "crops",
+            f"{photo_id}_{ear.side}_clean.jpg",
+        )
+        contour = overlays.ear_contour_in_crop(image, ear)
+        rows.append((str(ear.side), profile, crop_path, clean_crop_path, contour))
         ears.append(
             EarResult(
                 side=str(ear.side),
@@ -293,6 +333,7 @@ def _photo_result_from_analysis(
         photo_id=photo_id,
         status="analyzed",
         detail=f"{_plural(len(rows), 'usable ear')}",
+        date=date,
         photo_path=str(path),
         overlay_path=overlay_path,
         view=str(analysis["view"]),
@@ -379,13 +420,21 @@ def _make_analyzer(dataset: Dataset | None, cache_root: Path) -> object | None:
         return None
 
 
-def _fallback_rows(
-    gallery: GalleryData,
-) -> dict[str, list[tuple[str, np.ndarray, str | None]]]:
-    """Group precomputed gallery rows by photo identifier."""
-    rows: dict[str, list[tuple[str, np.ndarray, str | None]]] = {}
+def _fallback_rows(gallery: GalleryData) -> dict[str, list[ProfileRow]]:
+    """Group precomputed gallery rows by photo identifier.
+
+    Precomputed rows carry no crop geometry, so contour correction is only
+    offered for freshly analyzed photos.
+    """
+    rows: dict[str, list[ProfileRow]] = {}
     for index, photo_id in enumerate(gallery.photo_ids):
         rows.setdefault(photo_id, []).append(
-            (gallery.sides[index], gallery.profiles[index], gallery.crop_paths[index])
+            (
+                gallery.sides[index],
+                gallery.profiles[index],
+                gallery.crop_paths[index],
+                None,
+                None,
+            )
         )
     return rows

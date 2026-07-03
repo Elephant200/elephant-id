@@ -65,3 +65,35 @@ class TestTearMatcher:
         assert len(config.stretches) == 17
         assert config.stretches[0] == 0.8
         assert config.stretches[-1] == 1.2
+
+
+class TestAlignPair:
+    """Display alignment through TearMatcher.align_pair."""
+
+    def test_shifted_profiles_overlap_after_alignment(self) -> None:
+        matcher = TearMatcher()
+        query = make_profile([(300, 0.05)])
+        candidate = make_profile([(330, 0.05)])  # same tear, shifted 30/720 bins
+        aligned_query, aligned_candidate, match = matcher.align_pair(query, candidate)
+        assert match.shift_bins != 0
+        assert len(aligned_query) == matcher.config.resampled_bins
+        assert len(aligned_candidate) == matcher.config.resampled_bins
+        raw_gap = np.argmax(query) - np.argmax(candidate)
+        aligned_gap = np.argmax(aligned_query) - np.argmax(aligned_candidate)
+        assert abs(aligned_gap) < abs(raw_gap) / 3
+
+    def test_identical_profiles_align_unchanged(self) -> None:
+        matcher = TearMatcher()
+        profile = make_profile([(300, 0.05), (500, 0.02)])
+        aligned_query, aligned_candidate, match = matcher.align_pair(profile, profile)
+        assert match.shift_bins == 0
+        assert match.stretch == pytest.approx(1.0)
+        np.testing.assert_allclose(aligned_query, aligned_candidate, atol=1e-9)
+
+    def test_alignment_preserves_uncompressed_depths(self) -> None:
+        matcher = TearMatcher()
+        profile = make_profile([(300, 0.04)])
+        aligned_query, _, _ = matcher.align_pair(profile, profile)
+        # Depth compression would lift 0.04 to 0.04**0.5 = 0.2; display
+        # alignment must keep true depths (minus small resampling loss).
+        assert 0.02 < aligned_query.max() < 0.06
