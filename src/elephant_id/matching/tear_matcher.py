@@ -13,14 +13,28 @@ import numpy as np
 
 @dataclass(frozen=True)
 class TearMatcherConfig:
-    """Parameters controlling resampling, shift penalties, and stretch search."""
+    """Parameters controlling resampling, shift penalties, and stretch search.
 
-    resampled_bins: int = 120
+    ``depth_exponent`` compresses tear depths (``profile ** depth_exponent``)
+    before overlap scoring. Values below 1 tolerate depth mismatch from ear
+    foreshortening while preserving angular structure.
+
+    Defaults are the configuration validated on the high-quality and filtered
+    evaluation sets: 240 bins preserve narrow scallops that 120 bins smear
+    into accidental impostor overlap, and the fine stretch grid improves ear
+    width normalization.
+    """
+
+    resampled_bins: int = 240
     max_shift_fraction: float = 0.15  # fraction of the resampled profile length
     shift_penalty_scale: float = 0.08
     shift_penalty_power: float = 4.0
+    depth_exponent: float = 0.5
     stretches: tuple[float, ...] = field(
-        default=(0.85, 0.90, 0.95, 1.00, 1.05, 1.10, 1.15)
+        default=(
+            0.800, 0.825, 0.850, 0.875, 0.900, 0.925, 0.950, 0.975, 1.000,
+            1.025, 1.050, 1.075, 1.100, 1.125, 1.150, 1.175, 1.200,
+        )
     )
 
     def __post_init__(self) -> None:
@@ -33,6 +47,8 @@ class TearMatcherConfig:
             raise ValueError("shift_penalty_scale must be positive")
         if self.shift_penalty_power <= 0:
             raise ValueError("shift_penalty_power must be positive")
+        if self.depth_exponent <= 0:
+            raise ValueError("depth_exponent must be positive")
         if not self.stretches:
             raise ValueError("stretches must not be empty")
         if any(stretch <= 0 for stretch in self.stretches):
@@ -123,8 +139,8 @@ class TearMatcher:
             raise ValueError("queries and candidates must have the same shape")
 
         # Outward bulges are not useful tear evidence for this matcher.
-        query_rows = self._clip_negative_depths(query_rows)
-        candidate_rows = self._clip_negative_depths(candidate_rows)
+        query_rows = self._compress_depths(self._clip_negative_depths(query_rows))
+        candidate_rows = self._compress_depths(self._clip_negative_depths(candidate_rows))
 
         query_resampled_profile = self._resample_profiles(query_rows)
         candidate_resampled_profile = self._resample_profiles(candidate_rows)
@@ -180,6 +196,12 @@ class TearMatcher:
     def _clip_negative_depths(self, profile_rows: np.ndarray) -> np.ndarray:
         """Discard outward-depth signal before matching."""
         return np.maximum(profile_rows, 0.0)
+
+    def _compress_depths(self, profile_rows: np.ndarray) -> np.ndarray:
+        """Apply the configured depth compression to non-negative depths."""
+        if self.config.depth_exponent == 1.0:
+            return profile_rows
+        return profile_rows**self.config.depth_exponent
 
     def _resample_profiles(self, profile_rows: np.ndarray) -> np.ndarray:
         """Linearly resample profile rows to the matching resolution."""
