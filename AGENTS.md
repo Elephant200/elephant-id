@@ -2,7 +2,7 @@
 
 ## Project Description
 
-Elephant ID is a human-in-the-loop system for identifying individual African elephants from sighting photo folders. It uses AI and expert review to produce draft identification records, support matching against known elephants, and efficiently utilize human oversight. The goal of the project is twofold. The first goal is to design a discriminative representation that encodes features such as ear tears and holes. The second is to build and deploy an offline desktop app that processes sightings, identifies the individual elephant, and presents the result for human approval. This app's purpose is to facilitate identification of thousands of elephants.
+Elephant ID is a human-in-the-loop system for identifying individual African elephants from grouped sighting photo folders. It uses AI evidence extraction, reviewer correction, tear-profile matching, and human identity decisions to help scale elephant identification while preserving expert oversight. The product direction is an offline-capable desktop workflow: import a sighting folder into an App Library, review and correct the analysis package, compare aligned known-elephant candidates, and log the final identity decision.
 
 ## Commands
 
@@ -34,14 +34,15 @@ After Python code changes, run `uv run ruff check .` and fix reported issues. `l
 - `apps/web/`: a next.js landing page; do not touch.
 - `scripts/`: local exploration and model/demo scripts.
 - `legacy/` and `.curvrank_ref/`: historical/reference material; do not modernize unless asked.
-- `docs/`: SEEK, field context, pipeline, architecture, file tree, and reference papers.
+- `docs/`: current status, product workflow, architecture, glossary, and technical reference notes.
 
 ## Documentation Context
 
-- Refer to `docs/goals.md` and `docs/pipeline.md` to understand the purpose of the project; refer to `docs/field-context.md` to understand constraints in the field; refer to `docs/seek.md` to understand the structure of a SEEK code.
-- The current product direction is desktop-first and local-capable. Do not assume the backend must always be local; connected teams may use remote services where practical.
-- v1 should optimize for office review of grouped one-elephant folders and older bull identification unless the user explicitly changes the scope.
-- For v1, focus on implementing classic SEEK as-is. Do not design storage, review, or matching in a way that prevents later adaptive features such as Curvrank signatures, contour plots, vector embeddings, or other provenance-tracked descriptors.
+- Read `docs/status.md` first to understand what is current, what is legacy, and what is cleanup debt.
+- Read `docs/workflow.md` for the product flow and `docs/architecture.md` for broad technical constraints.
+- Use `docs/context.md` as the canonical glossary. Prefer its terms: App Library, analysis package, known-elephant catalog, reviewer, evidence review, tear profile, and identity decision.
+- SEEK coding is no longer the product direction. Treat `SeekCode`, `SeekCoder`, and SEEK metadata as legacy compatibility or cleanup debt unless the user explicitly asks to work on them.
+- V1 optimizes for offline review of one already-grouped one-elephant sighting folder. Matching requires one approved left ear and one approved right ear; one-sided matching is a later capability.
 
 ## Boundaries
 
@@ -103,7 +104,7 @@ def center_to_xyxy(
 
 - Use `loguru`: `from loguru import logger`, then `logger.info(...)`, `logger.warning(...)`, etc. Put detail in the message with an f-string, e.g. `logger.info(f"Ran SAM3 {preset} for {photo.identifier}: {n} detections")`.
 - Never configure logging in library code. Entry points call `configure_logging()` from `elephant_id.log` once; it sets the loguru level from `LOG_LEVEL` or the parameter (default `INFO`). (The dev Flask app additionally configures stdlib `logging` for its own logs.)
-- Levels: `debug` for cache hits/misses and fine detail; `info` for milestones (a model run finishing, a sighting coded); `warning` for recoverable or needs-review cases (log a `warning` before skipping on a known failure path); `error`/`exception` for flat-out errors.
+- Levels: `debug` for cache hits/misses and fine detail; `info` for milestones (a model run finishing, evidence being approved, matching completing, or an identity decision being logged); `warning` for recoverable or needs-review cases (log a `warning` before skipping on a known failure path); `error`/`exception` for flat-out errors.
 - Never log secrets (API keys) or raw image/mask buffers — log identifiers, counts, and durations.
 
 ## Images And Geometry
@@ -121,10 +122,11 @@ def center_to_xyxy(
 
 ## Domain And Dataset
 
-- `Photo`, `Sighting`, and `SeekCode` are immutable validated domain objects.
-- `Photo.image_path` must be relative, non-escaping, and match the identifier stem.
-- `Sighting.sighting_id` is `{elephant_name}_{iso_date}`, and all photos must belong to that sighting.
-- Preserve the SEEK-code grammar exactly. Unknown is `None`/`_`; ages are two digits; right-ear sectors are `0/7/8/9`; left-ear sectors are `0/3/4/5`.
+- Current `Photo`, `Sighting`, and `SeekCode` domain objects describe the labeled historical dataset path, not the target product identity model.
+- In the current dataset path, `Photo.image_path` must be relative, non-escaping, and match the identifier stem.
+- In the current dataset path, `Sighting.sighting_id` is `{elephant_name}_{iso_date}`, and all photos must belong to that sighting.
+- Do not extend filename-derived identity conventions into new product storage. Product photos should use generated IDs and store metadata in the App Library.
+- Preserve existing `SeekCode` behavior when maintaining legacy parser/tests, but do not add new product features centered on SEEK codes.
 - `Dataset` lazy-loads metadata CSVs. Iteration order matters and must preserve CSV row order.
 - `Dataset.read_image()` returns fresh image copies and uses an internal LRU cache.
 
@@ -157,3 +159,11 @@ def center_to_xyxy(
 - Keep changes scoped to the request.
 - Do not commit unless explicitly asked.
 - Report noteworthy out-of-scope issues at the end of your response with file paths.
+
+## Documentation
+
+- [Current status](docs/status.md) - what exists now, what is legacy, and what is still target direction.
+- [Workflow](docs/workflow.md) - the intended product flow from import to identity decision.
+- [Architecture](docs/architecture.md) - broad system boundaries and non-negotiable architecture-level constraints for the final product.
+- [Context](docs/context.md) - canonical project vocabulary.
+- [Reference](docs/reference/README.md) - technical notes, matching details, papers, and older experiments.
