@@ -153,6 +153,11 @@ def center_to_xyxy(
 - Use fakes/recording stubs for model clients and caches; do not initialize real model clients in unit tests.
 - Add or update focused tests when changing validation, geometry, cache keys, serialization, or dataset ordering.
 
+## Subagents
+
+- For exploration and search subagents, pass a lighter, cheaper model rather than inheriting the parent model. Exploration is read-and-summarize work; reserve the parent model for synthesis, design, and integration. Delegating well-scoped implementation to a lighter model is also encouraged to conserve the parent model's budget.
+- ALWAYS drive Playwright browser verification from a subagent, not the main session.
+
 ## Git Workflow
 
 - Check `git status --short` before editing.
@@ -167,3 +172,4 @@ def center_to_xyxy(
 - [Architecture](docs/architecture.md) - broad system boundaries and non-negotiable architecture-level constraints for the final product.
 - [Context](docs/context.md) - canonical project vocabulary.
 - [Reference](docs/reference/README.md) - technical notes, matching details, papers, and older experiments.
+- [Future direction](docs/future.md) - forward-looking re-ID research direction beyond the current tear-profile matcher.
