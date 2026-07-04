@@ -1,0 +1,99 @@
+{
+  "schemaVersion": 1,
+  "name": "Elephant ID benchmark asset manifest",
+  "updated": "2026-07-04",
+  "notes": "Model and runtime assets are served from the isolated R2 custom domain for benchmark weights.",
+  "runtime": {
+    "wasm": {
+      "moduleUrl": "https://weights.benchmark.elephant-id.org/runtime/ort.min.mjs",
+      "wasmPaths": "https://weights.benchmark.elephant-id.org/runtime/",
+      "bytes": 13840337,
+      "sha256": "runtime-assets-pinned-separately"
+    },
+    "webgpu": {
+      "moduleUrl": "https://weights.benchmark.elephant-id.org/runtime/ort.webgpu.min.mjs",
+      "wasmPaths": "https://weights.benchmark.elephant-id.org/runtime/",
+      "bytes": 26894712,
+      "sha256": "runtime-assets-pinned-separately"
+    }
+  },
+  "models": [
+    {
+      "id": "efficientnetv2-b0",
+      "name": "EfficientNetV2-B0",
+      "task": "classification",
+      "url": "https://weights.benchmark.elephant-id.org/models/efficientnetv2-b0.onnx",
+      "bytes": 28573608,
+      "sha256": "2bbf5e1e9b453794b7ba17788c73bdcb3cf19322a1fd01e5fb7e774433dbab75",
+      "inputShape": [1, 3, 224, 224],
+      "inputDtype": "float32",
+      "source": "ONNX model zoo, tf_efficientnetv2_b0_Opset17_timm"
+    },
+    {
+      "id": "efficientnetv2-m",
+      "name": "EfficientNetV2-M",
+      "task": "classification",
+      "url": "https://weights.benchmark.elephant-id.org/models/efficientnetv2-m.onnx",
+      "bytes": 216223269,
+      "sha256": "bf9916aadc45582cf46149af1d4c5b697e5dd47de07cec0db5290d3d22947d2b",
+      "inputShape": [1, 3, 480, 480],
+      "inputDtype": "float32",
+      "source": "ONNX model zoo, tf_efficientnetv2_m_Opset17_timm"
+    },
+    {
+      "id": "yolo26n-detect",
+      "name": "YOLO26n Detect",
+      "task": "detection",
+      "url": "https://weights.benchmark.elephant-id.org/models/yolo26n.onnx",
+      "bytes": 9941957,
+      "sha256": "2e947b787d9e787b93a16772a5f55b1d4d8c4d86f53146149c5d6a642442d6f7",
+      "inputShape": [1, 3, 640, 640],
+      "inputDtype": "float32",
+      "source": "Ultralytics assets v8.4.0"
+    },
+    {
+      "id": "yolo26n-pose",
+      "name": "YOLO26n Keypoints",
+      "task": "keypoints",
+      "url": "https://weights.benchmark.elephant-id.org/models/yolo26n-pose.onnx",
+      "bytes": 12125856,
+      "sha256": "93fc5e1d6b7690f33b4e1d60d6e9aec1cea14bdbc361bfae11778969be662078",
+      "inputShape": [1, 3, 640, 640],
+      "inputDtype": "float32",
+      "source": "Ultralytics assets v8.4.0"
+    },
+    {
+      "id": "yolo26n-seg",
+      "name": "YOLO26n Segmentation",
+      "task": "segmentation",
+      "url": "https://weights.benchmark.elephant-id.org/models/yolo26n-seg.onnx",
+      "bytes": 11218582,
+      "sha256": "711e0ef837c677ae4006f65fe503a62a6b0529979f4828ed50b674a7482b7d2e",
+      "inputShape": [1, 3, 640, 640],
+      "inputDtype": "float32",
+      "source": "Ultralytics assets v8.4.0"
+    },
+    {
+      "id": "yolo26s-seg",
+      "name": "YOLO26s Segmentation",
+      "task": "segmentation",
+      "url": "https://weights.benchmark.elephant-id.org/models/yolo26s-seg.onnx",
+      "bytes": 41912273,
+      "sha256": "d205b2c489e7cf0cdb183bb23e56dc8a32a79602e8c5b1f5ecb01af0dc6822c3",
+      "inputShape": [1, 3, 640, 640],
+      "inputDtype": "float32",
+      "source": "Ultralytics assets v8.4.0"
+    },
+    {
+      "id": "yolo26m-seg",
+      "name": "YOLO26m Segmentation",
+      "task": "segmentation",
+      "url": "https://weights.benchmark.elephant-id.org/models/yolo26m-seg.onnx",
+      "bytes": 94615730,
+      "sha256": "38a6e1140fba87287d5943170975e111872a4a1c489d6209646455ac01081dac",
+      "inputShape": [1, 3, 640, 640],
+      "inputDtype": "float32",
+      "source": "Ultralytics assets v8.4.0"
+    }
+  ]
+}
