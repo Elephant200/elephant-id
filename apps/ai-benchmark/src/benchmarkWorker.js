@@ -69,14 +69,26 @@ async function measureWorkload(workload) {
     samples.push(performance.now() - start);
     await tick();
   }
+  const stats = summarizeSamples(samples);
   return {
     id: workload.id,
     name: workload.name,
     unit: 'ms',
     samples,
-    stats: summarizeSamples(samples),
+    stats,
+    throughput: computeThroughput(workload.metric, stats.p50),
     details: workload.details,
   };
+}
+
+/**
+ * Turn a p50 latency into a throughput figure: `perRun` work units per run,
+ * divided by seconds, scaled to the reporting unit (e.g. 1e9 for GFLOP/s).
+ */
+function computeThroughput(metric, p50Ms) {
+  if (!metric || !(p50Ms > 0)) return null;
+  const value = metric.perRun / (p50Ms / 1000) / metric.scale;
+  return { unit: metric.unit, value };
 }
 
 function tensorMathWorkload() {
@@ -92,6 +104,8 @@ function tensorMathWorkload() {
     id: 'cpu-float32-fma',
     name: 'CPU Float32 tensor math',
     details: 'Float32Array multiply-add over 1,048,576 elements, repeated.',
+    // 18 passes x length elements x 2 flops (one multiply + one add) per run.
+    metric: { unit: 'GFLOP/s', perRun: 18 * length * 2, scale: 1e9 },
     run() {
       let acc = sink;
       for (let pass = 0; pass < 18; pass += 1) {
@@ -113,6 +127,7 @@ function memoryCopyWorkload() {
     id: 'memory-copy-64mb',
     name: 'Memory copy bandwidth',
     details: 'Copies 64 MiB between typed arrays.',
+    metric: { unit: 'GB/s', perRun: length, scale: 1e9 },
     run() {
       b.set(a);
       a[0] = (a[0] + b[length - 1]) & 255;
@@ -129,6 +144,7 @@ function preprocessWorkload(size) {
     id: `preprocess-${size}`,
     name: `${size}x${size} image preprocess`,
     details: 'RGBA uint8 to normalized NCHW float tensor.',
+    metric: { unit: 'img/s', perRun: 1, scale: 1 },
     run() {
       const plane = size * size;
       for (let y = 0; y < size; y += 1) {
@@ -159,6 +175,7 @@ function postprocessWorkload() {
     id: 'postprocess-nms',
     name: 'Detection postprocess',
     details: 'Sorts 1,200 boxes and runs NMS-like overlap suppression.',
+    metric: { unit: 'runs/s', perRun: 1, scale: 1 },
     run() {
       const selected = [];
       const candidates = [...boxes].sort((a, b) => b.score - a.score);
@@ -192,6 +209,7 @@ function maskCompositeWorkload() {
     id: 'mask-composite',
     name: 'Segmentation mask composite',
     details: 'Combines 32 mask prototypes into 24 instance masks.',
+    metric: { unit: 'runs/s', perRun: 1, scale: 1 },
     run() {
       const pixels = width * height;
       for (let mask = 0; mask < masks; mask += 1) {

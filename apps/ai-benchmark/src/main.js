@@ -1,8 +1,9 @@
 import './styles.css';
 import { collectDeviceInfo } from './device.js';
-import { formatBytes, formatMs, stabilityLabel, summarizeSamples } from './stats.js';
+import { formatBytes, formatMs } from './stats.js';
+import { TIER_LABELS } from './rating.js';
 
-const DEFAULT_MANIFEST_URL = '/benchmark-assets.example.json';
+const DEFAULT_MANIFEST_URL = '/benchmark-assets.json';
 const HARDWARE_MODULE = {
   id: 'general-hardware',
   name: 'General Hardware Check',
@@ -14,19 +15,36 @@ const state = {
   manifestUrl: DEFAULT_MANIFEST_URL,
   manifest: null,
   selected: new Set(['general-hardware']),
+  backend: 'auto',
   running: false,
   canceled: false,
   results: [],
   device: null,
   report: '',
+  summary: null,
   abortController: null,
   worker: null,
   statusText: 'Ready',
 };
 
+const TASK_LABELS = {
+  hardware: 'Device stress test',
+  classification: 'Image classification',
+  detection: 'Object detection',
+  keypoints: 'Pose / keypoints',
+  segmentation: 'Segmentation',
+};
+
 const app = document.querySelector('#app');
 
+registerServiceWorker();
 init();
+
+function registerServiceWorker() {
+  // Dev is served by Vite (HMR, transformed modules); a cache would fight it.
+  if (!import.meta.env.PROD || !('serviceWorker' in navigator)) return;
+  navigator.serviceWorker.register('/sw.js').catch(() => {});
+}
 
 async function init() {
   renderShell();
@@ -47,39 +65,60 @@ function renderShell() {
       </header>
       <main class="main">
         <section class="panel intro">
-          <div>
-            <h1>Local CV benchmark</h1>
-            <p>Select tests, run them, copy the report.</p>
+          <div class="intro-copy">
+            <h1>Can this device run local AI?</h1>
+            <p>
+              This runs real computer-vision models right here in your browser —
+              nothing is uploaded and it works offline once loaded. Pick what to
+              test and press Start.
+            </p>
           </div>
           <div class="actions">
-            <button class="primary" id="start-btn" type="button">Start selected</button>
+            <label class="field">
+              <span>Run on</span>
+              <select id="backend-select">
+                <option value="auto">Auto (GPU, else CPU)</option>
+                <option value="webgpu">GPU (WebGPU)</option>
+                <option value="wasm">CPU (WASM)</option>
+              </select>
+            </label>
+            <button class="primary" id="start-btn" type="button">Start</button>
             <button class="danger hidden" id="cancel-btn" type="button">Cancel</button>
           </div>
         </section>
 
         <section class="panel">
           <div class="section-head">
-            <h2>Benchmark Modules</h2>
-            <div id="selected-total" class="mono"></div>
+            <h2>What to test</h2>
+            <div class="section-head-right">
+              <button class="ghost" id="select-all-btn" type="button">Select all</button>
+              <div id="selected-total" class="mono"></div>
+            </div>
           </div>
           <div id="module-list" class="module-list"></div>
         </section>
 
         <section class="panel">
-          <div class="section-head">
-            <h2>Run Progress</h2>
-            <div id="run-state" class="mono">Idle</div>
-          </div>
-          <div id="progress-log" class="progress-log"></div>
+          <h2>Result</h2>
+          <div id="summary" class="summary-empty">Press Start to benchmark this device.</div>
           <div id="results" class="results"></div>
         </section>
 
-        <section class="panel report-panel">
-          <div class="section-head">
-            <h2>Report</h2>
-            <button class="ghost" id="copy-report" type="button" disabled>Copy Report</button>
-          </div>
-          <div id="report" class="report-empty">Run selected modules to generate a report.</div>
+        <section class="panel">
+          <details id="details-progress">
+            <summary>Live activity <span id="run-state" class="mono">Idle</span></summary>
+            <div id="progress-log" class="progress-log"></div>
+          </details>
+        </section>
+
+        <section class="panel">
+          <details id="details-report">
+            <summary>
+              Full technical report
+              <button class="ghost" id="copy-report" type="button" disabled>Copy</button>
+            </summary>
+            <div id="report" class="report-empty">Run a benchmark to generate the report.</div>
+          </details>
         </section>
       </main>
     </div>
@@ -87,7 +126,26 @@ function renderShell() {
 
   document.querySelector('#start-btn').addEventListener('click', runSelected);
   document.querySelector('#cancel-btn').addEventListener('click', cancelRun);
-  document.querySelector('#copy-report').addEventListener('click', copyReport);
+  document.querySelector('#copy-report').addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    copyReport();
+  });
+  document.querySelector('#backend-select').addEventListener('change', (event) => {
+    state.backend = event.target.value;
+  });
+  document.querySelector('#select-all-btn').addEventListener('click', toggleSelectAll);
+}
+
+function toggleSelectAll() {
+  if (state.running) return;
+  const modules = getModules();
+  if (modules.every((module) => state.selected.has(module.id))) {
+    state.selected.clear();
+  } else {
+    for (const module of modules) state.selected.add(module.id);
+  }
+  renderModules();
 }
 
 async function loadManifest() {
@@ -109,6 +167,7 @@ async function runSelected() {
   state.canceled = false;
   state.results = [];
   state.report = '';
+  state.summary = null;
   state.abortController = new AbortController();
   render();
   logProgress('Starting selected modules');
@@ -119,8 +178,6 @@ async function runSelected() {
     try {
       if (module.id === 'general-hardware') {
         const result = await runHardwareModule();
-        const gpuResult = await runWebGpuProbe(state.abortController.signal);
-        if (gpuResult) result.workloads.push(gpuResult);
         state.results.push(result);
       } else {
         const { runModelModule } = await import('./modelRunner.js');
@@ -129,6 +186,7 @@ async function runSelected() {
           manifest: state.manifest,
           signal: state.abortController.signal,
           onProgress: logProgress,
+          backend: state.backend,
         });
         state.results.push(result);
       }
@@ -149,12 +207,18 @@ async function runSelected() {
 
   state.running = false;
   state.canceled = state.abortController.signal.aborted;
-  const { buildEmailReport } = await import('./report.js');
+  const status = state.canceled ? 'canceled' : 'complete';
+  const { buildEmailReport, buildSummary } = await import('./report.js');
+  state.summary = buildSummary({
+    device: state.device,
+    modules: state.results,
+    status,
+  });
   state.report = buildEmailReport({
     device: state.device,
     manifest: state.manifest ?? {},
     modules: state.results,
-    status: state.canceled ? 'canceled' : 'complete',
+    status,
   });
   setStatus(state.canceled ? 'Canceled' : 'Complete');
   render();
@@ -171,94 +235,26 @@ function runHardwareModule() {
       reject(new DOMException('Benchmark canceled', 'AbortError'));
     };
     state.abortController.signal.addEventListener('abort', abort, { once: true });
+    const finish = () => {
+      state.abortController.signal.removeEventListener('abort', abort);
+      worker.terminate();
+      state.worker = null;
+    };
     worker.onmessage = (event) => {
       const data = event.data;
       if (data.type === 'progress') logProgress(data.message);
       if (data.type === 'partial-result') renderWorkloadResult(data.result);
       if (data.type === 'complete') {
-        state.abortController.signal.removeEventListener('abort', abort);
-        worker.terminate();
-        state.worker = null;
+        finish();
         resolve(data.result);
       }
       if (data.type === 'error') {
-        state.abortController.signal.removeEventListener('abort', abort);
-        worker.terminate();
-        state.worker = null;
+        finish();
         reject(new Error(data.error));
       }
     };
     worker.postMessage({ type: 'run-hardware' });
   });
-}
-
-async function runWebGpuProbe(signal) {
-  if (!navigator.gpu) return null;
-  const samples = [];
-  const adapter = await navigator.gpu.requestAdapter();
-  if (!adapter) return null;
-  const device = await adapter.requestDevice();
-  const count = 1 << 20;
-  const buffer = device.createBuffer({
-    size: count * 4,
-    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST,
-  });
-  const shader = device.createShaderModule({
-    code: `
-      @group(0) @binding(0) var<storage, read_write> data: array<f32>;
-      @compute @workgroup_size(64)
-      fn main(@builtin(global_invocation_id) id: vec3<u32>) {
-        let i = id.x;
-        if (i < ${count}u) {
-          data[i] = f32((i * 17u) % 251u) * 0.001 + data[i] * 1.0001;
-        }
-      }
-    `,
-  });
-  const pipeline = device.createComputePipeline({
-    layout: 'auto',
-    compute: { module: shader, entryPoint: 'main' },
-  });
-  const bindGroup = device.createBindGroup({
-    layout: pipeline.getBindGroupLayout(0),
-    entries: [{ binding: 0, resource: { buffer } }],
-  });
-  for (let i = 0; i < 2; i += 1) {
-    throwIfAborted(signal);
-    await dispatchGpu(device, pipeline, bindGroup, count);
-  }
-  for (let i = 0; i < 7; i += 1) {
-    throwIfAborted(signal);
-    const start = performance.now();
-    await dispatchGpu(device, pipeline, bindGroup, count);
-    samples.push(performance.now() - start);
-  }
-  device.destroy();
-  return {
-    id: 'webgpu-compute',
-    name: 'WebGPU compute dispatch',
-    unit: 'ms',
-    samples,
-    stats: summarizeSamples(samples),
-    details: 'Compute shader over 1,048,576 float values.',
-  };
-}
-
-function throwIfAborted(signal) {
-  if (signal?.aborted) {
-    throw new DOMException('Benchmark canceled', 'AbortError');
-  }
-}
-
-async function dispatchGpu(device, pipeline, bindGroup, count) {
-  const encoder = device.createCommandEncoder();
-  const pass = encoder.beginComputePass();
-  pass.setPipeline(pipeline);
-  pass.setBindGroup(0, bindGroup);
-  pass.dispatchWorkgroups(Math.ceil(count / 64));
-  pass.end();
-  device.queue.submit([encoder.finish()]);
-  await device.queue.onSubmittedWorkDone();
 }
 
 function cancelRun() {
@@ -274,24 +270,138 @@ function cancelRun() {
 function render() {
   document.querySelector('#status-pill').textContent = state.statusText;
   document.querySelector('#start-btn').disabled = state.running || !state.manifest;
+  document.querySelector('#backend-select').disabled = state.running;
   document.querySelector('#cancel-btn').classList.toggle('hidden', !state.running || state.canceled);
   document.querySelector('#copy-report').disabled = !state.report;
   document.querySelector('#report').innerHTML = state.report
     ? renderReportHtml(state.report)
-    : 'Run selected modules to generate a report.';
+    : 'Run a benchmark to generate the report.';
   document.querySelector('#report').classList.toggle('report-empty', !state.report);
-  document.querySelector('#run-state').textContent = state.running
-    ? state.canceled
-      ? 'Canceling'
-      : 'Running'
-    : state.canceled
-      ? 'Canceled'
-      : state.report
-        ? 'Complete'
-        : 'Idle';
+  document.querySelector('#run-state').textContent = runStateLabel();
+  document.querySelector('#details-progress').open = state.running;
   renderEnvironment();
   renderModules();
+  renderSummary();
   renderResults();
+}
+
+function runStateLabel() {
+  if (state.running) return state.canceled ? 'Canceling' : 'Running';
+  if (state.canceled) return 'Canceled';
+  return state.report ? 'Complete' : 'Idle';
+}
+
+function renderSummary() {
+  const target = document.querySelector('#summary');
+  if (!state.summary) {
+    target.className = 'summary-empty';
+    target.textContent = state.running
+      ? 'Benchmarking… live activity is below.'
+      : 'Press Start to benchmark this device.';
+    return;
+  }
+  const { verdict, models, compute, system, legend } = state.summary;
+  const tierClass = verdict.tier ?? TONE_TIER[verdict.tone] ?? 'good';
+  target.className = 'summary';
+  target.innerHTML = `
+    <div class="verdict verdict-${tierClass}">
+      <div class="verdict-label">${escapeHtml(verdict.label)}</div>
+      <div class="verdict-detail">${escapeHtml(verdict.detail)}</div>
+    </div>
+    ${gradeSection('Model inference speed', models.map(modelGradeCard))}
+    ${gradeSection('Compute breakdown', compute.map(computeGradeCard))}
+    ${systemSection(system)}
+    ${legendSection(legend)}
+  `;
+}
+
+const TONE_TIER = { ok: 'great', warn: 'acceptable', bad: 'poor' };
+
+function gradeSection(title, cards) {
+  if (!cards.length) return '';
+  return `
+    <div class="grade-section">
+      <h3>${escapeHtml(title)}</h3>
+      <div class="grade-grid">${cards.join('')}</div>
+    </div>
+  `;
+}
+
+function modelGradeCard(model) {
+  return `
+    <div class="grade-card">
+      <div class="grade-top">
+        <span class="grade-name">${escapeHtml(model.name)}</span>
+        ${tierBadge(model.tier)}
+      </div>
+      <div class="grade-metric">${Math.round(model.fps)} runs/sec</div>
+      <div class="grade-meta">${escapeHtml(model.backendLabel)} · ${formatMs(model.latencyMs)}</div>
+    </div>
+  `;
+}
+
+function computeGradeCard(item) {
+  return `
+    <div class="grade-card">
+      <div class="grade-top">
+        <span class="grade-name">${escapeHtml(item.name)}</span>
+        ${item.tier ? tierBadge(item.tier) : ''}
+      </div>
+      <div class="grade-metric">${escapeHtml(item.throughput)}</div>
+    </div>
+  `;
+}
+
+function systemSection(system) {
+  if (!system.length) return '';
+  return `
+    <div class="grade-section">
+      <h3>System</h3>
+      <div class="stat-grid">
+        ${system
+          .map(
+            (fact) => `
+          <div class="stat-card">
+            <div class="stat-label">${escapeHtml(fact.label)}</div>
+            <div class="stat-value">${escapeHtml(fact.value)}</div>
+          </div>`,
+          )
+          .join('')}
+      </div>
+    </div>
+  `;
+}
+
+function legendSection(legend) {
+  return `
+    <details class="legend">
+      <summary>How grades work</summary>
+      <p class="legend-note">
+        Model inference speed is the grade that matters for the workflow. The
+        hardware rows are rough throughput heuristics. Cut-offs (higher is better):
+      </p>
+      ${legend
+        .map(
+          (scale) => `
+        <div class="legend-row">
+          <div class="legend-name">${escapeHtml(scale.name)}</div>
+          <div class="legend-bands">
+            ${scale.bands
+              .map(
+                (band) =>
+                  `<span class="legend-band badge badge-${band.tier}">${TIER_LABELS[band.tier]} ${escapeHtml(band.text)}</span>`,
+              )
+              .join('')}
+          </div>
+        </div>`,
+        )
+        .join('')}
+    </details>
+  `;
+}
+
+function tierBadge(tier) {
+  return `<span class="badge badge-${tier}">${TIER_LABELS[tier]}</span>`;
 }
 
 function renderEnvironment() {
@@ -309,10 +419,14 @@ function renderModules() {
   const selectedBytes = modules
     .filter((module) => state.selected.has(module.id))
     .reduce((sum, module) => sum + (module.bytes ?? 0), runtimeBytes());
+  const allSelected = modules.every((module) => state.selected.has(module.id));
+  const selectAllBtn = document.querySelector('#select-all-btn');
+  selectAllBtn.textContent = allSelected ? 'Clear all' : 'Select all';
+  selectAllBtn.disabled = state.running;
   document.querySelector('#selected-total').textContent =
     state.selected.size > 1
-      ? `Selected model/runtime download: about ${formatBytes(selectedBytes)}`
-      : 'Select modules independently';
+      ? `About ${formatBytes(selectedBytes)} to download`
+      : 'Choose one or more';
   list.innerHTML = modules.map(renderModuleCard).join('');
   list.querySelectorAll('input[type="checkbox"]').forEach((input) => {
     input.addEventListener('change', () => {
@@ -325,20 +439,16 @@ function renderModules() {
 
 function renderModuleCard(module) {
   const checked = state.selected.has(module.id) ? 'checked' : '';
-  const bytes = module.id === 'general-hardware'
-    ? 'No model download'
-    : `${formatBytes(module.bytes)} model`;
-  const hash = module.sha256?.startsWith('replace-with')
-    ? 'hash placeholder'
-    : module.sha256
-      ? 'hash pinned'
-      : 'hash missing';
+  const task = TASK_LABELS[module.task] ?? module.task;
+  const size = module.id === 'general-hardware'
+    ? 'no download'
+    : `${formatBytes(module.bytes)} download`;
   return `
     <label class="module-card">
       <input type="checkbox" value="${module.id}" ${checked} ${state.running ? 'disabled' : ''} />
       <div>
         <div class="module-title">${escapeHtml(module.name)}</div>
-        <div class="module-meta">${escapeHtml(module.task)} · ${bytes}${module.id === 'general-hardware' ? '' : ` · ${hash}`}</div>
+        <div class="module-meta">${escapeHtml(task)} · ${escapeHtml(size)}</div>
       </div>
     </label>
   `;
@@ -346,8 +456,10 @@ function renderModuleCard(module) {
 
 function renderResults() {
   const target = document.querySelector('#results');
-  if (!state.results.length) {
-    target.innerHTML = '<div class="empty">No completed module results yet.</div>';
+  // While running, show live per-module rows; the graded summary replaces them
+  // once the run completes.
+  if (state.summary || !state.results.length) {
+    target.innerHTML = '';
     return;
   }
   target.innerHTML = state.results.map(renderResultRow).join('');
@@ -358,14 +470,20 @@ function renderResultRow(result) {
     return `<div class="result-row warn"><strong>${escapeHtml(result.name)}</strong><span>${escapeHtml(result.error ?? result.reason ?? result.status)}</span></div>`;
   }
   if (result.id === 'general-hardware') {
-    return `<div class="result-row"><strong>${result.name}</strong><span>${result.workloads.length} workloads complete</span></div>`;
+    return `<div class="result-row"><strong>${escapeHtml(result.name)}</strong><span>${result.workloads.length} checks complete</span></div>`;
   }
   return `
     <div class="result-row">
       <strong>${escapeHtml(result.name)}</strong>
-      <span>${result.backend} · p50 ${formatMs(result.stats.p50)} · p95 ${formatMs(result.stats.p95)} · ${stabilityLabel(result.stats)}</span>
+      <span>${escapeHtml(backendLabel(result.backend))} · ${Math.round(result.stats.fpsP50)} runs/sec</span>
     </div>
   `;
+}
+
+function backendLabel(backend) {
+  if (backend === 'webgpu') return 'GPU';
+  if (backend === 'wasm') return 'CPU';
+  return backend;
 }
 
 function renderWorkloadResult(result) {

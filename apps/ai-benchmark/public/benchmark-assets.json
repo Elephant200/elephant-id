@@ -2,16 +2,16 @@
   "schemaVersion": 1,
   "name": "Elephant ID benchmark asset manifest",
   "updated": "2026-07-04",
-  "notes": "Model and runtime assets are served from the isolated R2 custom domain for benchmark weights.",
+  "notes": "Model weights and the ONNX Runtime wasm/glue are served from the R2 custom domain. wasmPaths is an absolute cross-origin URL, so the runtime loads under COEP: require-corp via CORS (R2 returns the CORS headers).",
   "runtime": {
     "wasm": {
       "wasmPaths": "https://weights.benchmark.elephant-id.org/runtime/",
-      "bytes": 13840337,
+      "bytes": 13479978,
       "sha256": "runtime-assets-pinned-separately"
     },
     "webgpu": {
       "wasmPaths": "https://weights.benchmark.elephant-id.org/runtime/",
-      "bytes": 26894712,
+      "bytes": 24254953,
       "sha256": "runtime-assets-pinned-separately"
     }
   },

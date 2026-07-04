@@ -62,10 +62,3 @@ export function formatBytes(bytes) {
   }
   return `${value.toFixed(unit === 0 ? 0 : 2)} ${units[unit]}`;
 }
-
-export function stabilityLabel(stats) {
-  if (!stats.count) return 'not measured';
-  if (stats.cv <= 0.08 && stats.p95 <= stats.p50 * 1.25) return 'stable';
-  if (stats.cv <= 0.18 && stats.p95 <= stats.p50 * 1.6) return 'variable';
-  return 'spiky';
-}

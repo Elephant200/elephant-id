@@ -1,4 +1,4 @@
-import { summarizeSamples } from './stats.js';
+import { formatBytes, summarizeSamples } from './stats.js';
 
 const DEFAULT_WARMUPS = 2;
 const DEFAULT_SAMPLES = 7;
@@ -9,14 +9,16 @@ export async function runModelModule({
   manifest,
   signal,
   onProgress,
+  backend: backendPreference = 'auto',
 }) {
   const startedAt = performance.now();
   const download = await downloadModel(model, signal, onProgress);
-  const backendResult = await createFastestSession({
+  const backendResult = await createSessionForBackend({
     manifest,
     modelBytes: download.buffer,
     signal,
     onProgress,
+    preference: backendPreference,
   });
   const { session, backend, ort, warnings } = backendResult;
   const inputName = session.inputNames[0];
@@ -65,12 +67,23 @@ export async function runModelModule({
   };
 }
 
-async function createFastestSession({ manifest, modelBytes, signal, onProgress }) {
+async function createSessionForBackend({
+  manifest,
+  modelBytes,
+  signal,
+  onProgress,
+  preference,
+}) {
   const warnings = [];
   const webgpuRuntime = manifest.runtime?.webgpu;
-  if (navigator.gpu && webgpuRuntime?.wasmPaths) {
+  const webgpuUsable = Boolean(navigator.gpu) && Boolean(webgpuRuntime?.wasmPaths);
+
+  if (preference === 'webgpu' && !webgpuUsable) {
+    throw new Error('WebGPU was requested but is not available in this browser.');
+  }
+  if (preference !== 'wasm' && webgpuUsable) {
     try {
-      onProgress('Trying WebGPU backend');
+      onProgress('Trying GPU (WebGPU) backend');
       return await createSession({
         runtime: webgpuRuntime,
         backend: 'webgpu',
@@ -79,6 +92,7 @@ async function createFastestSession({ manifest, modelBytes, signal, onProgress }
         warnings,
       });
     } catch (error) {
+      if (preference === 'webgpu') throw error;
       warnings.push(`WebGPU unavailable for this model: ${error.message}`);
     }
   }
@@ -87,7 +101,7 @@ async function createFastestSession({ manifest, modelBytes, signal, onProgress }
   if (!wasmRuntime?.wasmPaths) {
     throw new Error('Manifest does not define a WASM ONNX Runtime wasmPaths URL.');
   }
-  onProgress('Using WASM backend');
+  onProgress('Using CPU (WASM) backend');
   return createSession({
     runtime: wasmRuntime,
     backend: 'wasm',
@@ -149,7 +163,7 @@ async function downloadModel(model, signal, onProgress) {
     };
   }
 
-  onProgress(`Downloading ${model.name} (${formatBytesInline(model.bytes)})`);
+  onProgress(`Downloading ${model.name} (${formatBytes(model.bytes)})`);
   const response = await fetch(model.url, { signal, mode: 'cors' });
   if (!response.ok) {
     throw new Error(`Download failed with HTTP ${response.status}`);
@@ -217,11 +231,33 @@ function createSyntheticInput(ort, shape) {
 }
 
 function resolveInputShape(session, inputName, fallback) {
-  const dims = session.inputMetadata?.[inputName]?.dimensions;
-  if (Array.isArray(dims) && dims.every((dim) => Number.isInteger(dim) && dim > 0)) {
-    return dims;
+  const meta = session.inputMetadata?.find((entry) => entry.name === inputName);
+  const modelShape = meta?.isTensor ? meta.shape : null;
+  if (!Array.isArray(modelShape) || !modelShape.length) {
+    return requireStaticShape(fallback, inputName);
   }
-  return fallback;
+  // The model is the source of truth. Fixed dims come straight from it (so we
+  // feed a correctly-sized tensor even when the manifest inputShape is stale);
+  // symbolic dims (batch, dynamic H/W) fall back to the manifest per index.
+  return modelShape.map((dim, index) => {
+    if (typeof dim === 'number' && Number.isInteger(dim) && dim > 0) return dim;
+    const fromFallback = fallback?.[index];
+    if (Number.isInteger(fromFallback) && fromFallback > 0) return fromFallback;
+    throw new Error(
+      `Input "${inputName}" dimension ${index} is dynamic (${dim}) with no manifest fallback.`,
+    );
+  });
+}
+
+function requireStaticShape(fallback, inputName) {
+  if (
+    Array.isArray(fallback) &&
+    fallback.length >= 2 &&
+    fallback.every((dim) => Number.isInteger(dim) && dim > 0)
+  ) {
+    return fallback;
+  }
+  throw new Error(`No usable input shape for "${inputName}" from model or manifest.`);
 }
 
 function releaseSession(session) {
@@ -238,9 +274,4 @@ function throwIfAborted(signal) {
 
 function tick() {
   return new Promise((resolve) => setTimeout(resolve, 0));
-}
-
-function formatBytesInline(bytes) {
-  if (!bytes) return 'unknown size';
-  return `${(bytes / 1048576).toFixed(2)} MiB`;
 }

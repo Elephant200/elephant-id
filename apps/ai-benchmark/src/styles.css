@@ -13,6 +13,11 @@
   --accent: #b07c26;
   --danger: #a8523a;
   --ok: #3f6b46;
+  --tier-excellent: #2f7d32;
+  --tier-great: #4f7a3a;
+  --tier-good: #8a7d1f;
+  --tier-acceptable: #b07c26;
+  --tier-poor: #a8523a;
   --mono: "SFMono-Regular", "IBM Plex Mono", ui-monospace, monospace;
   --sans: "IBM Plex Sans", Inter, system-ui, -apple-system, sans-serif;
 }
@@ -145,9 +150,46 @@ p {
   gap: 12px;
 }
 
+.section-head-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .actions {
   flex: 0 0 auto;
-  align-items: flex-start;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.field select {
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 5px;
+  background: #fffaf0;
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 14px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.field select:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 button {
@@ -264,9 +306,243 @@ button:disabled {
   color: var(--muted);
 }
 
-.report-panel #report {
+/* Plain-language summary */
+.summary-empty {
+  color: var(--muted);
+}
+
+.summary {
+  display: grid;
+  gap: 14px;
+}
+
+.verdict {
+  padding: 14px 16px;
+  border-radius: 6px;
+  border-left: 5px solid var(--line-strong);
+  background: var(--inset);
+}
+
+.verdict-excellent {
+  border-left-color: var(--tier-excellent);
+}
+
+.verdict-great {
+  border-left-color: var(--tier-great);
+}
+
+.verdict-good {
+  border-left-color: var(--tier-good);
+}
+
+.verdict-acceptable {
+  border-left-color: var(--tier-acceptable);
+}
+
+.verdict-poor {
+  border-left-color: var(--tier-poor);
+}
+
+.verdict-label {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--green-deep);
+}
+
+.verdict-detail {
+  margin-top: 4px;
+  color: var(--muted);
+}
+
+/* Graded cards (models + compute breakdown) */
+.grade-section {
+  margin-top: 4px;
+}
+
+.grade-section h3 {
+  margin: 0 0 8px;
+  color: var(--green-deep);
+  font-size: 14px;
+}
+
+.grade-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.grade-card {
+  padding: 12px 13px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fffaf0;
+}
+
+.grade-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.grade-name {
+  font-weight: 700;
+}
+
+.grade-metric {
+  margin-top: 6px;
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--green-deep);
+}
+
+.grade-meta {
+  margin-top: 2px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* Tier badges */
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: #fff;
+  white-space: nowrap;
+}
+
+.badge-excellent {
+  background: var(--tier-excellent);
+}
+
+.badge-great {
+  background: var(--tier-great);
+}
+
+.badge-good {
+  background: var(--tier-good);
+}
+
+.badge-acceptable {
+  background: var(--tier-acceptable);
+}
+
+.badge-poor {
+  background: var(--tier-poor);
+}
+
+/* Legend */
+.legend {
+  margin-top: 4px;
+  padding: 10px 12px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 6px;
+  background: var(--inset);
+}
+
+.legend > summary {
+  font-size: 14px;
+}
+
+.legend-note {
+  margin: 10px 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.legend-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: baseline;
+  padding: 6px 0;
+  border-top: 1px solid var(--line);
+}
+
+.legend-name {
+  flex: 0 0 150px;
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.legend-bands {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.legend-band {
+  font-weight: 400;
+}
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+}
+
+.stat-card {
+  padding: 12px 13px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fffaf0;
+}
+
+.stat-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.stat-value {
+  margin-top: 4px;
+  font-weight: 700;
+}
+
+/* Collapsible technical sections */
+details > summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  color: var(--green-deep);
+  font-size: 18px;
+  font-weight: 700;
+  list-style: none;
+}
+
+details > summary::-webkit-details-marker {
+  display: none;
+}
+
+details > summary::before {
+  content: "\25B8";
+  color: var(--line-strong);
+  font-size: 13px;
+}
+
+details[open] > summary::before {
+  content: "\25BE";
+}
+
+details > summary #run-state,
+details > summary .ghost {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 400;
+}
+
+#report {
   width: 100%;
-  min-height: 360px;
+  min-height: 320px;
+  margin-top: 12px;
   padding: 14px;
   border: 1px solid var(--line);
   border-radius: 5px;
@@ -275,14 +551,18 @@ button:disabled {
   font-size: 12px;
 }
 
-.report-panel h3 {
+#details-progress .progress-log {
+  margin-top: 12px;
+}
+
+#report h3 {
   margin: 14px 0 6px;
   color: var(--green-deep);
   font-family: var(--sans);
   font-size: 15px;
 }
 
-.report-panel h3:first-child {
+#report h3:first-child {
   margin-top: 0;
 }
 
