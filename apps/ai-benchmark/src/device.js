@@ -6,18 +6,8 @@ export async function collectDeviceInfo() {
     getHighEntropyUa(uaData),
     getStorageEstimate(),
   ]);
-  const memory = performance.memory
-    ? {
-        jsHeapSizeLimit: performance.memory.jsHeapSizeLimit,
-        totalJSHeapSize: performance.memory.totalJSHeapSize,
-        usedJSHeapSize: performance.memory.usedJSHeapSize,
-      }
-    : null;
-
   return {
-    timestamp: new Date().toISOString(),
     userAgent: navigator.userAgent,
-    brands: uaData?.brands ?? [],
     browser: describeBrowser(highEntropy, uaData),
     platform: uaData?.platform ?? navigator.platform,
     platformVersion: highEntropy?.platformVersion ?? null,
@@ -25,17 +15,12 @@ export async function collectDeviceInfo() {
       ? `${highEntropy.architecture}${highEntropy.bitness ? ` ${highEntropy.bitness}-bit` : ''}`
       : null,
     deviceModel: highEntropy?.model || null,
-    mobile: uaData?.mobile ?? /Mobi|Android/i.test(navigator.userAgent),
-    language: navigator.language,
     logicalCpuCores: navigator.hardwareConcurrency ?? null,
     deviceMemoryGb: navigator.deviceMemory ?? null,
     storage,
     network: getNetworkInfo(),
     crossOriginIsolated: window.crossOriginIsolated,
-    secureContext: window.isSecureContext,
-    webAssembly: typeof WebAssembly !== 'undefined',
     wasmFeatures: detectWasmFeatures(),
-    workers: typeof Worker !== 'undefined',
     webGpuAvailable: Boolean(navigator.gpu),
     gpuAdapter: adapter,
     gpuRenderer: getWebglRenderer(),
@@ -45,7 +30,9 @@ export async function collectDeviceInfo() {
       devicePixelRatio: window.devicePixelRatio,
       colorDepth: window.screen.colorDepth,
     },
-    performanceMemory: memory,
+    performanceMemory: performance.memory
+      ? { jsHeapSizeLimit: performance.memory.jsHeapSizeLimit }
+      : null,
   };
 }
 
@@ -153,16 +140,12 @@ async function getGpuAdapterInfo() {
       architecture: info?.architecture ?? 'not exposed',
       device: info?.device ?? 'not exposed',
       description: info?.description ?? 'not exposed',
-      features: Array.from(adapter.features ?? []),
       limits: adapter.limits
         ? {
             maxBufferSize: adapter.limits.maxBufferSize,
             maxStorageBufferBindingSize: adapter.limits.maxStorageBufferBindingSize,
             maxComputeInvocationsPerWorkgroup:
               adapter.limits.maxComputeInvocationsPerWorkgroup,
-            maxComputeWorkgroupSizeX: adapter.limits.maxComputeWorkgroupSizeX,
-            maxComputeWorkgroupsPerDimension:
-              adapter.limits.maxComputeWorkgroupsPerDimension,
           }
         : null,
     };

@@ -11,18 +11,7 @@ export function percentile(values, pct) {
 export function summarizeSamples(samples) {
   const values = samples.filter((value) => Number.isFinite(value));
   if (!values.length) {
-    return {
-      count: 0,
-      mean: 0,
-      p50: 0,
-      p95: 0,
-      min: 0,
-      max: 0,
-      stddev: 0,
-      cv: 0,
-      fpsP50: 0,
-      fpsP95: 0,
-    };
+    return { mean: 0, p50: 0, p95: 0, min: 0, max: 0, stddev: 0, fpsP50: 0, fpsP95: 0 };
   }
   const total = values.reduce((sum, value) => sum + value, 0);
   const mean = total / values.length;
@@ -32,14 +21,12 @@ export function summarizeSamples(samples) {
   const p50 = percentile(values, 50);
   const p95 = percentile(values, 95);
   return {
-    count: values.length,
     mean,
     p50,
     p95,
     min: Math.min(...values),
     max: Math.max(...values),
     stddev: Math.sqrt(variance),
-    cv: mean > 0 ? Math.sqrt(variance) / mean : 0,
     fpsP50: p50 > 0 ? 1000 / p50 : 0,
     fpsP95: p95 > 0 ? 1000 / p95 : 0,
   };

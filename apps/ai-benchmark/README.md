@@ -19,14 +19,15 @@ holds to one rule: **nothing large downloads unless the user asks for it.**
 ## Deploy Shape
 
 - **App shell**: Cloudflare Pages (`ai-benchmark` project), build `npm run build`,
-  output `dist`. `public/_headers` sets `COOP: same-origin` / `COEP: require-corp`
-  so the wasm backend can use threads.
+  output `dist`. `public/_headers` sets `COOP: same-origin` / `COEP: credentialless`
+  for cross-origin isolation (wasm threads) that still lets the Cloudflare Web
+  Analytics beacon through. Safari lacks `credentialless`, so it runs single-thread.
 - **Runtime + weights**: Cloudflare R2 bucket `ai-benchmark-assets`, custom domain
   `weights.benchmark.elephant-id.org`, referenced by `public/benchmark-assets.json`.
   The runtime `wasmPaths` is an **absolute cross-origin URL** — this is deliberate:
   it loads under COEP via CORS, and (unlike a same-origin `/public` path) Vite's dev
-  server doesn't try to transform it. R2 CORS is locked to `GET`/`HEAD` from
-  `https://benchmark.elephant-id.org` only.
+  server doesn't try to transform it. R2 CORS allows `GET`/`HEAD` from
+  `https://benchmark.elephant-id.org` and `http://localhost:5173` (local dev).
 
 ### Runtime files on R2
 
@@ -52,7 +53,5 @@ npm run build && npm run preview -- --port 5173 --strictPort   # test the SW/off
 npm run deploy    # build + wrangler pages deploy dist --project-name ai-benchmark
 ```
 
-R2 CORS is production-only (`https://benchmark.elephant-id.org`). To run models
-locally, temporarily add `http://localhost:5173` to the bucket's CORS origins
-(`wrangler r2 bucket cors set ai-benchmark-assets --file ...`) and remove it after.
-Without that, local model runs fail on CORS, but the shell and hardware check still work.
+Local runs fetch runtime + weights from R2; `http://localhost:5173` is in the
+bucket's CORS allow-list, so keep the dev port at 5173.

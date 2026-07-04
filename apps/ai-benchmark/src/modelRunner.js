@@ -11,7 +11,6 @@ export async function runModelModule({
   onProgress,
   backend: backendPreference = 'auto',
 }) {
-  const startedAt = performance.now();
   const download = await downloadModel(model, signal, onProgress);
   const backendResult = await createSessionForBackend({
     manifest,
@@ -23,8 +22,8 @@ export async function runModelModule({
   const { session, backend, ort, warnings } = backendResult;
   const inputName = session.inputNames[0];
   const inputShape = resolveInputShape(session, inputName, model.inputShape);
-  const input = createSyntheticInput(ort, inputShape);
-  const feeds = { [inputName]: input.tensor };
+  const inputTensor = createSyntheticInput(ort, inputShape);
+  const feeds = { [inputName]: inputTensor };
   const samples = [];
 
   onProgress(`Warmup: ${model.name} on ${backend}`);
@@ -43,7 +42,6 @@ export async function runModelModule({
     await tick();
   }
 
-  const outputNames = [...session.outputNames];
   releaseSession(session);
   return {
     id: model.id,
@@ -51,16 +49,12 @@ export async function runModelModule({
     task: model.task,
     status: 'complete',
     backend,
-    startedAt,
-    endedAt: performance.now(),
     modelBytes: model.bytes,
     bytesDownloaded: download.bytesDownloaded,
     downloadMs: download.downloadMs,
-    hashVerified: download.hashVerified,
     hashStatus: download.hashStatus,
     sessionCreateMs: backendResult.sessionCreateMs,
     inputShape,
-    outputNames,
     samples,
     stats: summarizeSamples(samples),
     warnings,
@@ -158,7 +152,6 @@ async function downloadModel(model, signal, onProgress) {
       buffer,
       bytesDownloaded: 0,
       downloadMs: performance.now() - start,
-      hashVerified: true,
       hashStatus: 'browser cache',
     };
   }
@@ -182,7 +175,6 @@ async function downloadModel(model, signal, onProgress) {
     buffer,
     bytesDownloaded,
     downloadMs,
-    hashVerified: hashStatus === 'verified',
     hashStatus,
   };
 }
@@ -224,10 +216,7 @@ function createSyntheticInput(ort, shape) {
   for (let i = 0; i < data.length; i += 1) {
     data[i] = (((i * 17) % 255) / 255 - 0.5) * 2;
   }
-  return {
-    data,
-    tensor: new ort.Tensor('float32', data, shape),
-  };
+  return new ort.Tensor('float32', data, shape);
 }
 
 function resolveInputShape(session, inputName, fallback) {

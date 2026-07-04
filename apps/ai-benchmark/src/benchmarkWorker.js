@@ -5,7 +5,6 @@ const WARMUPS = 3;
 
 self.onmessage = async (event) => {
   if (event.data?.type !== 'run-hardware') return;
-  const startedAt = performance.now();
   const results = [];
   try {
     const workloads = [
@@ -15,14 +14,8 @@ self.onmessage = async (event) => {
       postprocessWorkload(),
       maskCompositeWorkload(),
     ];
-    for (let index = 0; index < workloads.length; index += 1) {
-      const workload = workloads[index];
-      self.postMessage({
-        type: 'progress',
-        message: `General hardware: ${workload.name}`,
-        completed: index,
-        total: workloads.length,
-      });
+    for (const workload of workloads) {
+      self.postMessage({ type: 'progress', message: `General hardware: ${workload.name}` });
       const result = await measureWorkload(workload);
       results.push(result);
       self.postMessage({ type: 'partial-result', result });
@@ -34,26 +27,11 @@ self.onmessage = async (event) => {
         name: 'General Hardware Check',
         status: 'complete',
         backend: 'browser worker',
-        startedAt,
-        endedAt: performance.now(),
         workloads: results,
       },
     });
   } catch (error) {
-    self.postMessage({
-      type: 'error',
-      error: error.message,
-      result: {
-        id: 'general-hardware',
-        name: 'General Hardware Check',
-        status: 'failed',
-        backend: 'browser worker',
-        startedAt,
-        endedAt: performance.now(),
-        workloads: results,
-        error: error.message,
-      },
-    });
+    self.postMessage({ type: 'error', error: error.message });
   }
 };
 
@@ -73,11 +51,9 @@ async function measureWorkload(workload) {
   return {
     id: workload.id,
     name: workload.name,
-    unit: 'ms',
     samples,
     stats,
     throughput: computeThroughput(workload.metric, stats.p50),
-    details: workload.details,
   };
 }
 
@@ -100,10 +76,10 @@ function tensorMathWorkload() {
     b[i] = ((i % 197) - 98) / 97;
   }
   let sink = 0;
+  // Float32Array multiply-add over 1,048,576 elements, repeated.
   return {
     id: 'cpu-float32-fma',
     name: 'CPU Float32 tensor math',
-    details: 'Float32Array multiply-add over 1,048,576 elements, repeated.',
     // 18 passes x length elements x 2 flops (one multiply + one add) per run.
     metric: { unit: 'GFLOP/s', perRun: 18 * length * 2, scale: 1e9 },
     run() {
@@ -123,10 +99,10 @@ function memoryCopyWorkload() {
   const a = new Uint8Array(length);
   const b = new Uint8Array(length);
   a.fill(37);
+  // Copies 64 MiB between typed arrays.
   return {
     id: 'memory-copy-64mb',
     name: 'Memory copy bandwidth',
-    details: 'Copies 64 MiB between typed arrays.',
     metric: { unit: 'GB/s', perRun: length, scale: 1e9 },
     run() {
       b.set(a);
@@ -140,10 +116,10 @@ function preprocessWorkload(size) {
   const source = new Uint8Array(sourceSize);
   const output = new Float32Array(3 * size * size);
   for (let i = 0; i < source.length; i += 1) source[i] = (i * 13) & 255;
+  // RGBA uint8 to normalized NCHW float tensor.
   return {
     id: `preprocess-${size}`,
     name: `${size}x${size} image preprocess`,
-    details: 'RGBA uint8 to normalized NCHW float tensor.',
     metric: { unit: 'img/s', perRun: 1, scale: 1 },
     run() {
       const plane = size * size;
@@ -171,10 +147,10 @@ function postprocessWorkload() {
       score: ((i * 37) % 1000) / 1000,
     });
   }
+  // Sorts 1,200 boxes and runs NMS-like overlap suppression.
   return {
     id: 'postprocess-nms',
     name: 'Detection postprocess',
-    details: 'Sorts 1,200 boxes and runs NMS-like overlap suppression.',
     metric: { unit: 'runs/s', perRun: 1, scale: 1 },
     run() {
       const selected = [];
@@ -205,10 +181,10 @@ function maskCompositeWorkload() {
   const output = new Uint8Array(masks * width * height);
   for (let i = 0; i < proto.length; i += 1) proto[i] = ((i % 127) - 63) / 63;
   for (let i = 0; i < coeffs.length; i += 1) coeffs[i] = ((i % 31) - 15) / 31;
+  // Combines 32 mask prototypes into 24 instance masks.
   return {
     id: 'mask-composite',
     name: 'Segmentation mask composite',
-    details: 'Combines 32 mask prototypes into 24 instance masks.',
     metric: { unit: 'runs/s', perRun: 1, scale: 1 },
     run() {
       const pixels = width * height;
