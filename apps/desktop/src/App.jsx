@@ -1,24 +1,42 @@
 import { useCallback, useEffect, useState } from 'react';
+import {
+  Activity,
+  FolderPlus,
+  GalleryHorizontalEnd,
+  Image,
+  ListChecks,
+  Scale,
+  ScanSearch,
+  Settings,
+} from 'lucide-react';
 import elephantsAliveLogo from '../src/assets/elephants-alive.png';
 import { getHealth, getSighting, listSightings } from './api.js';
 import { LightboxProvider } from './components/Lightbox.jsx';
 import CatalogPage from './pages/CatalogPage.jsx';
+import DevPhotoAnalysisPage from './pages/DevPhotoAnalysisPage.jsx';
+import DevSam3Page from './pages/DevSam3Page.jsx';
+import DevTearMatchPage from './pages/DevTearMatchPage.jsx';
+import DevTearProfilePage from './pages/DevTearProfilePage.jsx';
 import ImportPage from './pages/ImportPage.jsx';
-import LabPage from './pages/LabPage.jsx';
 import QueuePage from './pages/QueuePage.jsx';
 import SettingsPage from './pages/SettingsPage.jsx';
 
-const NAV_ITEMS = [
-  { id: 'queue', label: 'Queue' },
-  { id: 'import', label: 'Import' },
-  { id: 'catalog', label: 'Catalog' },
-  { id: 'lab', label: 'Lab' },
-  { id: 'settings', label: 'Settings' },
+const CORE_NAV_ITEMS = [
+  { id: 'import', label: 'Import', icon: FolderPlus },
+  { id: 'queue', label: 'Queue', icon: ListChecks },
+  { id: 'catalog', label: 'Catalog', icon: GalleryHorizontalEnd },
+];
+
+const DEV_NAV_ITEMS = [
+  { id: 'dev-sam3', label: 'SAM3', icon: ScanSearch },
+  { id: 'dev-tear-profile', label: 'Tear Profile', icon: Activity },
+  { id: 'dev-tear-match', label: 'Tear Match', icon: Scale },
+  { id: 'dev-photo-analysis', label: 'Photo Analysis', icon: Image },
 ];
 
 export default function App() {
   const [health, setHealth] = useState(null);
-  const [route, setRoute] = useState('queue');
+  const [route, setRoute] = useState('import');
   const [sightings, setSightings] = useState([]);
   const [activeSightingId, setActiveSightingId] = useState(null);
   const [sighting, setSighting] = useState(null);
@@ -154,24 +172,56 @@ export default function App() {
 
       <aside className="sidebar">
         <div className="side-section">
-          <div className="side-label">Navigation</div>
-          {NAV_ITEMS.map((item, index) => (
+          <div className="side-label">Core</div>
+          {CORE_NAV_ITEMS.map((item) => (
             <button
               key={item.id}
               type="button"
               className={`nav-btn ${route === item.id ? 'active' : ''}`}
               data-testid={`nav-${item.id}`}
               onClick={() => {
+                if (item.id === 'import') {
+                  startNewSighting();
+                  return;
+                }
                 if (item.id === 'queue') {
                   clearActive();
                 }
                 setRoute(item.id);
               }}
             >
-              <span className="num">{String(index + 1).padStart(2, '0')}</span>
+              <item.icon className="nav-icon" aria-hidden="true" />
               {item.label}
             </button>
           ))}
+        </div>
+
+        <div className="side-section dev-section">
+          <div className="side-label">Development</div>
+          {DEV_NAV_ITEMS.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className={`nav-btn dev-nav ${route === item.id ? 'active' : ''}`}
+              data-testid={`nav-${item.id}`}
+              onClick={() => setRoute(item.id)}
+            >
+              <item.icon className="nav-icon" aria-hidden="true" />
+              {item.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="side-section settings-section">
+          <button
+            type="button"
+            className={`nav-btn settings-nav ${route === 'settings' ? 'active' : ''}`}
+            data-testid="nav-settings"
+            onClick={() => setRoute('settings')}
+          >
+            <Settings className="nav-icon" aria-hidden="true" />
+            Settings
+          </button>
         </div>
 
         <div className="sidebar-brand">
@@ -188,7 +238,10 @@ export default function App() {
         {route === 'import' && <ImportPage {...pageProps} />}
         {route === 'queue' && <QueuePage {...pageProps} openSighting={openSighting} />}
         {route === 'catalog' && <CatalogPage />}
-        {route === 'lab' && <LabPage engineReady={engineReady} />}
+        {route === 'dev-sam3' && <DevSam3Page engineReady={engineReady} />}
+        {route === 'dev-tear-profile' && <DevTearProfilePage engineReady={engineReady} />}
+        {route === 'dev-tear-match' && <DevTearMatchPage engineReady={engineReady} />}
+        {route === 'dev-photo-analysis' && <DevPhotoAnalysisPage engineReady={engineReady} />}
         {route === 'settings' && <SettingsPage health={health} />}
       </main>
     </div>

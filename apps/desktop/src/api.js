@@ -48,10 +48,10 @@ export const decideSighting = (id, action, elephantName = null) =>
     body: JSON.stringify({ action, elephant_name: elephantName }),
   });
 
-export const devAnalyze = async (file) => {
+async function uploadDevImage(path, file) {
   const body = new FormData();
   body.append('file', file);
-  const response = await fetch(`${API_BASE}/dev/analyze`, { method: 'POST', body });
+  const response = await fetch(`${API_BASE}${path}`, { method: 'POST', body });
   if (!response.ok) {
     let detail = `${response.status}`;
     try {
@@ -62,7 +62,31 @@ export const devAnalyze = async (file) => {
     throw new Error(detail);
   }
   return response.json();
-};
+}
+
+async function uploadDevImagePair(path, fileA, fileB) {
+  const body = new FormData();
+  body.append('file_a', fileA);
+  body.append('file_b', fileB);
+  const response = await fetch(`${API_BASE}${path}`, { method: 'POST', body });
+  if (!response.ok) {
+    let detail = `${response.status}`;
+    try {
+      detail = (await response.json()).detail ?? detail;
+    } catch {
+      /* non-JSON error body */
+    }
+    throw new Error(detail);
+  }
+  return response.json();
+}
+
+export const devAnalyze = (file) => uploadDevImage('/dev/analyze', file);
+export const devSam3 = (file) => uploadDevImage('/dev/sam3', file);
+export const devTearProfile = (file) => uploadDevImage('/dev/tear-profile', file);
+export const devTearMatch = (fileA, fileB) =>
+  uploadDevImagePair('/dev/tear-match', fileA, fileB);
+export const devPhotoAnalysis = (file) => uploadDevImage('/dev/photo-analysis', file);
 
 export const imageUrl = (path) =>
   path ? `${API_BASE}/image?path=${encodeURIComponent(path)}` : null;
