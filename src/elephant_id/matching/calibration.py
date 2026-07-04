@@ -2,8 +2,9 @@
 
 A raw overlap score is not comparable across ears: the same score is far
 stronger evidence between two feature-rich ears than between two smooth ones.
-The calibrator fits a logistic model on ``(score, tear mass)`` pair features so
-scores become comparable across profiles and ear sides.
+The calibrator fits a logistic model on ``(score, tear mass)`` pair features.
+The default evaluation passes cohort-normalized matcher scores; ablation runs
+may pass raw symmetrized matcher scores to test whether normalization helps.
 """
 
 import warnings
@@ -17,7 +18,9 @@ from sklearn.linear_model import LogisticRegression
 def tear_mass(profiles: np.ndarray) -> np.ndarray:
     """Return total positive tear depth per profile row, in depth-degrees.
 
-    Accepts one profile or a 2-D batch; always returns a 1-D array.
+    Accepts one profile or a 2-D batch; always returns a 1-D array. Higher
+    mass means the ear has more visible tear signal, so the same match score
+    tends to be more trustworthy.
     """
     rows = np.asarray(profiles, dtype=np.float64)
     if rows.ndim == 1:
@@ -47,7 +50,7 @@ class TearScoreCalibratorConfig:
 
 
 class TearScoreCalibrator:
-    """Map raw match scores to calibrated scores conditioned on tear mass."""
+    """Map selected match scores to calibrated scores conditioned on tear mass."""
 
     def __init__(self, config: TearScoreCalibratorConfig | None = None) -> None:
         """Create an unfitted calibrator with the default configuration."""
@@ -80,7 +83,9 @@ class TearScoreCalibrator:
         """Fit logistic weights on labeled same/different pairs.
 
         Args:
-            scores: Raw match scores per pair.
+            scores: Match scores per pair. The default evaluation passes
+                cohort-normalized matcher scores here; ablations may pass raw
+                symmetrized matcher scores.
             query_masses: Query tear mass per pair (see ``tear_mass``).
             candidate_masses: Candidate tear mass per pair.
             same_identity: Boolean label per pair.
@@ -118,7 +123,10 @@ class TearScoreCalibrator:
         query_masses: np.ndarray,
         candidate_masses: np.ndarray,
     ) -> np.ndarray:
-        """Return calibrated scores for score/mass pairs.
+        """Return calibrated evidence logits for score/mass pairs.
+
+        The returned value is the logistic decision function. It is useful for
+        ranking and side fusion, but it is not a probability.
 
         Raises:
             RuntimeError: If the calibrator has not been fitted.
