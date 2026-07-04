@@ -68,7 +68,7 @@ export async function runModelModule({
 async function createFastestSession({ manifest, modelBytes, signal, onProgress }) {
   const warnings = [];
   const webgpuRuntime = manifest.runtime?.webgpu;
-  if (navigator.gpu && webgpuRuntime?.moduleUrl) {
+  if (navigator.gpu && webgpuRuntime?.wasmPaths) {
     try {
       onProgress('Trying WebGPU backend');
       return await createSession({
@@ -84,8 +84,8 @@ async function createFastestSession({ manifest, modelBytes, signal, onProgress }
   }
 
   const wasmRuntime = manifest.runtime?.wasm;
-  if (!wasmRuntime?.moduleUrl) {
-    throw new Error('Manifest does not define a WASM ONNX Runtime module URL.');
+  if (!wasmRuntime?.wasmPaths) {
+    throw new Error('Manifest does not define a WASM ONNX Runtime wasmPaths URL.');
   }
   onProgress('Using WASM backend');
   return createSession({
@@ -99,7 +99,7 @@ async function createFastestSession({ manifest, modelBytes, signal, onProgress }
 
 async function createSession({ runtime, backend, modelBytes, signal, warnings }) {
   throwIfAborted(signal);
-  const ort = await import(/* @vite-ignore */ runtime.moduleUrl);
+  const ort = await loadOrt(backend);
   configureOrt(ort, runtime);
   const start = performance.now();
   const session = await ort.InferenceSession.create(modelBytes, {
@@ -113,6 +113,13 @@ async function createSession({ runtime, backend, modelBytes, signal, warnings })
     warnings,
     sessionCreateMs: performance.now() - start,
   };
+}
+
+async function loadOrt(backend) {
+  if (backend === 'webgpu') {
+    return import('onnxruntime-web/webgpu');
+  }
+  return import('onnxruntime-web/wasm');
 }
 
 function configureOrt(ort, runtime) {

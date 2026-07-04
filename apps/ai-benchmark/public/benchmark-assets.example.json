@@ -5,13 +5,11 @@
   "notes": "Model and runtime assets are served from the isolated R2 custom domain for benchmark weights.",
   "runtime": {
     "wasm": {
-      "moduleUrl": "https://weights.benchmark.elephant-id.org/runtime/ort.min.mjs",
       "wasmPaths": "https://weights.benchmark.elephant-id.org/runtime/",
       "bytes": 13840337,
       "sha256": "runtime-assets-pinned-separately"
     },
     "webgpu": {
-      "moduleUrl": "https://weights.benchmark.elephant-id.org/runtime/ort.webgpu.min.mjs",
       "wasmPaths": "https://weights.benchmark.elephant-id.org/runtime/",
       "bytes": 26894712,
       "sha256": "runtime-assets-pinned-separately"
