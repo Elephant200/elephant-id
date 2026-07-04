@@ -1,8 +1,8 @@
-# ponytail: credentialless (not require-corp) keeps cross-origin isolation for
-# wasm threads while letting Cloudflare Web Analytics beacon through. Safari
-# lacks credentialless -> single-thread wasm there; upgrade only if Safari CPU
-# speed matters more than the analytics beacon.
+# require-corp so Safari also gets cross-origin isolation (wasm threads); Safari
+# does not support credentialless. This blocks Cloudflare Web Analytics' cross-
+# origin beacon (it collects nothing here), so turn Web Analytics off for this
+# project in the Cloudflare dashboard to drop its console error and beacon.
 /*
   Cross-Origin-Opener-Policy: same-origin
-  Cross-Origin-Embedder-Policy: credentialless
+  Cross-Origin-Embedder-Policy: require-corp
   X-Content-Type-Options: nosniff

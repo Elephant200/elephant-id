@@ -19,9 +19,11 @@ holds to one rule: **nothing large downloads unless the user asks for it.**
 ## Deploy Shape
 
 - **App shell**: Cloudflare Pages (`ai-benchmark` project), build `npm run build`,
-  output `dist`. `public/_headers` sets `COOP: same-origin` / `COEP: credentialless`
-  for cross-origin isolation (wasm threads) that still lets the Cloudflare Web
-  Analytics beacon through. Safari lacks `credentialless`, so it runs single-thread.
+  output `dist`. `public/_headers` sets `COOP: same-origin` / `COEP: require-corp`
+  for cross-origin isolation (wasm threads) on **all** browsers including Safari
+  (which does not support `credentialless`). This blocks the Cloudflare Web
+  Analytics beacon; turn Web Analytics off in the dashboard to drop its console
+  error (it cannot collect data under `require-corp` anyway).
 - **Runtime + weights**: Cloudflare R2 bucket `ai-benchmark-assets`, custom domain
   `weights.benchmark.elephant-id.org`, referenced by `public/benchmark-assets.json`.
   The runtime `wasmPaths` is an **absolute cross-origin URL** — this is deliberate:
