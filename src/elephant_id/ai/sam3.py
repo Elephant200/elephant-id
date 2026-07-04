@@ -57,7 +57,7 @@ def _resolve_preset(preset: str) -> tuple[str, ...]:
 
 
 class Sam3Runner:
-    """Local-only runner for the Facebook SAM3 segmentation model."""
+    """Roboflow-hosted runner for the Facebook SAM3 segmentation workflow."""
 
     def __init__(
         self,
@@ -140,6 +140,15 @@ class Sam3Service:
             for preset in SAM3_QUERY_PRESETS
         }
 
+    def cache_key(self, photo: Photo) -> str:
+        """Return the cache key used for a photo under every SAM3 preset."""
+        return (
+            f"{photo.identifier}__"
+            f"conf-{self.runner.confidence_threshold:.2f}__"
+            f"nms-{self.runner.nms}__"
+            f"iou-{self.runner.nms_iou_threshold:.2f}"
+        )
+
     def run(self, photo: Photo, query_preset: str) -> list[Detection]:
         """
         Run the SAM3 model for the given Photo object.
@@ -153,12 +162,7 @@ class Sam3Service:
         """
         _resolve_preset(query_preset)
 
-        key = (
-            f"{photo.identifier}__"
-            f"conf-{self.runner.confidence_threshold:.2f}__"
-            f"nms-{self.runner.nms}__"
-            f"iou-{self.runner.nms_iou_threshold:.2f}"
-        )
+        key = self.cache_key(photo)
 
         envelope = self.cache_managers[query_preset].get_or_compute(
             key=key,
