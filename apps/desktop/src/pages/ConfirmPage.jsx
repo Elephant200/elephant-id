@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { decideSighting, imageUrl } from '../api.js';
+import { useEffect, useState } from 'react';
+import { decideSighting, getElephant, imageUrl } from '../api.js';
 import { ZoomImage } from '../components/Lightbox.jsx';
 
 const DECISION_LABELS = {
@@ -20,6 +20,29 @@ export default function ConfirmPage({
 }) {
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [catalogDetail, setCatalogDetail] = useState(null);
+
+  const decided = sighting?.decision;
+  const decision = decided || pendingDecision;
+  const action = decision?.action;
+  const label = DECISION_LABELS[action] || action;
+  const elephantName = decision?.elephantName || decision?.elephant_name || null;
+
+  useEffect(() => {
+    let cancelled = false;
+    setCatalogDetail(null);
+    if (action !== 'existing_known_elephant' || !elephantName) return undefined;
+    getElephant(elephantName)
+      .then((detail) => {
+        if (!cancelled) setCatalogDetail(detail);
+      })
+      .catch(() => {
+        if (!cancelled) setCatalogDetail(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [action, elephantName]);
 
   if (!sighting) {
     return (
@@ -30,8 +53,6 @@ export default function ConfirmPage({
     );
   }
 
-  const decided = sighting.decision;
-  const decision = decided || pendingDecision;
   if (!decision) {
     return (
       <div>
@@ -41,15 +62,36 @@ export default function ConfirmPage({
     );
   }
 
-  const action = decision.action;
-  const label = DECISION_LABELS[action] || action;
   const approvedEvidence = ['left', 'right']
     .map((side) => sighting.approved_evidence?.[side])
     .filter(Boolean);
+  const selectedCandidate =
+    decision.candidate ||
+    sighting.match?.candidates?.find((candidate) => candidate.identity === elephantName);
   const referenceEvidence =
     action === 'existing_known_elephant'
-      ? (decision.candidate?.evidence || []).filter((item) => item.gallery_crop_path)
+      ? (selectedCandidate?.evidence || []).filter(
+          (item) => item.gallery_display_crop_path || item.gallery_crop_path,
+        )
       : [];
+  const queryPhotos = uniqueImages(
+    (sighting.photos || [])
+      .filter((photo) => photo.photo_path)
+      .map((photo) => ({
+        key: photo.photo_id || photo.file_name,
+        src: photo.photo_path,
+        label: photo.file_name || photo.photo_id,
+      })),
+  );
+  const catalogPhotos = uniqueImages(
+    (catalogDetail?.photos || [])
+      .map((photo) => ({
+        key: photo.photo_path || photo.photo_id,
+        src: photo.photo_path || photo.display_crop_path || photo.crop_path,
+        label: `${photo.photo_id} · ${photo.date}`,
+      }))
+      .filter((photo) => photo.src),
+  );
 
   const confirm = async () => {
     if (decided) return;
@@ -76,7 +118,8 @@ export default function ConfirmPage({
       <p className="screen-sub">
         This read-only screen is the final review before the identity decision
         is saved. Existing known elephant decisions show the selected reference
-        evidence; new and unresolved decisions do not add reference images.
+        evidence; existing known-elephant decisions show side-by-side query and
+        catalog context before and after saving.
       </p>
 
       {error && (
@@ -118,49 +161,38 @@ export default function ConfirmPage({
         </div>
       </div>
 
-      <div className="panel">
-        <div className="panel-title">Approved sighting evidence</div>
-        {approvedEvidence.length === 0 ? (
-          <div className="empty-note">
-            NO APPROVED LEFT/RIGHT EVIDENCE. THIS SIGHTING WILL BE SAVED AS UNRESOLVED.
-          </div>
-        ) : (
-          <div className="repr-row">
-            {approvedEvidence.map((evidence) => (
-              <figure className="repr-ear" key={evidence.candidate_id}>
-                <ZoomImage
-                  src={imageUrl(evidence.crop_path)}
-                  alt={`${evidence.side} approved evidence`}
-                  caption={`${evidence.file_name} - approved ${evidence.side} ear`}
-                />
-                <figcaption>
-                  {evidence.file_name} · {evidence.side}
-                </figcaption>
-              </figure>
-            ))}
-          </div>
-        )}
+      <div className="confirm-compare">
+        <EvidenceColumn
+          title="Query sighting"
+          subtitle={sighting.folder_name}
+          ears={approvedEvidence.map((evidence) => ({
+            key: evidence.candidate_id,
+            side: evidence.side,
+            src: evidence.display_crop_path || evidence.crop_path,
+            label: `${evidence.file_name} · ${evidence.side}`,
+            caption: `${evidence.file_name} - approved ${evidence.side} ear`,
+          }))}
+          photos={queryPhotos}
+          empty="NO APPROVED LEFT/RIGHT EVIDENCE. THIS SIGHTING WILL BE SAVED AS UNRESOLVED."
+        />
+        <EvidenceColumn
+          title="Known-elephant catalog"
+          subtitle={elephantName || 'No catalog elephant selected'}
+          ears={referenceEvidence.map((evidence) => ({
+            key: `${evidence.gallery_photo_id}-${evidence.side}`,
+            side: evidence.side,
+            src: evidence.gallery_display_crop_path || evidence.gallery_crop_path,
+            label: `${evidence.gallery_photo_id} · ${evidence.side}`,
+            caption: `${elephantName} - ${evidence.gallery_photo_id} (${evidence.side})`,
+          }))}
+          photos={catalogPhotos}
+          empty={
+            action === 'existing_known_elephant'
+              ? 'NO CATALOG REFERENCE IMAGES AVAILABLE'
+              : 'NEW AND UNRESOLVED DECISIONS DO NOT ADD CATALOG REFERENCE IMAGES'
+          }
+        />
       </div>
-
-      {referenceEvidence.length > 0 && (
-        <div className="panel">
-          <div className="panel-title">Selected known-elephant reference</div>
-          <div className="repr-row">
-            {referenceEvidence.map((evidence) => (
-              <figure className="repr-ear" key={`${evidence.gallery_photo_id}-${evidence.side}`}>
-                <ZoomImage
-                  src={imageUrl(evidence.gallery_crop_path)}
-                  alt={`${evidence.side} reference evidence`}
-                  caption={`${decision.elephantName} - ${evidence.gallery_photo_id} (${evidence.side})`}
-                />
-                <figcaption>
-                  {evidence.gallery_photo_id} · {evidence.side}
-                </figcaption>
-              </figure>
-            ))}
-          </div>
-        </div>
-      )}
 
       {!decided && (
         <div className="action-bar" data-testid="confirm-action-bar">
@@ -195,4 +227,61 @@ export default function ConfirmPage({
       )}
     </div>
   );
+}
+
+function EvidenceColumn({ title, subtitle, ears, photos, empty }) {
+  return (
+    <section className="compare-column">
+      <div className="compare-column-head">
+        <div>
+          <div className="panel-title">{title}</div>
+          <div className="candidate-name">{subtitle}</div>
+        </div>
+      </div>
+      {ears.length === 0 ? (
+        <div className="empty-note">{empty}</div>
+      ) : (
+        <div className="confirm-ear-grid">
+          {ears.map((ear) => (
+            <figure className="confirm-ear" key={ear.key}>
+              <ZoomImage
+                src={imageUrl(ear.src)}
+                alt={`${ear.side} ear`}
+                caption={ear.caption}
+              />
+              <figcaption>
+                <span className={`badge ${ear.side}`}>{ear.side}</span>
+                {ear.label}
+              </figcaption>
+            </figure>
+          ))}
+        </div>
+      )}
+      <div className="confirm-photo-list">
+        {photos.length === 0 ? (
+          <div className="empty-note">NO FULL PHOTOS AVAILABLE</div>
+        ) : (
+          photos.map((photo) => (
+            <figure className="confirm-photo" key={photo.key}>
+              <ZoomImage
+                src={imageUrl(photo.src)}
+                alt={photo.label}
+                caption={photo.label}
+              />
+              <figcaption>{photo.label}</figcaption>
+            </figure>
+          ))
+        )}
+      </div>
+    </section>
+  );
+}
+
+function uniqueImages(images) {
+  const seen = new Set();
+  return images.filter((image) => {
+    if (!image.src || seen.has(image.src)) return false;
+    seen.add(image.src);
+    return true;
+  });
 }

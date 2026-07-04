@@ -20,6 +20,16 @@ function pathFor(values, yMax, close) {
   return d;
 }
 
+function overlapPath(first, second, yMax) {
+  const n = Math.min(first.length, second.length);
+  if (n < 2) return '';
+  return pathFor(
+    Array.from({ length: n }, (_, index) => Math.min(first[index], second[index])),
+    yMax,
+    true,
+  );
+}
+
 export default function ProfileChart({ series, height = HEIGHT }) {
   const drawn = series.filter((entry) => entry.values && entry.values.length > 1);
   if (drawn.length === 0) return null;
@@ -67,6 +77,12 @@ export default function ProfileChart({ series, height = HEIGHT }) {
           className="chart-grid"
         />
       ))}
+      {drawn.length >= 2 && (
+        <path
+          d={overlapPath(drawn[0].values, drawn[1].values, yMax)}
+          className="chart-overlap"
+        />
+      )}
       {drawn.map((entry) => (
         <g key={entry.label}>
           {entry.fill && (

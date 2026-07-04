@@ -26,6 +26,7 @@ export default function MatchPage({
   sighting,
   setSighting,
   setStage,
+  pendingDecision,
   selectedCandidate,
   setSelectedCandidate,
   setPendingDecision,
@@ -33,6 +34,7 @@ export default function MatchPage({
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
   const [newName, setNewName] = useState('');
+  const [decisionMode, setDecisionMode] = useState(pendingDecision?.action ?? null);
 
   if (!sighting || sighting.status !== 'ready' || !sighting.approved_evidence) {
     return (
@@ -57,10 +59,10 @@ export default function MatchPage({
     }
   };
 
-  const queryCrops = new Map(
+  const queryEvidence = new Map(
     ['left', 'right'].map((side) => {
       const evidence = sighting.approved_evidence?.[side];
-      return [`${evidence?.photo_id}:${side}`, evidence?.crop_path];
+      return [`${evidence?.photo_id}:${side}`, evidence];
     }),
   );
   // Approved query evidence carries a human-readable file name; prefer it over
@@ -75,10 +77,34 @@ export default function MatchPage({
   const selectedMatch = candidates?.find(
     (candidate) => candidate.identity === selectedCandidate,
   );
+  const currentDecision =
+    decisionMode === 'existing_known_elephant' && selectedMatch
+      ? {
+          action: 'existing_known_elephant',
+          elephantName: selectedMatch.identity,
+          candidate: selectedMatch,
+          label: `Existing known elephant: ${selectedMatch.identity}`,
+        }
+      : decisionMode === 'new_known_elephant' && newName.trim()
+        ? {
+            action: 'new_known_elephant',
+            elephantName: newName.trim(),
+            label: `New known elephant: ${newName.trim()}`,
+          }
+        : decisionMode === 'unresolved'
+          ? { action: 'unresolved', elephantName: null, label: 'Unresolved' }
+          : null;
 
-  const chooseDecision = (decision) => {
+  const proceed = () => {
+    if (!currentDecision) return;
+    const { label, ...decision } = currentDecision;
     setPendingDecision(decision);
     setStage('confirm');
+  };
+
+  const selectExisting = (candidate, selected) => {
+    setSelectedCandidate(selected ? null : candidate.identity);
+    setDecisionMode(selected ? null : 'existing_known_elephant');
   };
 
   return (
@@ -129,7 +155,7 @@ export default function MatchPage({
           {candidates.length === 0 && (
             <div className="empty-note">NO CANDIDATES — CATALOG HAS NO SAME-SIDE EVIDENCE</div>
           )}
-          <div data-testid="candidates">
+          <div className="candidate-list" data-testid="candidates">
             {candidates.map((candidate, index) => {
               const selected = selectedCandidate === candidate.identity;
               return (
@@ -137,9 +163,7 @@ export default function MatchPage({
                   key={candidate.identity}
                   className={`candidate ${selected ? 'selected' : ''}`}
                   data-testid={`candidate-${candidate.identity}`}
-                  onClick={() =>
-                    setSelectedCandidate(selected ? null : candidate.identity)
-                  }
+                  onClick={() => selectExisting(candidate, selected)}
                 >
                   <div className="candidate-head">
                     <div className="rank">{String(index + 1).padStart(2, '0')}</div>
@@ -168,7 +192,7 @@ export default function MatchPage({
                         data-testid={`select-${candidate.identity}`}
                         onClick={(event) => {
                           event.stopPropagation();
-                          setSelectedCandidate(selected ? null : candidate.identity);
+                          selectExisting(candidate, selected);
                         }}
                       >
                         {selected ? '✓ Selected' : 'Select'}
@@ -177,13 +201,21 @@ export default function MatchPage({
                   </div>
                   <div className="evidence-row">
                       {candidate.evidence.map((evidence) => {
-                        const queryCrop = queryCrops.get(
+                        const approved = queryEvidence.get(
                           `${evidence.query_photo_id}:${evidence.side}`,
                         );
                         const queryLabel =
                           queryLabels.get(evidence.side) || evidence.query_photo_id;
+                        const queryCrop = approved?.display_crop_path || approved?.crop_path;
+                        const galleryCrop =
+                          evidence.gallery_display_crop_path || evidence.gallery_crop_path;
                         return (
                           <div className="evidence" key={evidence.side}>
+                            <div className="evidence-side">
+                              <span className={`badge ${evidence.side}`}>{evidence.side}</span>
+                              <strong>{earStrength(evidence)}</strong>
+                              <span>{evidence.score.toFixed(2)}</span>
+                            </div>
                             <div className="evidence-pair">
                               <figure>
                                 {queryCrop ? (
@@ -198,9 +230,9 @@ export default function MatchPage({
                                 <figcaption>THIS SIGHTING · {queryLabel}</figcaption>
                               </figure>
                               <figure>
-                                {evidence.gallery_crop_path ? (
+                                {galleryCrop ? (
                                   <ZoomImage
-                                    src={imageUrl(evidence.gallery_crop_path)}
+                                    src={imageUrl(galleryCrop)}
                                     alt={`catalog ${evidence.side}`}
                                     caption={`Known-elephant catalog - ${evidence.gallery_photo_id} (${evidence.side} ear, ${evidence.gallery_date})`}
                                   />
@@ -226,7 +258,7 @@ export default function MatchPage({
                                       color: CATALOG_COLOR,
                                     },
                                   ]}
-                                  height={84}
+                                  height={150}
                                 />
                                 <div className="chart-legend">
                                   <span
@@ -247,14 +279,6 @@ export default function MatchPage({
                                 </div>
                               </div>
                             )}
-                            <div className="evidence-meta">
-                              <span
-                                className={`badge ${evidence.side}`}
-                                title={`calibrated score ${evidence.score.toFixed(2)}`}
-                              >
-                                {evidence.side} ear · {earStrength(evidence)}
-                              </span>
-                            </div>
                           </div>
                         );
                       })}
@@ -264,67 +288,70 @@ export default function MatchPage({
             })}
           </div>
 
+          <div className="panel new-elephant-panel">
+            <div className="panel-title">Register new known elephant</div>
+            <p className="screen-sub" style={{ marginBottom: 12 }}>
+              Use this only after reviewing all ranked candidates and deciding none
+              of them are the sighted elephant.
+            </p>
+            <div className="new-elephant-row">
+              <input
+                className="enroll-input"
+                placeholder="New known elephant name"
+                value={newName}
+                onChange={(event) => setNewName(event.target.value)}
+                data-testid="new-elephant-name"
+              />
+              <button
+                type="button"
+                className="btn primary"
+                disabled={!newName.trim()}
+                data-testid="choose-new"
+                onClick={() => {
+                  setSelectedCandidate(null);
+                  setDecisionMode('new_known_elephant');
+                }}
+              >
+                Use new elephant
+              </button>
+            </div>
+          </div>
+
           <div className="action-bar" data-testid="match-action-bar">
             <div className="action-bar-status">
               <div className="action-bar-line">
-                {selectedCandidate ? (
+                {currentDecision ? (
                   <>
-                    <span className="side-tag">SELECTED </span>
-                    <span className="ok-tick">✓</span> {selectedCandidate}
+                    <span className="side-tag">CURRENT DECISION </span>
+                    <span className="ok-tick">✓</span> {currentDecision.label}
                   </>
                 ) : (
-                  <span className="missing">No existing known elephant selected</span>
+                  <span className="missing">No identity decision selected</span>
                 )}
               </div>
               <div className="action-bar-hint">
-                Choose an existing match, enrol a new elephant, or leave unresolved
+                Select a candidate, choose unresolved, or register a new elephant below the list
               </div>
             </div>
             <button
               type="button"
-              className="btn ok"
-              data-testid="choose-existing"
-              disabled={!selectedMatch}
-              onClick={() =>
-                chooseDecision({
-                  action: 'existing_known_elephant',
-                  elephantName: selectedMatch.identity,
-                  candidate: selectedMatch,
-                })
-              }
+              className="btn ghost"
+              data-testid="choose-unresolved"
+              onClick={() => {
+                setSelectedCandidate(null);
+                setDecisionMode('unresolved');
+              }}
             >
-              Existing known elephant
+              Unresolved
             </button>
-            <input
-              className="enroll-input"
-              placeholder="New known elephant name"
-              value={newName}
-              onChange={(event) => setNewName(event.target.value)}
-              data-testid="new-elephant-name"
-            />
             <button
               type="button"
               className="btn primary"
-              disabled={!newName.trim()}
-              data-testid="choose-new"
-              onClick={() =>
-                chooseDecision({
-                  action: 'new_known_elephant',
-                  elephantName: newName.trim(),
-                })
-              }
+              data-testid="choose-existing"
+              disabled={!currentDecision}
+              onClick={proceed}
             >
-              New known elephant
-            </button>
-            <button
-              type="button"
-              className="btn ghost"
-              data-testid="choose-unresolved"
-              onClick={() =>
-                chooseDecision({ action: 'unresolved', elephantName: null })
-              }
-            >
-              Unresolved
+              Continue to confirmation
             </button>
           </div>
         </>

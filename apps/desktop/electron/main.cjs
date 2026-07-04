@@ -1,12 +1,10 @@
-// Alphaphant Electron main process: spawns the FastAPI sidecar, waits for
-// /health, then opens the renderer. Fully local; no internet required.
+// Alphaphant Electron main process: spawns the FastAPI sidecar and opens the
+// renderer immediately. The UI polls /health and shows a connecting splash.
 const { app, BrowserWindow, dialog, ipcMain } = require('electron');
 const { spawn } = require('node:child_process');
-const http = require('node:http');
 const path = require('node:path');
 
 const API_PORT = Number(process.env.ALPHAPHANT_API_PORT || 8756);
-const API_BASE = `http://127.0.0.1:${API_PORT}`;
 // apps/desktop/electron -> repo root
 const REPO_ROOT = path.resolve(__dirname, '..', '..', '..');
 
@@ -32,36 +30,13 @@ function startSidecar() {
   });
 }
 
-function checkHealth() {
-  return new Promise((resolve) => {
-    const request = http.get(`${API_BASE}/health`, { timeout: 1500 }, (response) => {
-      response.resume();
-      resolve(response.statusCode === 200);
-    });
-    request.on('error', () => resolve(false));
-    request.on('timeout', () => {
-      request.destroy();
-      resolve(false);
-    });
-  });
-}
-
-async function waitForSidecar(timeoutMs = 90000) {
-  const startedAt = Date.now();
-  while (Date.now() - startedAt < timeoutMs) {
-    if (await checkHealth()) return true;
-    await new Promise((resolve) => setTimeout(resolve, 500));
-  }
-  return false;
-}
-
 async function createWindow() {
   const window = new BrowserWindow({
     width: 1480,
     height: 940,
     minWidth: 1080,
     minHeight: 700,
-    backgroundColor: '#ece5d2',
+    backgroundColor: '#24341f',
     title: 'Alphaphant',
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
@@ -70,17 +45,8 @@ async function createWindow() {
     },
   });
 
-  const healthy = await waitForSidecar();
-  if (!healthy) {
-    dialog.showErrorBox(
-      'Alphaphant sidecar did not start',
-      `No response from ${API_BASE}/health. ` +
-        'Check that `uv run python -m elephant_id.api` works from the repo root.',
-    );
-  } else {
-    console.log(`[alphaphant] connected to sidecar at ${API_BASE}`);
-  }
-
+  // Load the renderer immediately so React can show the connecting splash
+  // while the sidecar boots (same UX as `npm run dev` in a browser).
   if (process.env.VITE_DEV_SERVER_URL) {
     await window.loadURL(process.env.VITE_DEV_SERVER_URL);
   } else {
