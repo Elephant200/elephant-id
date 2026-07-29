@@ -10,9 +10,10 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
+import numpy as np
 from loguru import logger
 
-from elephant_id.api import ingest
+from elephant_id.api import figures, ingest
 from elephant_id.api.analysis import (
     EAR_SIDES,
     analysis_payload,
@@ -139,6 +140,17 @@ class SightingWorkflow:
             )
         except FileNotFoundError:
             profiles, sides, photo_ids, crop_paths = None, (), (), ()
+        if profiles is not None and len(profiles) > 0:
+            updated_record = _ensure_analysis_profile_plots(
+                record,
+                profiles,
+                sides,
+                photo_ids,
+                self.store.sighting_dir(sighting_id) / "profile_plots",
+            )
+            if updated_record["photos"] != record.get("photos", []):
+                self.store.update(sighting_id, photos=updated_record["photos"])
+            record = updated_record
         return analysis_payload(
             record,
             profiles,
@@ -206,9 +218,14 @@ class SightingWorkflow:
             raise WorkflowConflict(f"Sighting is {record['status']}, not ready")
         profiles, sides, photo_ids, _ = self.working_profiles(sighting_id, record)
         ranked = engine.rank(profiles, sides, photo_ids, top_n=top_n)
+        candidates = [candidate.to_dict() for candidate in ranked]
+        _render_match_profile_plots(
+            candidates,
+            self.store.sighting_dir(sighting_id) / "match_plots",
+        )
         match = {
             "matched_at": datetime.now(UTC).isoformat(),
-            "candidates": [candidate.to_dict() for candidate in ranked],
+            "candidates": candidates,
         }
         return self.store.update(sighting_id, match=match)
 
@@ -304,5 +321,108 @@ def _approved_candidate(candidate: dict) -> dict:
         "photo_id": candidate["photo_id"],
         "file_name": candidate["file_name"],
         "crop_path": candidate["crop_path"],
+        "display_crop_path": candidate.get("display_crop_path") or candidate["crop_path"],
+        "photo_path": candidate.get("photo_path"),
         "corrected": False,
     }
+
+
+def _render_match_profile_plots(candidates: list[dict], output_dir: Path) -> None:
+    """Attach one server-rendered aligned-profile PNG to each match evidence item."""
+    renderable: list[tuple[dict, np.ndarray, np.ndarray]] = []
+    for candidate in candidates:
+        for evidence in candidate.get("evidence", []):
+            query = np.asarray(evidence.get("query_profile", ()), dtype=np.float64)
+            catalog = np.asarray(evidence.get("gallery_profile", ()), dtype=np.float64)
+            evidence["profile_plot_path"] = None
+            if (
+                query.ndim == 1
+                and catalog.ndim == 1
+                and len(query) > 1
+                and query.shape == catalog.shape
+            ):
+                renderable.append((evidence, query, catalog))
+    if not renderable:
+        return
+
+    y_max = figures.shared_profile_ymax(
+        [(query, catalog) for _, query, catalog in renderable]
+    )
+    for candidate_index, candidate in enumerate(candidates, start=1):
+        for evidence in candidate.get("evidence", []):
+            if evidence.get("profile_plot_path") is not None:
+                continue
+            query = np.asarray(evidence.get("query_profile", ()), dtype=np.float64)
+            catalog = np.asarray(evidence.get("gallery_profile", ()), dtype=np.float64)
+            if (
+                query.ndim != 1
+                or catalog.ndim != 1
+                or len(query) <= 1
+                or query.shape != catalog.shape
+            ):
+                continue
+            side = str(evidence["side"])
+            output_path = output_dir / f"candidate-{candidate_index:02d}-{side}.png"
+            figures.render_aligned_profiles_png(
+                query,
+                catalog,
+                output_path,
+                side=side,
+                shift_degrees=float(evidence.get("alignment_shift_degrees", 0.0)),
+                stretch=float(evidence.get("alignment_stretch", 1.0)),
+                score=float(evidence["score"]),
+                y_max=y_max,
+            )
+            evidence["profile_plot_path"] = str(output_path)
+
+
+def _ensure_analysis_profile_plots(
+    record: dict,
+    profiles: np.ndarray,
+    sides: tuple[str, ...],
+    photo_ids: tuple[str, ...],
+    output_dir: Path,
+) -> dict:
+    """Backfill missing server-rendered profile PNGs on stored photo evidence."""
+    resolved_output_dir = output_dir.resolve()
+    rows_by_photo_side: dict[tuple[str, str], list[tuple[int, np.ndarray]]] = {}
+    for row_index, (profile, side, photo_id) in enumerate(
+        zip(profiles, sides, photo_ids, strict=True)
+    ):
+        rows_by_photo_side.setdefault((photo_id, side), []).append(
+            (row_index, np.asarray(profile, dtype=np.float64))
+        )
+
+    photos = []
+    for photo in record.get("photos", []):
+        photo_copy = dict(photo)
+        ears = []
+        for ear in photo.get("ears", []):
+            ear_copy = dict(ear)
+            side = str(ear_copy.get("side", ""))
+            rows = rows_by_photo_side.get((str(photo.get("photo_id", "")), side), [])
+            existing_path = ear_copy.get("profile_plot_path")
+            resolved_existing_path = (
+                Path(existing_path).expanduser().resolve() if existing_path else None
+            )
+            if (
+                resolved_existing_path is not None
+                and resolved_existing_path.is_file()
+                and resolved_existing_path.is_relative_to(resolved_output_dir)
+            ):
+                if rows:
+                    rows.pop(0)
+                ears.append(ear_copy)
+                continue
+            if rows:
+                row_index, profile = rows.pop(0)
+                output_path = output_dir / f"row-{row_index:03d}-{side}.png"
+                figures.render_tear_profile_png(profile, output_path, side=side)
+                ear_copy["profile_plot_path"] = str(output_path)
+            ears.append(ear_copy)
+        photo_copy["ears"] = ears
+        photos.append(photo_copy)
+
+    updated = dict(record)
+    updated["photos"] = photos
+    return updated

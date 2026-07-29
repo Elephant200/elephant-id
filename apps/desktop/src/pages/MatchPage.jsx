@@ -1,10 +1,6 @@
 import { useState } from 'react';
 import { imageUrl, matchSighting } from '../api.js';
 import { ZoomImage } from '../components/Lightbox.jsx';
-import ProfileChart from '../components/ProfileChart.jsx';
-
-const QUERY_COLOR = '#3e5a41';
-const CATALOG_COLOR = '#b07c26';
 
 // Strength labels are computed by the engine from its impostor-score
 // distribution; the fallback covers match results stored before that existed.
@@ -242,41 +238,13 @@ export default function MatchPage({
                                 <figcaption>KNOWN-ELEPHANT CATALOG · {evidence.gallery_photo_id}</figcaption>
                               </figure>
                             </div>
-                            {evidence.query_profile?.length > 0 && (
+                            {evidence.profile_plot_path && (
                               <div className="evidence-chart">
-                                <ProfileChart
-                                  series={[
-                                    {
-                                      label: 'sighting',
-                                      values: evidence.query_profile,
-                                      color: QUERY_COLOR,
-                                      fill: true,
-                                    },
-                                    {
-                                      label: 'known-elephant catalog',
-                                      values: evidence.gallery_profile,
-                                      color: CATALOG_COLOR,
-                                    },
-                                  ]}
-                                  height={150}
+                                <img
+                                  src={imageUrl(evidence.profile_plot_path)}
+                                  alt={`Aligned ${evidence.side} ear tear profiles for ${candidate.identity}`}
+                                  className="profile-plot-image match-profile-plot"
                                 />
-                                <div className="chart-legend">
-                                  <span
-                                    className="legend-swatch"
-                                    style={{ background: QUERY_COLOR }}
-                                  />
-                                  this sighting
-                                  <span
-                                    className="legend-swatch"
-                                    style={{ background: CATALOG_COLOR }}
-                                  />
-                                  known-elephant catalog
-                                  <span className="legend-note">
-                                    {typeof evidence.alignment_shift_degrees === 'number'
-                                      ? `aligned (shift ${evidence.alignment_shift_degrees.toFixed(1)}°, stretch ×${(evidence.alignment_stretch ?? 1).toFixed(2)})`
-                                      : 'aligned tear profiles'}
-                                  </span>
-                                </div>
                               </div>
                             )}
                           </div>

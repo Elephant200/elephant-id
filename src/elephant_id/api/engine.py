@@ -50,6 +50,8 @@ class SideEvidence:
     gallery_photo_id: str
     gallery_date: str
     gallery_crop_path: str | None
+    gallery_display_crop_path: str | None
+    gallery_photo_path: str | None
     query_profile: tuple[float, ...] = ()
     gallery_profile: tuple[float, ...] = ()
     strength: str = ""
@@ -96,6 +98,8 @@ class MatchingEngine:
         self._sides = list(gallery.sides)
         self._dates = list(gallery.dates)
         self._crop_paths = list(gallery.crop_paths)
+        self._display_crop_paths = list(gallery.display_crop_paths)
+        self._source_paths = list(gallery.source_paths)
         self._rows_by_identity: dict[str, list[int]] = defaultdict(list)
         for row, identity in enumerate(self._identities):
             self._rows_by_identity[identity].append(row)
@@ -136,7 +140,11 @@ class MatchingEngine:
                     for side in EAR_SIDES
                 }
                 thumbnail = next(
-                    (self._crop_paths[row] for row in rows if self._crop_paths[row]),
+                    (
+                        self._display_crop_paths[row] or self._crop_paths[row]
+                        for row in rows
+                        if self._display_crop_paths[row] or self._crop_paths[row]
+                    ),
                     None,
                 )
                 summaries.append(
@@ -168,6 +176,8 @@ class MatchingEngine:
                         "side": self._sides[row],
                         "date": self._dates[row],
                         "crop_path": self._crop_paths[row],
+                        "display_crop_path": self._display_crop_paths[row] or self._crop_paths[row],
+                        "photo_path": self._source_paths[row],
                     }
                     for row in sorted(rows, key=lambda r: (self._dates[r], self._photo_ids[r]))
                 ],
@@ -248,6 +258,11 @@ class MatchingEngine:
                             gallery_photo_id=self._photo_ids[best_gallery],
                             gallery_date=self._dates[best_gallery],
                             gallery_crop_path=self._crop_paths[best_gallery],
+                            gallery_display_crop_path=(
+                                self._display_crop_paths[best_gallery]
+                                or self._crop_paths[best_gallery]
+                            ),
+                            gallery_photo_path=self._source_paths[best_gallery],
                             query_profile=plot_profile(aligned_query),
                             gallery_profile=plot_profile(aligned_gallery),
                             strength=self._strength_label(float(calibrated[best])),
@@ -305,6 +320,8 @@ class MatchingEngine:
                 self._sides.append(str(sides[offset]))
                 self._dates.append(date)
                 self._crop_paths.append(crop_paths[offset])
+                self._display_crop_paths.append(crop_paths[offset])
+                self._source_paths.append(crop_paths[offset])
                 self._rows_by_identity[identity].append(start_row + offset)
             self._calibrator = self._fit_calibrator()
         logger.info(f"Filed {len(new_profiles)} profiles under {identity} ({date})")

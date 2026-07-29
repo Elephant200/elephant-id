@@ -5,11 +5,9 @@ workflow errors into HTTP status codes; business logic lives in
 ``elephant_id.api.workflow``.
 """
 
-import hashlib
 import mimetypes
 import threading
 from collections.abc import Callable
-from datetime import UTC, datetime
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, UploadFile
@@ -18,7 +16,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from loguru import logger
 from pydantic import BaseModel
 
-from elephant_id.api import ingest, paths
+from elephant_id.api import dev, ingest, paths
 from elephant_id.api.analysis import decorate_record
 from elephant_id.api.engine import MatchingEngine
 from elephant_id.api.gallery import GalleryData, load_gallery
@@ -243,38 +241,71 @@ def create_app(data_dir: Path | None = None, state: AppState | None = None) -> F
 
     @app.post("/dev/analyze")
     def dev_analyze(file: UploadFile) -> dict:
-        """Development Lab: run the full photo analyzer on one uploaded image.
-
-        Uploads keep their original stem when it already follows the dataset
-        naming convention (warm cache); otherwise a content-hashed Lab stem is
-        generated, which requires the live model services.
-        """
-        suffix = Path(file.filename or "upload.jpg").suffix.lower() or ".jpg"
-        if suffix not in ingest.IMAGE_EXTENSIONS:
-            raise HTTPException(
-                status_code=400, detail=f"Unsupported image type: {suffix}"
-            )
-        data = file.file.read()
-        if not data:
-            raise HTTPException(status_code=400, detail="Empty upload")
-
-        original_stem = Path(file.filename or "").stem
-        if ingest.PHOTO_STEM_PATTERN.match(original_stem):
-            stem = original_stem
-        else:
-            digest = hashlib.sha1(data).hexdigest()[:8]
-            stem = f"Lab{digest}_{datetime.now(UTC).date().isoformat()}_01"
-        work_dir = state.data_dir / "dev" / stem
-        work_dir.mkdir(parents=True, exist_ok=True)
-        photo_path = work_dir / f"{stem}{suffix}"
-        photo_path.write_bytes(data)
+        """Compatibility alias for the full photo-analysis dev endpoint."""
         try:
-            result = ingest.analyze_single_photo(
-                photo_path, work_dir, paths.MODEL_CACHE_ROOT
+            result = dev.photo_analysis(
+                file.file.read(),
+                file.filename,
+                state.data_dir,
+                paths.MODEL_CACHE_ROOT,
             )
-        except ValueError as error:
+        except (RuntimeError, ValueError) as error:
             raise HTTPException(status_code=422, detail=str(error)) from error
-        return result.to_dict()
+        return result["photo"]
+
+    @app.post("/dev/sam3")
+    def dev_sam3(file: UploadFile) -> dict:
+        """Development Lab: run SAM3 body/features overlays on one image."""
+        try:
+            return dev.sam3_overlay(
+                file.file.read(),
+                file.filename,
+                state.data_dir,
+                paths.MODEL_CACHE_ROOT,
+            )
+        except (RuntimeError, ValueError) as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+
+    @app.post("/dev/tear-profile")
+    def dev_tear_profile(file: UploadFile) -> dict:
+        """Development Lab: run tear-profile extraction on one image."""
+        try:
+            return dev.tear_profile(
+                file.file.read(),
+                file.filename,
+                state.data_dir,
+                paths.MODEL_CACHE_ROOT,
+            )
+        except (RuntimeError, ValueError) as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+
+    @app.post("/dev/tear-match")
+    def dev_tear_match(file_a: UploadFile, file_b: UploadFile) -> dict:
+        """Development Lab: match same-side tear profiles from two images."""
+        try:
+            return dev.tear_match_pair(
+                file_a.file.read(),
+                file_a.filename,
+                file_b.file.read(),
+                file_b.filename,
+                state.data_dir,
+                paths.MODEL_CACHE_ROOT,
+            )
+        except (RuntimeError, ValueError) as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
+
+    @app.post("/dev/photo-analysis")
+    def dev_photo_analysis(file: UploadFile) -> dict:
+        """Development Lab: render the full photo-analysis diagnostic panel."""
+        try:
+            return dev.photo_analysis(
+                file.file.read(),
+                file.filename,
+                state.data_dir,
+                paths.MODEL_CACHE_ROOT,
+            )
+        except (RuntimeError, ValueError) as error:
+            raise HTTPException(status_code=422, detail=str(error)) from error
 
     @app.get("/image")
     def image(path: str) -> FileResponse:

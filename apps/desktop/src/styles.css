@@ -1366,15 +1366,25 @@ div.ear-crop {
 
 .ear-chart-caption .mono-dim { font-size: 9px; }
 
-/* profile charts */
-.profile-chart .chart-bg { fill: #f3eedd; stroke: var(--line); stroke-width: 1; }
-.profile-chart .chart-overlap { fill: rgba(47, 127, 112, 0.22); stroke: none; }
-.profile-chart .chart-trim { fill: rgba(124, 127, 126, 0.16); }
-.profile-chart .chart-grid { stroke: var(--line); stroke-width: 0.6; stroke-dasharray: 3 3; }
-.profile-chart .chart-tick {
+/* local-server Matplotlib profile plots */
+.profile-plot-image {
+  display: block;
+  width: 100%;
+  height: auto;
+  min-height: 120px;
+  object-fit: contain;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--bg-panel);
+  color: var(--text-faint);
   font-family: var(--font-mono);
   font-size: 10px;
-  fill: var(--text-faint);
+}
+
+div.profile-plot-image {
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .evidence-pair {
@@ -1391,32 +1401,16 @@ div.ear-crop {
   padding: 10px 12px 8px;
 }
 
-.chart-legend {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--text-faint);
-  margin-top: 2px;
-}
+.match-profile-plot { min-height: 180px; }
 
-.legend-swatch {
-  width: 10px;
-  height: 3px;
-  border-radius: 1px;
-  display: inline-block;
+.evidence img.match-profile-plot {
+  width: 100%;
+  height: auto;
+  min-height: 180px;
+  aspect-ratio: auto;
+  background: var(--bg-panel);
+  border-color: var(--line);
 }
-
-.legend-note {
-  margin-left: auto;
-  color: var(--accent-hi);
-  letter-spacing: 0.06em;
-}
-
-.legend-swatch + .legend-swatch { margin-left: 10px; }
 
 .new-elephant-panel {
   margin-top: 18px;

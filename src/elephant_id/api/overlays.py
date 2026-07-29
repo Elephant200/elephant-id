@@ -20,7 +20,7 @@ TUSK_RGB = (255, 105, 65)
 EAR_RGB = (80, 220, 130)
 ANCHOR_UPPER_RGB = (255, 255, 255)
 ANCHOR_LOWER_RGB = (255, 220, 80)
-EAR_CROP_PAD_FRACTION = 0.08
+EAR_CROP_PAD_FRACTION = 0.15
 
 
 def annotate_photo(image: BgrImage, analysis: dict) -> BgrImage:

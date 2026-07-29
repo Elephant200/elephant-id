@@ -2,6 +2,7 @@
 
 export const API_BASE =
   (typeof window !== 'undefined' && window.alphaphant?.apiBase) ||
+  import.meta.env.VITE_API_BASE ||
   'http://127.0.0.1:8756';
 
 async function request(path, options = {}) {

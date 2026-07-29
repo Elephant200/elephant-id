@@ -21,7 +21,7 @@ import cv2
 import numpy as np
 from loguru import logger
 
-from elephant_id.api import overlays
+from elephant_id.api import figures, overlays
 from elephant_id.api.gallery import GalleryData
 from elephant_id.api.profiles import plot_profile
 from elephant_id.constants import TEAR_PROFILE_BINS
@@ -43,6 +43,7 @@ class EarResult:
 
     side: str
     crop_path: str | None
+    profile_plot_path: str | None = None
     profile: tuple[float, ...] = field(default=())
     mass: float = 0.0
 
@@ -243,15 +244,22 @@ def _ingest_photo(
 
     precomputed = fallback.get(stem, [])
     if precomputed:
-        ears = tuple(
-            EarResult(
+        ears = []
+        for side, profile, crop, _, _ in precomputed:
+            profile_plot_path = figures.render_tear_profile_png(
+                profile,
+                work_dir / "profile_plots" / f"{photo_id}_{side}.png",
                 side=side,
-                crop_path=crop,
-                profile=plot_profile(profile),
-                mass=float(tear_mass(profile)[0]),
             )
-            for side, profile, crop, _, _ in precomputed
-        )
+            ears.append(
+                EarResult(
+                    side=side,
+                    crop_path=crop,
+                    profile_plot_path=str(profile_plot_path),
+                    profile=plot_profile(profile),
+                    mass=float(tear_mass(profile)[0]),
+                )
+            )
         return (
             PhotoResult(
                 file_name=path.name,
@@ -260,7 +268,7 @@ def _ingest_photo(
                 detail=f"{_plural(len(precomputed), 'profile')} from the known-elephant cache",
                 date=date,
                 photo_path=str(path),
-                ears=ears,
+                ears=tuple(ears),
             ),
             precomputed,
         )
@@ -316,11 +324,17 @@ def _photo_result_from_analysis(
             f"{photo_id}_{ear.side}_clean.jpg",
         )
         contour = overlays.ear_contour_in_crop(image, ear)
+        profile_plot_path = figures.render_tear_profile_png(
+            profile,
+            work_dir / "profile_plots" / f"{photo_id}_{ear.side}.png",
+            side=str(ear.side),
+        )
         rows.append((str(ear.side), profile, crop_path, clean_crop_path, contour))
         ears.append(
             EarResult(
                 side=str(ear.side),
                 crop_path=crop_path,
+                profile_plot_path=str(profile_plot_path),
                 profile=plot_profile(profile),
                 mass=float(tear_mass(profile)[0]),
             )
@@ -371,7 +385,8 @@ def _export_image(image: np.ndarray, directory: Path, file_name: str) -> str | N
     try:
         directory.mkdir(parents=True, exist_ok=True)
         output_path = directory / file_name
-        cv2.imwrite(str(output_path), image)
+        if not cv2.imwrite(str(output_path), image):
+            raise ValueError(f"Could not write evidence image: {output_path}")
         return str(output_path)
     except Exception as error:
         logger.warning(f"Could not export evidence image {file_name}: {error}")

@@ -1,8 +1,5 @@
 import { imageUrl } from '../api.js';
 import { useLightbox, ZoomImage } from './Lightbox.jsx';
-import ProfileChart from './ProfileChart.jsx';
-
-export const SIDE_COLORS = { left: '#3d6379', right: '#8a5a2c' };
 
 const SIDE_ORDER = { left: 0, right: 1 };
 
@@ -70,16 +67,15 @@ export default function PhotoEvidenceCard({ photo }) {
                 <figcaption className="img-caption">ANCHORED EAR CROP</figcaption>
               </figure>
               <div className="ear-chart">
-                <ProfileChart
-                  series={[
-                    {
-                      label: ear.side,
-                      values: ear.profile,
-                      color: SIDE_COLORS[ear.side] || '#7c7f7e',
-                      fill: true,
-                    },
-                  ]}
-                />
+                {ear.profile_plot_path ? (
+                  <img
+                    src={imageUrl(ear.profile_plot_path)}
+                    alt={`${ear.side} ear tear profile`}
+                    className="profile-plot-image"
+                  />
+                ) : (
+                  <div className="noimg profile-plot-image">NO PROFILE PLOT</div>
+                )}
                 <div className="ear-chart-caption">
                   <span className={`badge ${ear.side}`}>{ear.side} ear</span>
                   <span className="mono-dim" title="tear-depth profile along the outer ear margin">

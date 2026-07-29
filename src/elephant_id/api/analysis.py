@@ -5,8 +5,8 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-EAR_CANDIDATE_MIN_ASPECT = 1.1
-EAR_CANDIDATE_MAX_ASPECT = 1.3
+EAR_CANDIDATE_MIN_ASPECT = 0.7
+EAR_CANDIDATE_MAX_ASPECT = 0.9
 EAR_CANDIDATE_LIMIT = 3
 EAR_SIDES = ("left", "right")
 
@@ -89,6 +89,7 @@ def analysis_payload(
                     "file_name": photo.get("file_name") or photo_id,
                     "photo_path": photo.get("photo_path"),
                     "crop_path": crop_path,
+                    "display_crop_path": row_geo.get("clean_crop_path") or crop_path,
                     "crop_width": width,
                     "crop_height": height,
                     "aspect_ratio": round(float(aspect_ratio), 3),
@@ -97,7 +98,7 @@ def analysis_payload(
                     "clean_crop_path": row_geo.get("clean_crop_path"),
                     "contour": row_geo.get("contour"),
                     "ranking_note": (
-                        "Temporary preview ranking: aspect ratio 1.1-1.3 "
+                        "Temporary preview ranking: aspect ratio 0.7-0.9 "
                         "preferred, then larger crop area first."
                     ),
                 }
