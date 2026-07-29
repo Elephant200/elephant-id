@@ -1,25 +1,4 @@
-"""Evaluate tear-profile retrieval on the high-quality ear image set.
-
-The scoring stack under test (see docs/reference/matching.md): tear profiles ->
-``TearMatcher`` pair scores -> ``symmetrized_cohort_z`` normalization ->
-tear-mass-conditioned calibration -> side-score averaging.
-
-The input rows come from ``outputs/high_quality/manifest.csv``. Each kept row
-must identify one dataset photo, one known elephant, and one ear side. Profile
-extraction reads the historical coded dataset, then caches usable profile rows
-in ``outputs/tear_matching_eval/hq_profiles.npz``. Raw same-side pairwise
-matcher scores are cached separately and strictly tied to that profile cache.
-
-The reported protocol is two-ear retrieval from high-quality, high-resolution
-image pairs. Each image pair queries all other image pairs, grouped and ranked
-by elephant. Per gallery elephant and side, the score is the best score over
-all matching-side image pairs; "combined" averages the left and right side
-scores after those per-side maxima have been selected. By default, scores are
-cohort-normalized and calibrated; ``--no-normalization`` and
-``--no-calibration`` disable exactly those steps for one ablation run.
-Calibrators are fitted on identity-disjoint folds so no query is ever scored by
-a calibrator trained on its own elephant.
-"""
+"""Evaluate tear-profile retrieval on the high-quality ear image set."""
 
 import argparse
 import csv
@@ -101,10 +80,10 @@ def main() -> None:
     )
     score_matrix = evaluation_score_matrix(
         raw_pair_scores,
-        normalize=not args.no_normalization,
+        normalize=args.normalize,
     )
     calibrators = None
-    if not args.no_calibration:
+    if args.calibrate:
         calibrators = identity_calibrators(
             profile_set,
             score_matrix,
@@ -123,8 +102,8 @@ def main() -> None:
         profile_set,
         evaluation,
         seeds=seeds,
-        normalized=not args.no_normalization,
-        calibrated=not args.no_calibration,
+        normalized=args.normalize,
+        calibrated=args.calibrate,
     )
 
 
@@ -145,14 +124,14 @@ def parse_args() -> argparse.Namespace:
         help="Seed for identity-disjoint calibration folds and negative sampling.",
     )
     parser.add_argument(
-        "--no-normalization",
+        "--normalize",
         action="store_true",
-        help="Use symmetrized raw matcher scores instead of cohort-normalized scores.",
+        help="Use cohort-normalized scores instead of symmetrized raw matcher scores.",
     )
     parser.add_argument(
-        "--no-calibration",
+        "--calibrate",
         action="store_true",
-        help="Rank directly on selected scores instead of calibrated evidence logits.",
+        help="Use calibrated evidence logits instead of selected scores.",
     )
     parser.add_argument("--rebuild-cache", action="store_true")
     parser.add_argument("--rebuild-pairwise-cache", action="store_true")
@@ -836,9 +815,9 @@ def summary_path(*, normalized: bool, calibrated: bool) -> Path:
     if normalized and calibrated:
         name = "full"
     elif normalized:
-        name = "no_calibration"
+        name = "calibrated"
     elif calibrated:
-        name = "no_normalization"
+        name = "normalized"
     else:
         name = "raw_only"
     return OUTPUT_DIR / f"hq_summary_{name}.txt"
