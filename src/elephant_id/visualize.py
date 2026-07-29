@@ -313,15 +313,20 @@ def plot_tear_profile_geometry(
 
 def plot_tear_profile(
     axis: Axes,
-    tear_profile: TearProfile,
+    tear_profile: TearProfile | np.ndarray,
     *,
     color: str = "tab:red",
     y_max: float = 0.4,
     title: str = "Tear profile",
 ) -> None:
     """Plot one tear-depth profile with trimmed angle bands."""
-    angles = _tear_profile_angles(len(tear_profile.profile))
-    axis.plot(angles, tear_profile.profile, color=color, linewidth=1.4)
+    profile = (
+        np.asarray(tear_profile.profile, dtype=np.float64)
+        if isinstance(tear_profile, TearProfile)
+        else np.asarray(tear_profile, dtype=np.float64)
+    )
+    angles = _tear_profile_angles(len(profile))
+    axis.plot(angles, profile, color=color, linewidth=1.4)
     axis.axvspan(0, TEAR_TRIM_DEGREES, color="0.85")
     axis.axvspan(180.0 - TEAR_TRIM_DEGREES, 180.0, color="0.85")
     axis.axvline(TEAR_TRIM_DEGREES, color="tab:orange", linestyle="--", lw=1.0)
@@ -339,7 +344,7 @@ def plot_tear_profile(
         ha="center",
         va="top",
         fontsize=10,
-        fontweight="semibold",
+        fontweight="bold",
         transform=axis.transAxes,
     )
 
@@ -375,6 +380,7 @@ def plot_aligned_tear_profiles(
     *,
     candidate_label: str,
     color: str,
+    candidate_color: str = "black",
     y_max: float,
     shift_fraction: float | None = None,
     shift_bins: int | None = None,
@@ -398,7 +404,13 @@ def plot_aligned_tear_profiles(
         alpha=0.25,
         label="overlap",
     )
-    axis.plot(angles, candidate_profile, color="black", linewidth=1.6, label=candidate_label)
+    axis.plot(
+        angles,
+        candidate_profile,
+        color=candidate_color,
+        linewidth=1.6,
+        label=candidate_label,
+    )
     axis.plot(
         angles,
         aligned_query_profile,
@@ -408,11 +420,13 @@ def plot_aligned_tear_profiles(
     )
 
     title = candidate_label
-    if shift_fraction is not None and shift_bins is not None and stretch is not None and penalty is not None:
-        title = (
-            f"{candidate_label}: shift {shift_fraction * 180:+.1f}° "
-            f"(bin {shift_bins:+d}), stretch x{stretch:.2f}, penalty x{penalty:.2f}"
-        )
+    if shift_fraction is not None and stretch is not None:
+        title = f"{candidate_label}: shift {shift_fraction * 180:+.1f}°"
+        if shift_bins is not None:
+            title += f" (bin {shift_bins:+d})"
+        title += f", stretch x{stretch:.2f}"
+        if penalty is not None:
+            title += f", penalty x{penalty:.2f}"
     if overlap_score is not None and score is not None:
         title += f"\nIoU {overlap_score:.3f} -> score {score:.3f}"
 
