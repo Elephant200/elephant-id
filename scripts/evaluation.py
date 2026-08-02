@@ -835,15 +835,14 @@ def format_modes(
 
 def format_metrics(metrics: dict[str, dict[str, float]]) -> str:
     """Format one retrieval metric row."""
+    tops = " ".join(
+        f"top{k}={format_metric(metrics[f'top{k}'], precision=1, as_percent=True)}"
+        for k in TOP_KS
+    )
     return (
         f"n={format_metric(metrics['count'], precision=0)} "
-        f"top1={format_metric(metrics['top1'])} "
-        f"top3={format_metric(metrics['top3'])} "
-        f"top5={format_metric(metrics['top5'])} "
-        f"top10={format_metric(metrics['top10'])} "
-        f"top15={format_metric(metrics['top15'])} "
-        f"MRR={format_metric(metrics['mrr'])} "
-        f"median_rank={format_metric(metrics['median_rank'], precision=1)}"
+        f"{tops} "
+        f"MRR={format_metric(metrics['mrr'])}"
     )
 
 
@@ -851,19 +850,22 @@ def format_metric(
     metric: dict[str, float],
     *,
     precision: int = 3,
+    as_percent: bool = False,
 ) -> str:
     """Format a metric mean, with spread when multiple seeds were evaluated."""
-    mean = metric["mean"]
-    std = metric["std"]
+    scale = 100.0 if as_percent else 1.0
+    mean = metric["mean"] * scale
+    std = metric["std"] * scale
     if precision == 0:
         base = f"{mean:.0f}"
         spread = f"{std:.0f}"
     else:
         base = f"{mean:.{precision}f}"
         spread = f"{std:.{precision}f}"
+    suffix = "%" if as_percent else ""
     if std == 0.0:
-        return base
-    return f"{base}±{spread}"
+        return f"{base}{suffix}"
+    return f"{base}±{spread}{suffix}"
 
 
 if __name__ == "__main__":
