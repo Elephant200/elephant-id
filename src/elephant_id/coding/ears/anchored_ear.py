@@ -1,5 +1,6 @@
 """Anchored ear contour preparation."""
 
+import math
 from typing import Literal
 
 import cv2
@@ -9,6 +10,12 @@ from pycocotools import mask as coco_mask
 from elephant_id.ai.detection import Detection
 from elephant_id.coding.ears.geometry import resample2d
 from elephant_id.image.masks import RleMask, decode_rle_mask
+
+# Coarse, declared domain-knowledge priors for the ear-crop quality score.
+# These are deliberately not fit to any evaluation or matching dataset.
+EAR_QUALITY_ASPECT_MEAN = 0.8
+EAR_QUALITY_ASPECT_SIGMA = 0.1
+EAR_QUALITY_BORDER_MARGIN_FRACTION = 0.002
 
 
 def _closed_path(points: np.ndarray, start_idx: int, end_idx: int) -> np.ndarray:
@@ -110,9 +117,6 @@ class AnchoredEar:
         self._rle_mask: RleMask | None = None
         self._area: float | None = None
 
-        # Placeholder until quality scoring combines area and aspect ratio.
-        self.quality = 0.0
-
     def _ensure_geometry(self) -> None:
         """Compute the cut contour and its cheap derivatives in one pass."""
         if self._cut_contour is not None:
@@ -188,6 +192,37 @@ class AnchoredEar:
         """Area of the cleaned ear mask in pixels."""
         self._ensure_mask()
         return self._area
+
+    @property
+    def quality(self) -> float:
+        """Coarse quality prior for this ear crop in ``[0, 1]``.
+
+        A Gaussian on the crop box's aspect ratio (width / height) centered at
+        ``EAR_QUALITY_ASPECT_MEAN``, forced to ``0.0`` when the box lies within
+        ``EAR_QUALITY_BORDER_MARGIN_FRACTION`` of the image on any side. This is
+        a declared domain-knowledge prior, not a value fit to any dataset.
+        """
+        self._ensure_geometry()
+        x1, y1, x2, y2 = self._xyxy
+        height, width = self._mask_size
+
+        x_margin = EAR_QUALITY_BORDER_MARGIN_FRACTION * width
+        y_margin = EAR_QUALITY_BORDER_MARGIN_FRACTION * height
+        if (
+            x1 <= x_margin
+            or y1 <= y_margin
+            or width - x2 <= x_margin
+            or height - y2 <= y_margin
+        ):
+            return 0.0
+
+        box_height = y2 - y1
+        if box_height <= 0:
+            return 0.0
+
+        aspect = (x2 - x1) / box_height
+        deviation = aspect - EAR_QUALITY_ASPECT_MEAN
+        return math.exp(-(deviation**2) / (2 * EAR_QUALITY_ASPECT_SIGMA**2))
 
     @property
     def rle_mask(self) -> RleMask:
