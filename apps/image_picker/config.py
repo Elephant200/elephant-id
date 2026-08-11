@@ -20,3 +20,11 @@ SIDES: tuple[str, str] = ("left", "right")
 # ``MIN_QUALIFYING_SIGHTINGS`` qualifying sightings.
 QUALITY_THRESHOLD = 0.5
 MIN_QUALIFYING_SIGHTINGS = 5
+
+# Selection rule. Within an eligible elephant the reviewer selects between
+# ``MIN_SELECTED_SIGHTINGS`` and ``MAX_SELECTED_SIGHTINGS`` sightings inclusive,
+# picking one canonical ear per side for each. The maximum is a hard limit; an
+# elephant is "done" once it has between the minimum and maximum sightings that
+# are complete (both sides picked) with no partially picked sighting left over.
+MIN_SELECTED_SIGHTINGS = 3
+MAX_SELECTED_SIGHTINGS = 5

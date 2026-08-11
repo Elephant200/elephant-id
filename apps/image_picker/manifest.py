@@ -66,11 +66,23 @@ class ManifestStore:
 
     def picks_for_identity(self, identity: str) -> dict[tuple[str, str], str]:
         """Return ``{(side, sighting_date): photo_identifier}`` for one elephant."""
-        picks: dict[tuple[str, str], str] = {}
+        return self.picks_by_identity().get(identity, {})
+
+    def picks_by_identity(self) -> dict[str, dict[tuple[str, str], str]]:
+        """Return every elephant's picks in a single manifest read.
+
+        Reads the manifest once and groups rows by identity so callers that need
+        every elephant's picks (for example the eligible-list progress badges)
+        avoid re-reading the whole file per elephant.
+        """
+        by_identity: dict[str, dict[tuple[str, str], str]] = {}
         for row in self._read_rows():
-            if row.get("identity") == identity:
-                picks[(row["side"], row["sighting_date"])] = row["photo_identifier"]
-        return picks
+            identity = row.get("identity")
+            if not identity:
+                continue
+            picks = by_identity.setdefault(identity, {})
+            picks[(row["side"], row["sighting_date"])] = row["photo_identifier"]
+        return by_identity
 
     def record_pick(self, candidate: EarCandidate) -> None:
         """Upsert a candidate as the canonical pick for its side and sighting."""

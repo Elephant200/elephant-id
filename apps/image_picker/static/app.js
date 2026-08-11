@@ -3,6 +3,7 @@
 const elephantList = document.getElementById("elephant-list");
 const elephantPanel = document.getElementById("elephant-panel");
 const scanStatus = document.getElementById("scan-status");
+const reviewProgress = document.getElementById("review-progress");
 
 let selectedIdentity = null;
 
@@ -20,10 +21,12 @@ async function postJSON(url, body) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
+  const data = await response.json().catch(() => null);
   if (!response.ok) {
-    throw new Error(`${response.status} ${response.statusText}`);
+    const detail = data && data.error ? data.error : response.statusText;
+    throw new Error(detail);
   }
-  return response.json();
+  return data;
 }
 
 function cropUrl(identity, sightingDate, side, candidateId) {
@@ -47,6 +50,13 @@ function renderScan(scan) {
   }
 }
 
+function renderReviewProgress(view) {
+  const total = view.elephants.length;
+  reviewProgress.textContent = total
+    ? `${view.doneCount} of ${total} elephants done`
+    : "";
+}
+
 function renderElephants(elephants) {
   elephantList.innerHTML = "";
   for (const elephant of elephants) {
@@ -56,12 +66,20 @@ function renderElephants(elephants) {
     if (elephant.identity === selectedIdentity) {
       item.classList.add("selected");
     }
+    if (elephant.done) {
+      item.classList.add("done");
+    }
     const name = document.createElement("span");
     name.textContent = elephant.identity;
     item.appendChild(name);
     const badge = document.createElement("span");
     badge.className = "badge";
-    badge.textContent = `${elephant.pickedCount} picked`;
+    // Show complete-out-of-selected so partially-picked sightings are visible;
+    // fall back to the minimum target until at least that many are selected.
+    const denominator = Math.max(elephant.selectedCount, elephant.minSightings);
+    badge.textContent = elephant.done
+      ? `✓ ${elephant.completeCount}`
+      : `${elephant.completeCount}/${denominator}`;
     item.appendChild(badge);
     item.addEventListener("click", () => openElephant(elephant.identity));
     elephantList.appendChild(item);
@@ -71,6 +89,7 @@ function renderElephants(elephants) {
 async function refreshElephants() {
   const view = await getJSON("/api/elephants");
   renderScan(view.scan);
+  renderReviewProgress(view);
   renderElephants(view.elephants);
   if (view.scan.running) {
     setTimeout(refreshElephants, 2000);
@@ -120,9 +139,19 @@ function renderSideColumn(sighting, side) {
 function renderSighting(sighting) {
   const card = document.createElement("section");
   card.className = "sighting-card";
+  if (sighting.complete) {
+    card.classList.add("complete");
+  } else if (sighting.selected) {
+    card.classList.add("partial");
+  }
   card.dataset.sightingDate = sighting.sightingDate;
   const header = document.createElement("h3");
   header.textContent = sighting.sightingDate;
+  if (sighting.complete) {
+    header.textContent += " ✓";
+  } else if (sighting.selected) {
+    header.textContent += " (needs both ears)";
+  }
   card.appendChild(header);
   const columns = document.createElement("div");
   columns.className = "side-columns";
@@ -132,12 +161,41 @@ function renderSighting(sighting) {
   return card;
 }
 
+function selectionText(selection) {
+  const range = `${selection.minSightings}–${selection.maxSightings}`;
+  let text =
+    `Selected ${selection.selectedCount} of ${range} sightings ` +
+    `(${selection.completeCount} complete)`;
+  if (selection.done) {
+    text += " — done ✓";
+  }
+  return text;
+}
+
+function renderSelectionCounter(selection) {
+  const counter = document.createElement("div");
+  counter.id = "selection-counter";
+  counter.className = "selection-counter";
+  counter.classList.toggle("done", selection.done);
+  counter.textContent = selectionText(selection);
+  return counter;
+}
+
+function updateSelection(selection) {
+  const counter = document.getElementById("selection-counter");
+  if (counter) {
+    counter.classList.toggle("done", selection.done);
+    counter.textContent = selectionText(selection);
+  }
+}
+
 function renderElephantPanel(view) {
   elephantPanel.innerHTML = "";
   const heading = document.createElement("h2");
   heading.textContent =
     `${view.identity} — ${view.qualifyingCount} qualifying sightings`;
   elephantPanel.appendChild(heading);
+  elephantPanel.appendChild(renderSelectionCounter(view.selection));
   for (const sighting of view.sightings) {
     elephantPanel.appendChild(renderSighting(sighting));
   }
@@ -163,13 +221,19 @@ function replaceSighting(payload) {
 }
 
 async function pickCandidate(sightingDate, side, candidateId) {
-  const payload = await postJSON("/api/pick", {
-    identity: selectedIdentity,
-    sightingDate,
-    side,
-    candidateId,
-  });
-  replaceSighting(payload);
+  try {
+    const result = await postJSON("/api/pick", {
+      identity: selectedIdentity,
+      sightingDate,
+      side,
+      candidateId,
+    });
+    replaceSighting(result.sighting);
+    updateSelection(result.selection);
+    refreshElephants().catch(() => {});
+  } catch (error) {
+    scanStatus.textContent = `Pick rejected: ${error.message}`;
+  }
 }
 
 refreshElephants().catch((error) => {

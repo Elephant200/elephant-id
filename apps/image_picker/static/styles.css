@@ -51,6 +51,12 @@ body {
   color: #6b7684;
 }
 
+.review-progress {
+  font-size: 0.8rem;
+  color: #6b7684;
+  margin-bottom: 0.75rem;
+}
+
 .elephant-list {
   list-style: none;
   margin: 0;
@@ -84,6 +90,26 @@ body {
   padding: 0.1rem 0.5rem;
 }
 
+.elephant-item.done .badge {
+  color: #1b7a43;
+  background: #dcf1e3;
+}
+
+.selection-counter {
+  font-size: 0.9rem;
+  color: #45505c;
+  background: #eef1f4;
+  border-radius: 6px;
+  padding: 0.4rem 0.7rem;
+  margin-bottom: 1rem;
+}
+
+.selection-counter.done {
+  color: #1b7a43;
+  background: #dcf1e3;
+  font-weight: 600;
+}
+
 .panel {
   flex: 1;
   height: 100%;
@@ -101,6 +127,16 @@ body {
   border-radius: 8px;
   padding: 1rem;
   margin-bottom: 1rem;
+}
+
+.sighting-card.complete {
+  border-color: #9bd3b0;
+  background: #f4fbf6;
+}
+
+.sighting-card.partial {
+  border-color: #e6c98a;
+  background: #fdf9f0;
 }
 
 .sighting-card h3 {

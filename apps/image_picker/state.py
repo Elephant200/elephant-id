@@ -19,7 +19,9 @@ from .analysis import (
 from .catalog import PhotoCatalog
 from .config import (
     HIGH_QUALITY_MANIFEST,
+    MAX_SELECTED_SIGHTINGS,
     MIN_QUALIFYING_SIGHTINGS,
+    MIN_SELECTED_SIGHTINGS,
     QUALITY_THRESHOLD,
     SIDES,
 )
@@ -101,7 +103,7 @@ class PickerState:
 
     # --- views -----------------------------------------------------------
     def elephants_view(self) -> dict:
-        """Return the eligible-elephant list and scan progress."""
+        """Return the eligible-elephant list and scan/review progress."""
         with self._lock:
             eligible = list(self._eligible)
             running = not self._scan_future.done()
@@ -112,13 +114,18 @@ class PickerState:
                 "current": self._scan_current,
                 "eligible": len(eligible),
             }
-        elephants = [
-            {"identity": identity, "pickedCount": self._picked_count(identity)}
-            for identity in eligible
-        ]
+        picks_by_identity = self.manifest.picks_by_identity()
+        elephants = []
+        done_count = 0
+        for identity in eligible:
+            summary = self._selection_summary(picks_by_identity.get(identity, {}))
+            if summary["done"]:
+                done_count += 1
+            elephants.append({"identity": identity, **summary})
         return {
             "elephants": elephants,
             "scan": scan,
+            "doneCount": done_count,
             "manifestPath": str(HIGH_QUALITY_MANIFEST),
         }
 
@@ -137,6 +144,7 @@ class PickerState:
             "identity": identity,
             "minQualifying": MIN_QUALIFYING_SIGHTINGS,
             "qualifyingCount": len(payloads),
+            "selection": self._selection_summary(picks),
             "sightings": payloads,
         }
 
@@ -147,8 +155,11 @@ class PickerState:
     ) -> dict:
         """Return one qualifying sighting's candidates split by side."""
         sides = {}
+        picked_sides = set()
         for side in SIDES:
             picked_photo = picks.get((side, candidates.sighting_date))
+            if picked_photo is not None:
+                picked_sides.add(side)
             sides[side] = [
                 candidate.to_json(picked=candidate.photo_identifier == picked_photo)
                 for candidate in candidates.side(side)
@@ -156,13 +167,48 @@ class PickerState:
         return {
             "sightingId": candidates.sighting_id,
             "sightingDate": candidates.sighting_date,
+            "selected": bool(picked_sides),
+            "complete": self._is_complete(picked_sides),
             "left": sides["left"],
             "right": sides["right"],
         }
 
-    def _picked_count(self, identity: str) -> int:
-        """Return how many (side, sighting) picks exist for an elephant."""
-        return len(self.manifest.picks_for_identity(identity))
+    @staticmethod
+    def _sides_by_date(picks: dict[tuple[str, str], str]) -> dict[str, set[str]]:
+        """Group an elephant's picks into the set of picked sides per sighting."""
+        grouped: dict[str, set[str]] = {}
+        for side, sighting_date in picks:
+            grouped.setdefault(sighting_date, set()).add(side)
+        return grouped
+
+    @staticmethod
+    def _is_complete(picked_sides: set[str]) -> bool:
+        """Whether both ear sides have been picked for a sighting."""
+        return len(picked_sides) == len(SIDES)
+
+    def _selection_summary(self, picks: dict[tuple[str, str], str]) -> dict:
+        """Summarize an elephant's selection progress from its manifest picks.
+
+        A sighting is "selected" once it has any pick and "complete" once it has
+        both sides. An elephant is "done" when it has between the minimum and
+        maximum sightings complete with no partially picked sighting left over.
+        """
+        sides_by_date = self._sides_by_date(picks)
+        selected_count = len(sides_by_date)
+        complete_count = sum(
+            1 for sides in sides_by_date.values() if self._is_complete(sides)
+        )
+        done = (
+            selected_count == complete_count
+            and MIN_SELECTED_SIGHTINGS <= complete_count <= MAX_SELECTED_SIGHTINGS
+        )
+        return {
+            "selectedCount": selected_count,
+            "completeCount": complete_count,
+            "minSightings": MIN_SELECTED_SIGHTINGS,
+            "maxSightings": MAX_SELECTED_SIGHTINGS,
+            "done": done,
+        }
 
     # --- mutations -------------------------------------------------------
     def record_pick(
@@ -173,12 +219,34 @@ class PickerState:
         side: str,
         candidate_id: str,
     ) -> dict:
-        """Persist a pick and return the sighting's refreshed payload."""
+        """Persist a pick and return the sighting payload plus review progress.
+
+        Raises:
+            ValueError: If the pick would select more than ``MAX_SELECTED_SIGHTINGS``
+                sightings for the elephant.
+        """
         candidate = self._find_candidate(identity, sighting_date, side, candidate_id)
+        picks = self.manifest.picks_for_identity(identity)
+        selected_dates = set(self._sides_by_date(picks))
+        if (
+            sighting_date not in selected_dates
+            and len(selected_dates) >= MAX_SELECTED_SIGHTINGS
+        ):
+            logger.warning(
+                f"Rejected pick for {identity} {sighting_date} {side}: already at "
+                f"the {MAX_SELECTED_SIGHTINGS}-sighting limit"
+            )
+            raise ValueError(
+                f"Cannot select more than {MAX_SELECTED_SIGHTINGS} sightings for "
+                f"this elephant; re-pick within an already-selected sighting instead"
+            )
         self.manifest.record_pick(candidate)
         candidates = self._sighting_candidates(self._sighting(identity, sighting_date))
         picks = self.manifest.picks_for_identity(identity)
-        return self._sighting_payload(candidates, picks)
+        return {
+            "sighting": self._sighting_payload(candidates, picks),
+            "selection": self._selection_summary(picks),
+        }
 
     def crop_jpeg(
         self,

@@ -27,3 +27,9 @@ Then open `http://127.0.0.1:8010`.
   `outputs/high_quality/manifest.csv` and exports two images: a full-frame copy
   under `images_full/` and a tight ear crop under `images_crop/`. Changing a
   pick deletes the stale exports. The manifest is the only persisted state.
+- Within an elephant the reviewer selects between three and five sightings,
+  picking one canonical ear per side for each. The maximum is enforced as a hard
+  limit (a sixth sighting is rejected); an elephant reads as *done* once it has
+  three to five sightings with both ears picked. The panel shows a live
+  selected-sightings counter and the sidebar shows overall review progress; both
+  are derived from the manifest, not stored.
