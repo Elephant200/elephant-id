@@ -91,7 +91,7 @@ def test_sam3_service_uses_preset_cache_and_reads_photo(make_photo):
     assert service.runner.calls[0][1] == "body"
 
 
-def test_sam3_service_returns_detections_from_cached_envelope(make_photo):
+def test_sam3_service_returns_detections_from_cache(make_photo):
     detection = Detection(
         xyxy=(1.0, 2.0, 3.0, 4.0), class_name="ear", class_id=2, confidence=0.8
     )
@@ -110,18 +110,18 @@ def test_sam3_service_returns_detections_from_cached_envelope(make_photo):
     assert result == [detection]
 
 
-def test_sam3_service_compute_builds_envelope(make_photo):
+def test_sam3_service_compute_builds_cache_result(make_photo):
     service = _bare_service()
     service.runner = _RecordingRunner()
     service.dataset = _RecordingDataset()
 
-    envelope = service._compute(make_photo(), "features")
+    result = service._compute(make_photo(), "features")
 
-    assert envelope["queries"] == list(SAM3_QUERY_PRESETS["features"])
-    assert envelope["confidence_threshold"] == 0.5
-    assert envelope["nms"] is True
-    assert envelope["nms_iou_threshold"] == 0.2
-    assert envelope["detections"] == []
+    assert result["queries"] == list(SAM3_QUERY_PRESETS["features"])
+    assert result["confidence_threshold"] == 0.5
+    assert result["nms"] is True
+    assert result["nms_iou_threshold"] == 0.2
+    assert result["detections"] == []
 
 
 def test_sam3_service_passes_api_key_and_workspace_to_runner(monkeypatch):

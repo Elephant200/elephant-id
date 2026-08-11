@@ -13,7 +13,7 @@ from elephant_id.constants import DEFAULT_CACHE_ROOT
 
 
 class CacheManager:
-    """Cache AI model results as JSON envelopes."""
+    """Cache AI model results as JSON files."""
     def __init__(
         self,
         namespace: str,

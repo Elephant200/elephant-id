@@ -107,14 +107,14 @@ class AnchorService:
         ox1, oy1, ox2, oy2 = (int(coord) for coord in crop_xyxy)
         key = f"{photo.identifier}__crop_{ox1}_{oy1}_{ox2}_{oy2}"
 
-        envelope = self.cache_manager.get_or_compute(
+        cached = self.cache_manager.get_or_compute(
             key=key,
             compute_fn=lambda: self._compute(photo, crop_xyxy),
         )
         # Cached detections are crop-relative; translate to absolute image coords.
         detections = [
             Detection.from_dict(d).translate(float(ox1), float(oy1))
-            for d in envelope["detections"]
+            for d in cached["detections"]
         ]
         logger.info(f"Ran Anchor for {photo.identifier}: {len(detections)} keypoint detections")
         return detections

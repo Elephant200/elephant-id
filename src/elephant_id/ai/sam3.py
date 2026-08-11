@@ -183,16 +183,16 @@ class Sam3Service:
 
         key = self.cache_key(photo)
 
-        envelope = self.cache_managers[query_preset].get_or_compute(
+        cached = self.cache_managers[query_preset].get_or_compute(
             key=key,
             compute_fn=lambda: self._compute(photo, query_preset),
         )
-        detections = [Detection.from_dict(d) for d in envelope["detections"]]
+        detections = [Detection.from_dict(d) for d in cached["detections"]]
         logger.info(f"Ran SAM3 {query_preset} for {photo.identifier}: {len(detections)} detections")
         return detections
 
     def _compute(self, photo: Photo, query_preset: str) -> dict:
-        """Run the model and build the cache envelope."""
+        """Run the model and assemble the result to cache."""
         detections = self.runner.run(
             image=self.dataset.read_image(photo), query_preset=query_preset
         )
