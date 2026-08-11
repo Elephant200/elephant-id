@@ -54,8 +54,23 @@ class PhotoAnalyzer:
         self.ear_analyzer = EarFieldAnalyzer()
         self.tusk_analyzer = TuskFieldAnalyzer()
 
-    def analyze(self, photo: Photo) -> dict | None:
-        """Analyze one photo into flexible per-field evidence dictionaries."""
+    def analyze_shared(self, photo: Photo) -> dict | None:
+        """Detect the body and anchored features, skipping evidence analyzers.
+
+        Runs the SAM3 body/feature detection, body selection, feature grouping,
+        usable-ear selection, and anchor-keypoint attachment, then estimates the
+        view. This is the same detection-and-anchoring code path :meth:`analyze`
+        uses, minus the age, gender, ear, and tusk evidence sub-analyses.
+
+        Callers that only need the anchored ears (for example candidate
+        generation) should prefer this: the discarded evidence analyzers each
+        decode the full-resolution image on a cache miss, which dominates a
+        large scan even though those placeholder outputs go unused.
+
+        Returns:
+            A dict with ``view`` and the ``body``, ``trunks``, ``ears``, and
+            ``tusks`` detections, or ``None`` when the photo has no usable body.
+        """
         body_detections = self.sam3.run(photo, "body")
         feature_detections = self.sam3.run(photo, "features")
 
@@ -81,12 +96,26 @@ class PhotoAnalyzer:
             tusks=tusks,
         )
 
-        feature_context = {
+        return {
             "view": view,
             "body": body,
             "trunks": trunks,
             "ears": anchored_ears,
             "tusks": tusks,
+        }
+
+    def analyze(self, photo: Photo) -> dict | None:
+        """Analyze one photo into flexible per-field evidence dictionaries."""
+        shared = self.analyze_shared(photo)
+        if shared is None:
+            return None
+
+        feature_context = {
+            "view": shared["view"],
+            "body": shared["body"],
+            "trunks": shared["trunks"],
+            "ears": shared["ears"],
+            "tusks": shared["tusks"],
         }
 
         age_evidence = self.age_analyzer.analyze(photo, feature_context)
@@ -95,12 +124,12 @@ class PhotoAnalyzer:
         tusk_evidence = self.tusk_analyzer.analyze(photo, feature_context)
 
         return {
-            "view": view,
+            "view": shared["view"],
             "shared_data": {
-                "body": body,
-                "trunks": trunks,
-                "ears": anchored_ears,
-                "tusks": tusks,
+                "body": shared["body"],
+                "trunks": shared["trunks"],
+                "ears": shared["ears"],
+                "tusks": shared["tusks"],
             },
             "age": age_evidence,
             "gender": gender_evidence,

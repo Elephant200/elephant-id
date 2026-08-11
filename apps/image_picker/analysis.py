@@ -118,11 +118,16 @@ class CandidateAnalyzer:
         )
 
     def _ears(self, photo: Photo) -> list[AnchoredEar]:
-        """Return the anchored ears the production analyzer accepts for a photo."""
-        analysis = self._analyzer.analyze(photo)
-        if analysis is None:
+        """Return the anchored ears the production analyzer accepts for a photo.
+
+        Uses the analyzer's shared detection path, which skips the age, gender,
+        and tusk evidence sub-analyses the picker never reads -- each of those
+        would otherwise decode the full-resolution image on a cache miss.
+        """
+        shared = self._analyzer.analyze_shared(photo)
+        if shared is None:
             return []
-        return analysis["shared_data"]["ears"]
+        return shared["ears"]
 
     def _candidate(
         self,
