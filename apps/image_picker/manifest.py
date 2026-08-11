@@ -112,6 +112,29 @@ class ManifestStore:
             f"{candidate.sighting_date}: {candidate.photo_identifier}"
         )
 
+    def remove_pick(self, side: str, identity: str, sighting_date: str) -> bool:
+        """Delete a pick and its exported images for one side and sighting.
+
+        Returns:
+            Whether a matching manifest row existed and was removed.
+        """
+        key = (side, identity, sighting_date)
+        removed = False
+        with self._lock:
+            rows = self._read_rows()
+            kept: list[dict] = []
+            for row in rows:
+                if (row["side"], row["identity"], row["sighting_date"]) == key:
+                    self._delete_exports(row)
+                    removed = True
+                else:
+                    kept.append(row)
+            if removed:
+                self._write_rows(kept)
+        if removed:
+            logger.info(f"Removed pick {side} {identity} {sighting_date}")
+        return removed
+
     def _export(self, candidate: EarCandidate) -> dict:
         """Write the full-frame and crop images and build the manifest row."""
         photo = self.dataset.get_photo(candidate.photo_identifier)

@@ -4,27 +4,38 @@ from __future__ import annotations
 
 import io
 import os
+from pathlib import Path
 
 from flask import Flask, abort, jsonify, render_template, request, send_file
 from flask.typing import ResponseReturnValue
+from loguru import logger
 
 from elephant_id.dataset import Dataset
 from elephant_id.log import configure_logging
 
 from .analysis import CandidateAnalyzer
 from .catalog import PhotoCatalog
-from .config import CODED_ROOT, CSV_PATH
+from .config import CODED_ROOT, CSV_PATH, HIGH_QUALITY_ROOT
 from .manifest import ManifestStore
 from .state import PickerState
 
 
 def create_app() -> Flask:
-    """Build the configured matching image picker Flask app."""
+    """Build the configured matching image picker Flask app.
+
+    The manifest and exported crops live under ``HIGH_QUALITY_ROOT`` unless the
+    ``IMAGE_PICKER_OUTPUT_ROOT`` environment variable overrides it, which lets
+    the app run against a scratch directory without touching real picks.
+    """
     configure_logging()
     dataset = Dataset(dataset_root=CODED_ROOT, metadata_path=CSV_PATH)
     catalog = PhotoCatalog.from_dataset(dataset)
     analyzer = CandidateAnalyzer(dataset)
-    manifest = ManifestStore(dataset)
+    root_override = os.environ.get("IMAGE_PICKER_OUTPUT_ROOT")
+    output_root = Path(root_override) if root_override else HIGH_QUALITY_ROOT
+    if root_override:
+        logger.info(f"Using output root override: {output_root}")
+    manifest = ManifestStore(dataset, root=output_root)
     state = PickerState(
         dataset=dataset, catalog=catalog, analyzer=analyzer, manifest=manifest
     )
@@ -61,6 +72,21 @@ def create_app() -> Flask:
                     sighting_date=str(data.get("sightingDate") or ""),
                     side=str(data.get("side") or ""),
                     candidate_id=str(data.get("candidateId") or ""),
+                )
+            )
+        except (KeyError, ValueError) as error:
+            return jsonify({"error": str(error)}), 400
+
+    @app.post("/api/unpick")
+    def api_unpick() -> ResponseReturnValue:
+        """Remove a sighting's canonical pick for one side."""
+        data = request.get_json(force=True, silent=True) or {}
+        try:
+            return jsonify(
+                state.remove_pick(
+                    identity=str(data.get("identity") or ""),
+                    sighting_date=str(data.get("sightingDate") or ""),
+                    side=str(data.get("side") or ""),
                 )
             )
         except (KeyError, ValueError) as error:

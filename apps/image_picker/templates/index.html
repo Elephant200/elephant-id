@@ -21,6 +21,14 @@
       <p class="placeholder">Select an elephant to review its qualifying sightings.</p>
     </section>
   </main>
+  <div id="lightbox" class="lightbox" aria-hidden="true">
+    <button id="lightbox-close" class="lightbox-close" aria-label="Close">&times;</button>
+    <div class="lightbox-inner">
+      <img id="lightbox-img" alt="Enlarged ear crop" />
+      <div id="lightbox-caption" class="lightbox-caption"></div>
+      <div class="lightbox-hint">Click outside or press Esc to close</div>
+    </div>
+  </div>
   <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>
 </html>

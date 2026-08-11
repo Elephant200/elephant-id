@@ -4,6 +4,10 @@ const elephantList = document.getElementById("elephant-list");
 const elephantPanel = document.getElementById("elephant-panel");
 const scanStatus = document.getElementById("scan-status");
 const reviewProgress = document.getElementById("review-progress");
+const lightbox = document.getElementById("lightbox");
+const lightboxImg = document.getElementById("lightbox-img");
+const lightboxCaption = document.getElementById("lightbox-caption");
+const lightboxClose = document.getElementById("lightbox-close");
 
 let selectedIdentity = null;
 
@@ -39,6 +43,45 @@ function cropUrl(identity, sightingDate, side, candidateId) {
   return `/api/crop?${params.toString()}`;
 }
 
+/* --- lightbox ------------------------------------------------------------ */
+const hasLightbox = Boolean(lightbox && lightboxImg && lightboxCaption);
+
+function openLightbox(url, caption) {
+  if (!hasLightbox) {
+    return;
+  }
+  lightboxImg.src = url;
+  lightboxCaption.innerHTML = caption;
+  lightbox.classList.add("open");
+  lightbox.setAttribute("aria-hidden", "false");
+}
+
+function closeLightbox() {
+  if (!hasLightbox) {
+    return;
+  }
+  lightbox.classList.remove("open");
+  lightbox.setAttribute("aria-hidden", "true");
+  lightboxImg.removeAttribute("src");
+}
+
+if (hasLightbox) {
+  if (lightboxClose) {
+    lightboxClose.addEventListener("click", closeLightbox);
+  }
+  lightbox.addEventListener("click", (event) => {
+    if (event.target === lightbox) {
+      closeLightbox();
+    }
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && lightbox.classList.contains("open")) {
+      closeLightbox();
+    }
+  });
+}
+
+/* --- sidebar ------------------------------------------------------------- */
 function renderScan(scan) {
   if (scan.running) {
     scanStatus.textContent =
@@ -57,32 +100,55 @@ function renderReviewProgress(view) {
     : "";
 }
 
+function elephantItem(elephant) {
+  const item = document.createElement("li");
+  item.className = "elephant-item";
+  item.dataset.identity = elephant.identity;
+  if (elephant.identity === selectedIdentity) {
+    item.classList.add("selected");
+  }
+  if (elephant.done) {
+    item.classList.add("done");
+  }
+  const name = document.createElement("span");
+  name.className = "name";
+  name.textContent = elephant.identity;
+  item.appendChild(name);
+  const badge = document.createElement("span");
+  badge.className = "badge";
+  // Show complete-out-of-selected so partially-picked sightings are visible;
+  // fall back to the minimum target until at least that many are selected.
+  const denominator = Math.max(elephant.selectedCount, elephant.minSightings);
+  badge.textContent = elephant.done
+    ? `✓ ${elephant.completeCount}`
+    : `${elephant.completeCount}/${denominator}`;
+  item.appendChild(badge);
+  item.addEventListener("click", () => openElephant(elephant.identity));
+  return item;
+}
+
+function divider(text) {
+  const li = document.createElement("li");
+  li.className = "list-divider";
+  li.textContent = text;
+  return li;
+}
+
 function renderElephants(elephants) {
   elephantList.innerHTML = "";
-  for (const elephant of elephants) {
-    const item = document.createElement("li");
-    item.className = "elephant-item";
-    item.dataset.identity = elephant.identity;
-    if (elephant.identity === selectedIdentity) {
-      item.classList.add("selected");
+  // Group done elephants to the top ("in done order"), each group keeping the
+  // dataset's own ordering. Dividers only appear once something is done.
+  const done = elephants.filter((elephant) => elephant.done);
+  const remaining = elephants.filter((elephant) => !elephant.done);
+  if (done.length) {
+    elephantList.appendChild(divider(`Done (${done.length})`));
+    for (const elephant of done) {
+      elephantList.appendChild(elephantItem(elephant));
     }
-    if (elephant.done) {
-      item.classList.add("done");
-    }
-    const name = document.createElement("span");
-    name.textContent = elephant.identity;
-    item.appendChild(name);
-    const badge = document.createElement("span");
-    badge.className = "badge";
-    // Show complete-out-of-selected so partially-picked sightings are visible;
-    // fall back to the minimum target until at least that many are selected.
-    const denominator = Math.max(elephant.selectedCount, elephant.minSightings);
-    badge.textContent = elephant.done
-      ? `✓ ${elephant.completeCount}`
-      : `${elephant.completeCount}/${denominator}`;
-    item.appendChild(badge);
-    item.addEventListener("click", () => openElephant(elephant.identity));
-    elephantList.appendChild(item);
+    elephantList.appendChild(divider(`Remaining (${remaining.length})`));
+  }
+  for (const elephant of remaining) {
+    elephantList.appendChild(elephantItem(elephant));
   }
 }
 
@@ -96,44 +162,103 @@ async function refreshElephants() {
   }
 }
 
-function renderCandidate(sighting, side, candidate) {
+/* --- candidates ---------------------------------------------------------- */
+function renderCandidate(sighting, side, candidate, rank) {
   const figure = document.createElement("figure");
   figure.className = "candidate";
+  if (rank === 1) {
+    figure.classList.add("top");
+  }
   if (candidate.picked) {
     figure.classList.add("picked");
   }
-  const img = document.createElement("img");
-  img.loading = "lazy";
-  img.src = cropUrl(
+
+  const frame = document.createElement("div");
+  frame.className = "frame";
+  const url = cropUrl(
     selectedIdentity,
     sighting.sightingDate,
     side,
     candidate.candidateId,
   );
-  const caption = document.createElement("figcaption");
-  caption.textContent = candidate.quality.toFixed(3);
-  figure.appendChild(img);
-  figure.appendChild(caption);
-  figure.addEventListener("click", () =>
-    pickCandidate(sighting.sightingDate, side, candidate.candidateId),
-  );
+  const img = document.createElement("img");
+  img.loading = "lazy";
+  img.src = url;
+  img.alt = `${side} ear candidate for ${sighting.sightingDate}`;
+  frame.appendChild(img);
+
+  const rankBadge = document.createElement("span");
+  rankBadge.className = "rank-badge";
+  rankBadge.textContent = `#${rank}`;
+  frame.appendChild(rankBadge);
+
+  const zoom = document.createElement("button");
+  zoom.className = "zoom-btn";
+  zoom.type = "button";
+  zoom.title = "Enlarge to inspect detail";
+  zoom.setAttribute("aria-label", "Enlarge candidate");
+  zoom.textContent = "⤢";
+  zoom.addEventListener("click", (event) => {
+    event.stopPropagation();
+    openLightbox(
+      url,
+      `<strong>${candidate.photoIdentifier}</strong> · ${side} ear · ` +
+        `score ${candidate.quality.toFixed(3)}`,
+    );
+  });
+  frame.appendChild(zoom);
+
+  if (candidate.picked) {
+    const check = document.createElement("span");
+    check.className = "check-badge";
+    check.innerHTML =
+      '<span class="glyph keep">✓</span><span class="glyph drop">✕</span>';
+    frame.appendChild(check);
+  }
+  figure.appendChild(frame);
+
+  const meta = document.createElement("figcaption");
+  meta.className = "candidate-meta";
+  const score = document.createElement("span");
+  score.className = "quality-score";
+  score.textContent = candidate.quality.toFixed(3);
+  meta.appendChild(score);
+  if (candidate.picked) {
+    const label = document.createElement("span");
+    label.className = "picked-label";
+    label.innerHTML =
+      '<span class="on">Picked</span><span class="off">Remove</span>';
+    meta.appendChild(label);
+  }
+  figure.appendChild(meta);
+
+  figure.title = candidate.picked ? "Click to un-select" : "Click to select";
+  figure.addEventListener("click", () => {
+    if (candidate.picked) {
+      unpickCandidate(sighting.sightingDate, side);
+    } else {
+      pickCandidate(sighting.sightingDate, side, candidate.candidateId);
+    }
+  });
   return figure;
 }
 
-function renderSideColumn(sighting, side) {
-  const column = document.createElement("div");
-  column.className = "side-column";
+function renderSideBlock(sighting, side) {
+  const block = document.createElement("div");
+  block.className = "side-block";
   const heading = document.createElement("h4");
-  heading.textContent = side === "left" ? "Left ear" : "Right ear";
-  column.appendChild(heading);
-  const strip = document.createElement("div");
-  strip.className = "candidate-strip";
-  strip.dataset.side = side;
-  for (const candidate of sighting[side]) {
-    strip.appendChild(renderCandidate(sighting, side, candidate));
-  }
-  column.appendChild(strip);
-  return column;
+  const picked = sighting[side].some((candidate) => candidate.picked);
+  heading.textContent =
+    (side === "left" ? "Left ear" : "Right ear") + (picked ? " ✓" : "");
+  block.appendChild(heading);
+  const grid = document.createElement("div");
+  grid.className = "candidate-grid";
+  grid.dataset.side = side;
+  sighting[side].forEach((candidate, index) => {
+    grid.appendChild(renderCandidate(sighting, side, candidate, index + 1));
+  });
+  block.appendChild(grid);
+  return block;
 }
 
 function renderSighting(sighting) {
@@ -145,22 +270,31 @@ function renderSighting(sighting) {
     card.classList.add("partial");
   }
   card.dataset.sightingDate = sighting.sightingDate;
-  const header = document.createElement("h3");
-  header.textContent = sighting.sightingDate;
+
+  const head = document.createElement("div");
+  head.className = "sighting-head";
+  const title = document.createElement("h3");
+  title.textContent = sighting.sightingDate;
+  head.appendChild(title);
   if (sighting.complete) {
-    header.textContent += " ✓";
+    const pill = document.createElement("span");
+    pill.className = "status-pill complete";
+    pill.textContent = "Complete";
+    head.appendChild(pill);
   } else if (sighting.selected) {
-    header.textContent += " (needs both ears)";
+    const pill = document.createElement("span");
+    pill.className = "status-pill partial";
+    pill.textContent = "Needs both ears";
+    head.appendChild(pill);
   }
-  card.appendChild(header);
-  const columns = document.createElement("div");
-  columns.className = "side-columns";
-  columns.appendChild(renderSideColumn(sighting, "left"));
-  columns.appendChild(renderSideColumn(sighting, "right"));
-  card.appendChild(columns);
+  card.appendChild(head);
+
+  card.appendChild(renderSideBlock(sighting, "left"));
+  card.appendChild(renderSideBlock(sighting, "right"));
   return card;
 }
 
+/* --- selection counter --------------------------------------------------- */
 function selectionText(selection) {
   const range = `${selection.minSightings}–${selection.maxSightings}`;
   let text =
@@ -170,15 +304,6 @@ function selectionText(selection) {
     text += " — done ✓";
   }
   return text;
-}
-
-function renderSelectionCounter(selection) {
-  const counter = document.createElement("div");
-  counter.id = "selection-counter";
-  counter.className = "selection-counter";
-  counter.classList.toggle("done", selection.done);
-  counter.textContent = selectionText(selection);
-  return counter;
 }
 
 function updateSelection(selection) {
@@ -191,20 +316,40 @@ function updateSelection(selection) {
 
 function renderElephantPanel(view) {
   elephantPanel.innerHTML = "";
+
+  const header = document.createElement("div");
+  header.className = "panel-header";
   const heading = document.createElement("h2");
-  heading.textContent =
-    `${view.identity} — ${view.qualifyingCount} qualifying sightings`;
-  elephantPanel.appendChild(heading);
-  elephantPanel.appendChild(renderSelectionCounter(view.selection));
+  heading.textContent = view.identity;
+  const subtitle = document.createElement("span");
+  subtitle.className = "subtitle";
+  subtitle.textContent = `${view.qualifyingCount} sightings to review`;
+  heading.appendChild(document.createTextNode(" "));
+  heading.appendChild(subtitle);
+  header.appendChild(heading);
+
+  const counter = document.createElement("div");
+  counter.id = "selection-counter";
+  counter.className = "selection-counter";
+  counter.classList.toggle("done", view.selection.done);
+  counter.textContent = selectionText(view.selection);
+  header.appendChild(counter);
+  elephantPanel.appendChild(header);
+
+  const sightings = document.createElement("div");
+  sightings.className = "sightings";
   for (const sighting of view.sightings) {
-    elephantPanel.appendChild(renderSighting(sighting));
+    sightings.appendChild(renderSighting(sighting));
   }
+  elephantPanel.appendChild(sightings);
 }
 
 async function openElephant(identity) {
   selectedIdentity = identity;
   for (const item of elephantList.children) {
-    item.classList.toggle("selected", item.dataset.identity === identity);
+    if (item.dataset && item.dataset.identity) {
+      item.classList.toggle("selected", item.dataset.identity === identity);
+    }
   }
   elephantPanel.innerHTML = "<p class='placeholder'>Loading&hellip;</p>";
   const view = await getJSON(`/api/elephant/${encodeURIComponent(identity)}`);
@@ -212,10 +357,11 @@ async function openElephant(identity) {
 }
 
 function replaceSighting(payload) {
+  const sightings = elephantPanel.querySelector(".sightings");
   const card = elephantPanel.querySelector(
     `.sighting-card[data-sighting-date="${payload.sightingDate}"]`,
   );
-  if (card) {
+  if (card && sightings) {
     card.replaceWith(renderSighting(payload));
   }
 }
@@ -233,6 +379,21 @@ async function pickCandidate(sightingDate, side, candidateId) {
     refreshElephants().catch(() => {});
   } catch (error) {
     scanStatus.textContent = `Pick rejected: ${error.message}`;
+  }
+}
+
+async function unpickCandidate(sightingDate, side) {
+  try {
+    const result = await postJSON("/api/unpick", {
+      identity: selectedIdentity,
+      sightingDate,
+      side,
+    });
+    replaceSighting(result.sighting);
+    updateSelection(result.selection);
+    refreshElephants().catch(() => {});
+  } catch (error) {
+    scanStatus.textContent = `Un-select rejected: ${error.message}`;
   }
 }
 

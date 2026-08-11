@@ -277,6 +277,22 @@ class PickerState:
             "selection": self._selection_summary(picks),
         }
 
+    def remove_pick(self, *, identity: str, sighting_date: str, side: str) -> dict:
+        """Remove a side's pick and return the sighting payload plus progress.
+
+        Raises:
+            ValueError: If ``side`` is not a recognized ear side.
+        """
+        if side not in SIDES:
+            raise ValueError(f"Invalid side: {side}")
+        self.manifest.remove_pick(side, identity, sighting_date)
+        candidates = self._sighting_candidates(self._sighting(identity, sighting_date))
+        picks = self.manifest.picks_for_identity(identity)
+        return {
+            "sighting": self._sighting_payload(candidates, picks),
+            "selection": self._selection_summary(picks),
+        }
+
     def crop_jpeg(
         self,
         *,
