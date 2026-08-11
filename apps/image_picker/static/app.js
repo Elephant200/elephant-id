@@ -298,8 +298,11 @@ function renderSighting(sighting) {
   }
   card.appendChild(head);
 
-  card.appendChild(renderSideBlock(sighting, "left"));
-  card.appendChild(renderSideBlock(sighting, "right"));
+  const columns = document.createElement("div");
+  columns.className = "side-columns";
+  columns.appendChild(renderSideBlock(sighting, "left"));
+  columns.appendChild(renderSideBlock(sighting, "right"));
+  card.appendChild(columns);
   return card;
 }
 

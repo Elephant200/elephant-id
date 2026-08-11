@@ -283,10 +283,17 @@ body {
   vertical-align: 0.05em;
 }
 
-.side-block + .side-block {
-  margin-top: 1.25rem;
-  padding-top: 1.1rem;
-  border-top: 1px dashed var(--line);
+/* Left half / right half, side by side, so the two ears compare independently. */
+.side-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.side-columns > .side-block + .side-block {
+  padding-left: 1.5rem;
+  border-left: 1px dashed var(--line);
 }
 
 .side-block h4 {
@@ -299,8 +306,21 @@ body {
 
 .candidate-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
   gap: 1.1rem;
+}
+
+/* On a narrow panel the two halves would be too cramped; stack them instead. */
+@media (max-width: 960px) {
+  .side-columns {
+    grid-template-columns: 1fr;
+  }
+  .side-columns > .side-block + .side-block {
+    padding-left: 0;
+    padding-top: 1.1rem;
+    border-left: 0;
+    border-top: 1px dashed var(--line);
+  }
 }
 
 /* --- candidate ----------------------------------------------------------- */
