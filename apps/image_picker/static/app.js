@@ -306,9 +306,23 @@ function renderSideBlock(sighting, side) {
   const grid = document.createElement("div");
   grid.className = "candidate-grid";
   grid.dataset.side = side;
+  // In "selected only" mode show just the chosen crop for each side, enlarged,
+  // rather than the full ranked candidate list.
+  grid.classList.toggle("picked-only", showSelectedOnly);
+  let shown = 0;
   sighting[side].forEach((candidate, index) => {
+    if (showSelectedOnly && !candidate.picked) {
+      return;
+    }
     grid.appendChild(renderCandidate(sighting, side, candidate, index + 1));
+    shown += 1;
   });
+  if (showSelectedOnly && shown === 0) {
+    const empty = document.createElement("p");
+    empty.className = "side-empty";
+    empty.textContent = "Not picked yet";
+    grid.appendChild(empty);
+  }
   block.appendChild(grid);
   return block;
 }

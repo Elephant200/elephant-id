@@ -349,6 +349,21 @@ body {
   gap: 1.1rem;
 }
 
+/* "Selected only" mode shows one chosen crop per side, filling the half. */
+.candidate-grid.picked-only {
+  grid-template-columns: 1fr;
+}
+
+.side-empty {
+  margin: 0;
+  padding: 1.25rem;
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+  color: var(--ink-soft);
+  font-size: 0.85rem;
+  text-align: center;
+}
+
 /* On a narrow panel the two halves would be too cramped; stack them instead. */
 @media (max-width: 960px) {
   .side-columns {
