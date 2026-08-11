@@ -10,6 +10,14 @@ const lightboxCaption = document.getElementById("lightbox-caption");
 const lightboxClose = document.getElementById("lightbox-close");
 
 let selectedIdentity = null;
+// Ordered elephant identities as shown in the sidebar (done first, then
+// remaining) — the sequence the left/right arrow keys step through.
+let orderedIdentities = [];
+// The elephant view currently rendered in the panel, kept so the "selected
+// only" filter and in-place card updates can re-derive what to show.
+let currentView = null;
+// When true, the panel shows only sightings that already have a pick.
+let showSelectedOnly = false;
 
 async function getJSON(url) {
   const response = await fetch(url);
@@ -150,7 +158,51 @@ function renderElephants(elephants) {
   for (const elephant of remaining) {
     elephantList.appendChild(elephantItem(elephant));
   }
+  orderedIdentities = [...done, ...remaining].map((elephant) => elephant.identity);
 }
+
+/* --- keyboard navigation ------------------------------------------------- */
+function moveElephant(delta) {
+  if (!orderedIdentities.length) {
+    return;
+  }
+  const current = orderedIdentities.indexOf(selectedIdentity);
+  if (current === -1) {
+    openElephant(orderedIdentities[0]);
+    return;
+  }
+  const next = current + delta;
+  if (next < 0 || next >= orderedIdentities.length) {
+    return;
+  }
+  const identity = orderedIdentities[next];
+  openElephant(identity);
+  const item = elephantList.querySelector(
+    `.elephant-item[data-identity="${CSS.escape(identity)}"]`,
+  );
+  if (item) {
+    item.scrollIntoView({ block: "nearest" });
+  }
+}
+
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") {
+    return;
+  }
+  if (event.metaKey || event.ctrlKey || event.altKey) {
+    return;
+  }
+  // Leave the arrows alone for the lightbox and any focused text field.
+  if (lightbox && lightbox.classList.contains("open")) {
+    return;
+  }
+  const active = document.activeElement;
+  if (active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA")) {
+    return;
+  }
+  event.preventDefault();
+  moveElephant(event.key === "ArrowRight" ? 1 : -1);
+});
 
 async function refreshElephants() {
   const view = await getJSON("/api/elephants");
@@ -326,7 +378,67 @@ function updateSelection(selection) {
   }
 }
 
+function sightingsToShow(view) {
+  return showSelectedOnly
+    ? view.sightings.filter((sighting) => sighting.selected)
+    : view.sightings;
+}
+
+function setShowSelectedOnly(value) {
+  if (showSelectedOnly === value) {
+    return;
+  }
+  showSelectedOnly = value;
+  if (currentView) {
+    renderElephantPanel(currentView);
+  }
+}
+
+function viewToggle(view) {
+  const selectedCount = view.sightings.filter((s) => s.selected).length;
+  const toggle = document.createElement("div");
+  toggle.className = "view-toggle";
+  toggle.setAttribute("role", "group");
+  toggle.setAttribute("aria-label", "Filter sightings");
+  const options = [
+    ["all", "All", false],
+    ["selected", `Selected (${selectedCount})`, true],
+  ];
+  for (const [, label, selectedOnly] of options) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "view-toggle-btn";
+    button.textContent = label;
+    const active = selectedOnly === showSelectedOnly;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+    button.addEventListener("click", () => setShowSelectedOnly(selectedOnly));
+    toggle.appendChild(button);
+  }
+  return toggle;
+}
+
+function renderSightingsList(view) {
+  const sightings = document.createElement("div");
+  sightings.className = "sightings";
+  const toShow = sightingsToShow(view);
+  if (!toShow.length) {
+    const empty = document.createElement("p");
+    empty.className = "placeholder";
+    empty.textContent = showSelectedOnly
+      ? "No sightings selected yet — switch to All to start picking."
+      : "No qualifying sightings.";
+    sightings.appendChild(empty);
+  } else {
+    for (const sighting of toShow) {
+      sightings.appendChild(renderSighting(sighting));
+    }
+  }
+  return sightings;
+}
+
 function renderElephantPanel(view) {
+  currentView = view;
   elephantPanel.innerHTML = "";
 
   const header = document.createElement("div");
@@ -340,20 +452,19 @@ function renderElephantPanel(view) {
   heading.appendChild(subtitle);
   header.appendChild(heading);
 
+  const controls = document.createElement("div");
+  controls.className = "panel-header-controls";
   const counter = document.createElement("div");
   counter.id = "selection-counter";
   counter.className = "selection-counter";
   counter.classList.toggle("done", view.selection.done);
   counter.textContent = selectionText(view.selection);
-  header.appendChild(counter);
+  controls.appendChild(counter);
+  controls.appendChild(viewToggle(view));
+  header.appendChild(controls);
   elephantPanel.appendChild(header);
 
-  const sightings = document.createElement("div");
-  sightings.className = "sightings";
-  for (const sighting of view.sightings) {
-    sightings.appendChild(renderSighting(sighting));
-  }
-  elephantPanel.appendChild(sightings);
+  elephantPanel.appendChild(renderSightingsList(view));
 }
 
 async function openElephant(identity) {
@@ -368,14 +479,39 @@ async function openElephant(identity) {
   renderElephantPanel(view);
 }
 
+function refreshViewToggle() {
+  const existing = elephantPanel.querySelector(".view-toggle");
+  if (existing && currentView) {
+    existing.replaceWith(viewToggle(currentView));
+  }
+}
+
 function replaceSighting(payload) {
+  if (currentView) {
+    const index = currentView.sightings.findIndex(
+      (sighting) => sighting.sightingDate === payload.sightingDate,
+    );
+    if (index !== -1) {
+      currentView.sightings[index] = payload;
+    }
+  }
   const sightings = elephantPanel.querySelector(".sightings");
   const card = elephantPanel.querySelector(
     `.sighting-card[data-sighting-date="${payload.sightingDate}"]`,
   );
-  if (card && sightings) {
+  if (showSelectedOnly && !payload.selected) {
+    // The sighting lost its last pick; drop it from the selected-only view,
+    // falling back to the empty-state message if nothing selected remains.
+    if (card) {
+      card.remove();
+    }
+    if (sightings && currentView && !sightings.querySelector(".sighting-card")) {
+      sightings.replaceWith(renderSightingsList(currentView));
+    }
+  } else if (card) {
     card.replaceWith(renderSighting(payload));
   }
+  refreshViewToggle();
 }
 
 async function pickCandidate(sightingDate, side, candidateId) {
