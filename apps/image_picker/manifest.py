@@ -17,13 +17,11 @@ import threading
 from datetime import UTC, datetime
 from pathlib import Path
 
-import cv2
 from loguru import logger
 
 from elephant_id.dataset import Dataset
-from elephant_id.image.transforms import apply_crop
 
-from .analysis import EarCandidate
+from .analysis import EarCandidate, encode_crop_jpeg
 from .config import CODED_ROOT, HIGH_QUALITY_ROOT
 
 MANIFEST_FIELDS = [
@@ -79,12 +77,16 @@ class ManifestStore:
         key = (candidate.side, candidate.identity, candidate.sighting_date)
         with self._lock:
             rows = self._read_rows()
-            kept: list[dict] = []
-            replaced = False
-            new_row = self._export(candidate)
+            # Delete any prior exports for this key before writing the new ones,
+            # so re-picking the same photo does not delete its fresh export.
             for row in rows:
                 if (row["side"], row["identity"], row["sighting_date"]) == key:
                     self._delete_exports(row)
+            new_row = self._export(candidate)
+            kept: list[dict] = []
+            replaced = False
+            for row in rows:
+                if (row["side"], row["identity"], row["sighting_date"]) == key:
                     if not replaced:
                         kept.append(new_row)
                         replaced = True
@@ -114,11 +116,7 @@ class ManifestStore:
         crop_path = crop_dir / f"{candidate.photo_identifier}.jpg"
 
         shutil.copy2(source, full_path)
-        crop = apply_crop(image, candidate.crop_xyxy)
-        ok, encoded = cv2.imencode(".jpg", crop)
-        if not ok:
-            raise RuntimeError(f"Could not encode crop for {candidate.photo_identifier}")
-        crop_path.write_bytes(encoded.tobytes())
+        crop_path.write_bytes(encode_crop_jpeg(image, candidate.crop_xyxy))
 
         x1, y1, x2, y2 = candidate.crop_xyxy
         return {

@@ -5,14 +5,17 @@ from __future__ import annotations
 import threading
 from concurrent.futures import Future, ThreadPoolExecutor
 
-import cv2
 from loguru import logger
 
 from elephant_id.dataset import Dataset
 from elephant_id.domain import Sighting
-from elephant_id.image.transforms import apply_crop
 
-from .analysis import CandidateAnalyzer, EarCandidate, SightingCandidates
+from .analysis import (
+    CandidateAnalyzer,
+    EarCandidate,
+    SightingCandidates,
+    encode_crop_jpeg,
+)
 from .catalog import PhotoCatalog
 from .config import (
     HIGH_QUALITY_MANIFEST,
@@ -188,11 +191,7 @@ class PickerState:
         """Render one candidate's ear crop as JPEG bytes."""
         candidate = self._find_candidate(identity, sighting_date, side, candidate_id)
         photo = self.dataset.get_photo(candidate.photo_identifier)
-        crop = apply_crop(self.dataset.read_image(photo), candidate.crop_xyxy)
-        ok, encoded = cv2.imencode(".jpg", crop)
-        if not ok:
-            raise RuntimeError(f"Could not encode crop for {candidate.photo_identifier}")
-        return encoded.tobytes()
+        return encode_crop_jpeg(self.dataset.read_image(photo), candidate.crop_xyxy)
 
     # --- lookup helpers --------------------------------------------------
     def _sighting(self, identity: str, sighting_date: str) -> Sighting:

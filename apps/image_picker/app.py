@@ -6,6 +6,7 @@ import io
 import os
 
 from flask import Flask, abort, jsonify, render_template, request, send_file
+from flask.typing import ResponseReturnValue
 
 from elephant_id.dataset import Dataset
 from elephant_id.log import configure_logging
@@ -32,17 +33,17 @@ def create_app() -> Flask:
     app.extensions["picker_state"] = state
 
     @app.get("/")
-    def index():
+    def index() -> ResponseReturnValue:
         """Render the single-page picker UI."""
         return render_template("index.html")
 
     @app.get("/api/elephants")
-    def api_elephants():
+    def api_elephants() -> ResponseReturnValue:
         """Return eligible elephants and scan progress."""
         return jsonify(state.elephants_view())
 
     @app.get("/api/elephant/<identity>")
-    def api_elephant(identity: str):
+    def api_elephant(identity: str) -> ResponseReturnValue:
         """Return one elephant's qualifying sightings and candidates."""
         try:
             return jsonify(state.elephant_view(identity))
@@ -50,7 +51,7 @@ def create_app() -> Flask:
             abort(404)
 
     @app.post("/api/pick")
-    def api_pick():
+    def api_pick() -> ResponseReturnValue:
         """Record a candidate as a sighting's canonical pick for one side."""
         data = request.get_json(force=True, silent=True) or {}
         try:
@@ -66,7 +67,7 @@ def create_app() -> Flask:
             return jsonify({"error": str(error)}), 400
 
     @app.get("/api/crop")
-    def api_crop():
+    def api_crop() -> ResponseReturnValue:
         """Return one candidate's ear crop as a JPEG preview."""
         try:
             jpeg = state.crop_jpeg(

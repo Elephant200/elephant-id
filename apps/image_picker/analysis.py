@@ -11,11 +11,30 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+import cv2
+
 from elephant_id.coding.ears.anchored_ear import AnchoredEar
 from elephant_id.coding.photo_analyzer import PhotoAnalyzer
 from elephant_id.constants import DEFAULT_CACHE_ROOT
 from elephant_id.dataset import Dataset
 from elephant_id.domain import Photo, Sighting
+from elephant_id.image import BgrImage
+from elephant_id.image.transforms import apply_crop
+
+
+def encode_crop_jpeg(
+    image: BgrImage,
+    crop_xyxy: tuple[float, float, float, float],
+) -> bytes:
+    """Crop an ear region and encode it as JPEG bytes.
+
+    Raises:
+        RuntimeError: If OpenCV fails to encode the crop.
+    """
+    ok, encoded = cv2.imencode(".jpg", apply_crop(image, crop_xyxy))
+    if not ok:
+        raise RuntimeError("Could not encode ear crop")
+    return encoded.tobytes()
 
 
 @dataclass(frozen=True)
