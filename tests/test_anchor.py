@@ -91,3 +91,23 @@ def test_anchor_translates_every_prediction():
     assert translated[0].x1 == 5.0
     assert translated[1].x1 == 15.0
     assert translated[1].keypoints[1] == (16.0, 18.0)
+
+
+def test_anchor_service_construction_does_not_load_weights(tmp_path):
+    service = AnchorService(dataset=object(), cache_root=tmp_path)
+
+    assert service._runner is None
+
+
+def test_anchor_service_cache_hit_does_not_load_weights(tmp_path):
+    photo = _photo()
+    detection = _detection((1.0, 2.0, 3.0, 4.0), ((5.0, 6.0), (7.0, 8.0)))
+    service = AnchorService(dataset=object(), cache_root=tmp_path)
+    crop_xyxy = (100.0, 200.0, 460.0, 600.0)
+    key = f"{photo.identifier}__crop_100_200_460_600"
+    service.cache_manager.save(key, {"detections": [detection.to_dict()]})
+
+    translated = service.run(photo, crop_xyxy=crop_xyxy)
+
+    assert translated[0].xyxy == (101.0, 202.0, 103.0, 204.0)
+    assert service._runner is None

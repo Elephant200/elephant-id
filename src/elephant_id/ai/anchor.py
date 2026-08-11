@@ -53,19 +53,35 @@ class AnchorRunner:
 
 
 class AnchorService:
-    """Run the anchor keypoint detection YOLO26 model with caching."""
+    """Run the anchor keypoint detection YOLO26 model with caching.
+
+    The local YOLO runner (and its weights) is loaded lazily on the first
+    cache miss, so a fully warm cache serves detections without loading the
+    model.
+    """
 
     def __init__(
         self,
         dataset: Dataset,
         cache_root: Path = Path(DEFAULT_CACHE_ROOT)
     ) -> None:
-        self.runner = AnchorRunner()
         self.dataset = dataset
+        self._runner: AnchorRunner | None = None
         self.cache_manager = CacheManager(
             namespace="anchor",
             cache_root=cache_root,
         )
+
+    @property
+    def runner(self) -> AnchorRunner:
+        """The anchor runner, loading YOLO weights on first access."""
+        if self._runner is None:
+            self._runner = AnchorRunner()
+        return self._runner
+
+    @runner.setter
+    def runner(self, runner: AnchorRunner) -> None:
+        self._runner = runner
 
     def run(
         self,

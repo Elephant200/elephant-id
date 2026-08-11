@@ -117,7 +117,11 @@ class Sam3Runner:
 
 
 class Sam3Service:
-    """Run the Facebook SAM3 segmentation model with caching."""
+    """Run the Facebook SAM3 segmentation model with caching.
+
+    The remote runner is constructed lazily on the first cache miss, so a
+    fully warm cache serves detections without a ``ROBOFLOW_API_KEY``.
+    """
 
     def __init__(
         self,
@@ -126,27 +130,42 @@ class Sam3Service:
         api_key: str | None = None,
         workspace_name: str = ROBOFLOW_WORKSPACE,
     ) -> None:
-        self.runner = Sam3Runner(
-            confidence_threshold=DEFAULT_SAM3_CONFIDENCE_THRESHOLD,
-            nms=DEFAULT_SAM3_NMS,
-            nms_iou_threshold=DEFAULT_SAM3_NMS_IOU_THRESHOLD,
-            api_key=api_key,
-            workspace_name=workspace_name,
-        )
-
         self.dataset: Dataset = dataset
+        self.confidence_threshold: float = DEFAULT_SAM3_CONFIDENCE_THRESHOLD
+        self.nms: bool = DEFAULT_SAM3_NMS
+        self.nms_iou_threshold: float = DEFAULT_SAM3_NMS_IOU_THRESHOLD
+        self._api_key: str | None = api_key
+        self._workspace_name: str = workspace_name
+        self._runner: Sam3Runner | None = None
         self.cache_managers: dict[str, CacheManager] = {
             preset: CacheManager(f"sam3/{preset}", cache_root=cache_root)
             for preset in SAM3_QUERY_PRESETS
         }
 
+    @property
+    def runner(self) -> Sam3Runner:
+        """The SAM3 runner, constructed on first access (needs an API key)."""
+        if self._runner is None:
+            self._runner = Sam3Runner(
+                confidence_threshold=self.confidence_threshold,
+                nms=self.nms,
+                nms_iou_threshold=self.nms_iou_threshold,
+                api_key=self._api_key,
+                workspace_name=self._workspace_name,
+            )
+        return self._runner
+
+    @runner.setter
+    def runner(self, runner: Sam3Runner) -> None:
+        self._runner = runner
+
     def cache_key(self, photo: Photo) -> str:
         """Return the cache key used for a photo under every SAM3 preset."""
         return (
             f"{photo.identifier}__"
-            f"conf-{self.runner.confidence_threshold:.2f}__"
-            f"nms-{self.runner.nms}__"
-            f"iou-{self.runner.nms_iou_threshold:.2f}"
+            f"conf-{self.confidence_threshold:.2f}__"
+            f"nms-{self.nms}__"
+            f"iou-{self.nms_iou_threshold:.2f}"
         )
 
     def run(self, photo: Photo, query_preset: str) -> list[Detection]:
@@ -179,8 +198,8 @@ class Sam3Service:
         )
         return {
             "queries": list(_resolve_preset(query_preset)),
-            "confidence_threshold": self.runner.confidence_threshold,
-            "nms": self.runner.nms,
-            "nms_iou_threshold": self.runner.nms_iou_threshold,
+            "confidence_threshold": self.confidence_threshold,
+            "nms": self.nms,
+            "nms_iou_threshold": self.nms_iou_threshold,
             "detections": [detection.to_dict() for detection in detections],
         }

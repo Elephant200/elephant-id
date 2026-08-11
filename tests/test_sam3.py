@@ -64,8 +64,18 @@ class _RecordingCache:
         return compute_fn()
 
 
-def test_sam3_service_uses_preset_cache_and_reads_photo(make_photo):
+def _bare_service() -> Sam3Service:
+    """Build a service without running ``__init__`` or its cache managers."""
     service = Sam3Service.__new__(Sam3Service)
+    service._runner = None
+    service.confidence_threshold = 0.5
+    service.nms = True
+    service.nms_iou_threshold = 0.2
+    return service
+
+
+def test_sam3_service_uses_preset_cache_and_reads_photo(make_photo):
+    service = _bare_service()
     service.runner = _RecordingRunner()
     service.dataset = _RecordingDataset()
     cache = _RecordingCache()
@@ -90,7 +100,7 @@ def test_sam3_service_returns_detections_from_cached_envelope(make_photo):
         def get_or_compute(self, key, compute_fn):
             return {"detections": [detection.to_dict()]}
 
-    service = Sam3Service.__new__(Sam3Service)
+    service = _bare_service()
     service.runner = _RecordingRunner()
     service.dataset = _RecordingDataset()
     service.cache_managers = {"features": _CannedCache()}
@@ -101,7 +111,7 @@ def test_sam3_service_returns_detections_from_cached_envelope(make_photo):
 
 
 def test_sam3_service_compute_builds_envelope(make_photo):
-    service = Sam3Service.__new__(Sam3Service)
+    service = _bare_service()
     service.runner = _RecordingRunner()
     service.dataset = _RecordingDataset()
 
@@ -140,6 +150,32 @@ def test_sam3_service_passes_api_key_and_workspace_to_runner(monkeypatch):
 
     assert service.runner.api_key == "bulk-key"
     assert service.runner.workspace_name == "eleid-api-key-3"
+
+
+def test_sam3_service_construction_does_not_build_runner(tmp_path, monkeypatch):
+    monkeypatch.delenv("ROBOFLOW_API_KEY", raising=False)
+
+    service = Sam3Service(dataset=_RecordingDataset(), cache_root=tmp_path)
+
+    assert service._runner is None
+
+
+def test_sam3_service_cache_hit_does_not_build_runner(make_photo, tmp_path, monkeypatch):
+    monkeypatch.delenv("ROBOFLOW_API_KEY", raising=False)
+    photo = make_photo(name="Adam", sighting_date="2011-03-31", sequence=2)
+    detection = Detection(
+        xyxy=(1.0, 2.0, 3.0, 4.0), class_name="ear", class_id=2, confidence=0.8
+    )
+    service = Sam3Service(dataset=_RecordingDataset(), cache_root=tmp_path)
+    service.cache_managers["body"].save(
+        service.cache_key(photo), {"detections": [detection.to_dict()]}
+    )
+
+    result = service.run(photo, "body")
+
+    assert result == [detection]
+    assert service._runner is None
+    assert service.dataset.read_photos == []
 
 
 def test_sam3_service_rejects_unknown_query_preset(make_photo):
