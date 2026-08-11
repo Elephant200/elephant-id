@@ -12,6 +12,11 @@ CSV_PATH = DATASET_ROOT / "images.csv"
 HIGH_QUALITY_ROOT = REPO_ROOT / "outputs" / "high_quality"
 HIGH_QUALITY_MANIFEST = HIGH_QUALITY_ROOT / "manifest.csv"
 
+# The separate segmentation-annotation batch. A sighting is flagged (never
+# excluded) when any of its photos already appears here, so the reviewer is
+# aware of pipeline overlap. Crops are named ``{photo_identifier}_{side}.jpg``.
+SEGMENTATION_BATCH_ROOT = REPO_ROOT / "outputs" / "ear_segmentation_batch_1"
+
 SIDES: tuple[str, str] = ("left", "right")
 
 # Eligibility rule. A sighting qualifies when it has at least one left-side and

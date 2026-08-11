@@ -17,6 +17,7 @@ from .analysis import CandidateAnalyzer
 from .catalog import PhotoCatalog
 from .config import CODED_ROOT, CSV_PATH, HIGH_QUALITY_ROOT
 from .manifest import ManifestStore
+from .segmentation import SegmentationBatch
 from .state import PickerState
 
 
@@ -36,8 +37,13 @@ def create_app() -> Flask:
     if root_override:
         logger.info(f"Using output root override: {output_root}")
     manifest = ManifestStore(dataset, root=output_root)
+    segmentation = SegmentationBatch()
     state = PickerState(
-        dataset=dataset, catalog=catalog, analyzer=analyzer, manifest=manifest
+        dataset=dataset,
+        catalog=catalog,
+        analyzer=analyzer,
+        manifest=manifest,
+        segmentation=segmentation,
     )
 
     app = Flask(__name__, template_folder="templates", static_folder="static")

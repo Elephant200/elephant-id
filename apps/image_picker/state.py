@@ -26,6 +26,7 @@ from .config import (
     SIDES,
 )
 from .manifest import ManifestStore
+from .segmentation import SegmentationBatch
 
 
 class PickerState:
@@ -38,12 +39,14 @@ class PickerState:
         catalog: PhotoCatalog,
         analyzer: CandidateAnalyzer,
         manifest: ManifestStore,
+        segmentation: SegmentationBatch,
     ) -> None:
         """Start a single background worker scanning for eligible elephants."""
         self.dataset = dataset
         self.catalog = catalog
         self.analyzer = analyzer
         self.manifest = manifest
+        self.segmentation = segmentation
 
         self._lock = threading.RLock()
         self._sighting_cache: dict[str, SightingCandidates] = {}
@@ -193,9 +196,15 @@ class PickerState:
             "sightingDate": candidates.sighting_date,
             "selected": bool(picked_sides),
             "complete": self._is_complete(picked_sides),
+            "segmentationOverlap": self._overlaps_batch(candidates.sighting_id),
             "left": sides["left"],
             "right": sides["right"],
         }
+
+    def _overlaps_batch(self, sighting_id: str) -> bool:
+        """Whether a sighting has any photo in the segmentation batch."""
+        sighting = self.catalog.sighting_by_id.get(sighting_id)
+        return sighting is not None and self.segmentation.overlaps(sighting)
 
     @staticmethod
     def _grandfathered_dates(picks: dict[tuple[str, str], str]) -> set[str]:

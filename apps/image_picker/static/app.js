@@ -287,6 +287,15 @@ function renderSighting(sighting) {
     pill.textContent = "Needs both ears";
     head.appendChild(pill);
   }
+  if (sighting.segmentationOverlap) {
+    const pill = document.createElement("span");
+    pill.className = "status-pill overlap";
+    pill.title =
+      "A photo from this sighting is already in the segmentation annotation " +
+      "batch. Still selectable — this is for awareness only.";
+    pill.textContent = "In segmentation batch";
+    head.appendChild(pill);
+  }
   card.appendChild(head);
 
   card.appendChild(renderSideBlock(sighting, "left"));
