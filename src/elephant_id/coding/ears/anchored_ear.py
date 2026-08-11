@@ -101,6 +101,7 @@ class AnchoredEar:
 
         self._ear_rle_mask = ear_detection.rle_mask
         self._mask_size = tuple(ear_detection.rle_mask["size"])
+        self._confidence = float(ear_detection.confidence)
         self._keypoints = anchor_detection.keypoints
         self._original_anchor_points = tuple(
             sorted(anchor_detection.keypoints, key=lambda point: point[1])
@@ -186,6 +187,11 @@ class AnchoredEar:
         """Whether this is the elephant's left or right ear."""
         self._ensure_geometry()
         return self._side
+
+    @property
+    def confidence(self) -> float:
+        """Detection confidence of the source ear mask."""
+        return self._confidence
 
     @property
     def area(self) -> float:

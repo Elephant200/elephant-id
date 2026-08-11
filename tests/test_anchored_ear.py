@@ -54,6 +54,26 @@ def _anchored_ear(
     return AnchoredEar(ear, anchor)
 
 
+def test_confidence_exposes_source_ear_detection_confidence(rle_from_mask):
+    mask = _rectangle_mask(1000, 1000, 300, 250, 400, 500)
+    ear = Detection(
+        xyxy=(300.0, 250.0, 700.0, 750.0),
+        class_name="ear",
+        class_id=0,
+        confidence=0.83,
+        rle_mask=rle_from_mask(mask),
+    )
+    anchor = Detection(
+        xyxy=(300.0, 250.0, 700.0, 750.0),
+        class_name="anchor",
+        class_id=0,
+        confidence=0.9,
+        keypoints=((300.0, 250.0), (300.0, 749.0)),
+    )
+
+    assert AnchoredEar(ear, anchor).confidence == 0.83
+
+
 def test_quality_scores_ideal_centered_crop_near_one(rle_from_mask):
     ear = _anchored_ear(
         rle_from_mask, height=1000, width=1000, x0=300, y0=250, box_width=400, box_height=500
