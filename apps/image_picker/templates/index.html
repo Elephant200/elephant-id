@@ -1,46 +1,25 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Ear Image Picker</title>
-    <link rel="stylesheet" href="/static/styles.css" />
-  </head>
-  <body>
-    <header class="topbar">
-      <div>
-        <h1>Ear Image Picker</h1>
-        <p id="subtitle"></p>
-      </div>
-      <div class="side-tabs" role="tablist" aria-label="Ear side">
-        <button class="side-tab side-tab-active" type="button" data-side="left">Left</button>
-        <button class="side-tab" type="button" data-side="right">Right</button>
-      </div>
-      <div class="progress" id="progress"></div>
-    </header>
-
-    <main>
-      <section class="identity-bar">
-        <button type="button" class="nav-btn" id="prevBtn">Previous</button>
-        <div class="identity-title">
-          <strong id="identityName"></strong>
-          <span id="identityMeta"></span>
-        </div>
-        <button type="button" class="nav-btn" id="nextBtn">Next</button>
-      </section>
-
-      <section class="done-banner" id="doneBanner" hidden></section>
-      <section class="status-line" id="statusLine"></section>
-      <section class="grid" id="grid"></section>
-    </main>
-
-    <footer>
-      <div id="footerLeft"></div>
-      <button type="button" class="done-btn" id="doneBtn" disabled>Done</button>
-      <div id="footerRight"></div>
-    </footer>
-
-    <div class="toasts" id="toasts" aria-live="polite"></div>
-    <script src="/static/app.js"></script>
-  </body>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Matching Image Picker</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
+</head>
+<body>
+  <header class="app-header">
+    <h1>Matching Image Picker</h1>
+    <div id="scan-status" class="scan-status">Loading&hellip;</div>
+  </header>
+  <main class="layout">
+    <aside class="sidebar">
+      <h2>Eligible elephants</h2>
+      <ul id="elephant-list" class="elephant-list"></ul>
+    </aside>
+    <section id="elephant-panel" class="panel">
+      <p class="placeholder">Select an elephant to review its qualifying sightings.</p>
+    </section>
+  </main>
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
 </html>
