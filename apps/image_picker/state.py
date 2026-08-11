@@ -59,12 +59,19 @@ class PickerState:
 
     # --- eligibility scan ------------------------------------------------
     def _scan(self) -> None:
-        """Scan every elephant once, admitting those with enough qualifiers."""
+        """Scan every elephant once, admitting those with enough qualifiers.
+
+        The manifest is read once up front so prior-session picks can be
+        grandfathered without re-reading the file per elephant.
+        """
+        picks_by_identity = self.manifest.picks_by_identity()
         for identity in self.catalog.elephants():
             with self._lock:
                 self._scan_current = identity
             try:
-                eligible = self._is_eligible(identity)
+                eligible = self._is_eligible(
+                    identity, picks_by_identity.get(identity, {})
+                )
             except Exception as error:
                 logger.exception(f"Eligibility scan failed for {identity}: {error}")
                 eligible = False
@@ -77,16 +84,29 @@ class PickerState:
             self._scan_current = None
         logger.info(f"Eligibility scan complete: {len(self._eligible)} elephants")
 
-    def _is_eligible(self, identity: str) -> bool:
-        """Whether an elephant has enough qualifying sightings (stops early)."""
+    def _is_eligible(
+        self, identity: str, picks: dict[tuple[str, str], str]
+    ) -> bool:
+        """Whether an elephant has enough eligible sightings (stops early).
+
+        A sighting counts toward ``MIN_QUALIFYING_SIGHTINGS`` when it qualifies
+        under the current heuristic or is "grandfathered" -- already represented
+        by a manifest pick from a prior session -- so past review work survives a
+        heuristic change. Grandfathered sightings are checked first to avoid
+        analyzing them.
+        """
         sightings = self.catalog.sightings(identity)
         if len(sightings) < MIN_QUALIFYING_SIGHTINGS:
             return False
-        qualifying = 0
+        grandfathered = self._grandfathered_dates(picks)
+        eligible = 0
         for sighting in sightings:
-            if self._sighting_candidates(sighting).qualifies(QUALITY_THRESHOLD):
-                qualifying += 1
-                if qualifying >= MIN_QUALIFYING_SIGHTINGS:
+            if (
+                sighting.sighting_date.isoformat() in grandfathered
+                or self._sighting_candidates(sighting).qualifies(QUALITY_THRESHOLD)
+            ):
+                eligible += 1
+                if eligible >= MIN_QUALIFYING_SIGHTINGS:
                     return True
         return False
 
@@ -135,10 +155,14 @@ class PickerState:
         if not sightings:
             raise KeyError(identity)
         picks = self.manifest.picks_for_identity(identity)
+        grandfathered = self._grandfathered_dates(picks)
         payloads = []
         for sighting in sightings:
             candidates = self._sighting_candidates(sighting)
-            if candidates.qualifies(QUALITY_THRESHOLD):
+            if (
+                candidates.qualifies(QUALITY_THRESHOLD)
+                or candidates.sighting_date in grandfathered
+            ):
                 payloads.append(self._sighting_payload(candidates, picks))
         return {
             "identity": identity,
@@ -172,6 +196,11 @@ class PickerState:
             "left": sides["left"],
             "right": sides["right"],
         }
+
+    @staticmethod
+    def _grandfathered_dates(picks: dict[tuple[str, str], str]) -> set[str]:
+        """Sighting dates already represented by a manifest pick."""
+        return {sighting_date for _side, sighting_date in picks}
 
     @staticmethod
     def _sides_by_date(picks: dict[tuple[str, str], str]) -> dict[str, set[str]]:
