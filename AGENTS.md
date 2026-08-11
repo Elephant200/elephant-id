@@ -173,3 +173,17 @@ def center_to_xyxy(
 - [Context](docs/context.md) - canonical project vocabulary.
 - [Reference](docs/reference/README.md) - technical notes, matching details, papers, and older experiments.
 - [Future direction](docs/future.md) - forward-looking re-ID research direction beyond the current tear-profile matcher.
+
+## Agent skills
+
+### Issue tracker
+
+Local markdown under `.scratch/<feature-slug>/`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default five canonical roles (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context; canonical glossary is `docs/context.md` (not a root `CONTEXT.md`). See `docs/agents/domain.md`.
