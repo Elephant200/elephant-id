@@ -1,38 +1,42 @@
-# Future Direction
+# Future Research
 
-This document records where the matching work is heading beyond the current tear-profile signal. It is a research direction, not a committed plan. The current product only ships the tear-profile matcher documented in [reference/matching.md](reference/matching.md); everything here is prior art and intended next steps for turning matching into a calibrated multi-signal system.
+This document records directions beyond the pipeline being locked down now. None are current implementation requirements.
 
-## Why Move Beyond Tears
+## Better Preprocessing
 
-Elephants are low-entropy subjects: gray, no coat pattern. Identity lives in ear-margin shape, tears and holes, ear depigmentation and veins, tusks, and scars. The ELPephants benchmark baseline is only 56% top-1 / 80% top-10, and a part-based method reached just 24.3 mAP — a reminder that this is a hard re-ID problem. The consistent lesson is to compute descriptors on standardized **part crops** (especially the ear), not the whole body.
+The first priority is extraction repeatability. Candidate replacements for current inference include:
 
-The tear profile is one such part signal. It stays valuable as an interpretable, offline signal, but it should become one input among several rather than the only way the product reasons about identity. The legacy SEEK code is a lossy quantization of ear structure; if kept at all, it is an interpretable interop layer over richer descriptors, not a matching key.
+- detector plus U-Net ear segmentation;
+- detector plus BiRefNet ear segmentation;
+- alternative ear-landmark networks;
+- improved pose, visibility, or contour-quality estimation.
 
-## Key Prior - ElephantBook
+Each implementation should satisfy the semantic inference interfaces in [architecture.md](architecture.md). Model training and model-specific evaluation belong in dedicated training areas rather than the identity-retrieval evaluator.
 
-ElephantBook (arXiv 2106.15083, deployed at the Mara Elephant Project) is a web human-in-the-loop system that fuses SEEK-style ear codes, CurvRank ear-contour matching, and CNN embeddings. Its central finding is that SEEK and CurvRank are **complementary** — fusing them beats either alone. That validates this project's structured-plus-visual approach. ElephantBook predates modern descriptors, so the opportunity is to improve on it there.
+## Additional Identity Signals
 
-## Candidate Descriptor Stack
+Tear profiles are interpretable but cannot represent every useful identity feature. Later research may investigate:
 
-All of these are offline-capable, which matters for the desktop product:
+- learned ear or part embeddings;
+- depigmentation, vein, scar, or texture descriptors;
+- local feature matching;
+- holes when suitable annotations and segmentation exist;
+- tusk or body evidence when an experiment justifies reintroducing it.
 
-- **Global embedding — MiewID-msv3** (Hugging Face `conservationxlabs/miewid-msv3`, EfficientNetV2, 2152-dim; reported to beat MegaDescriptor by +19.2% top-1). Alternative: MegaDescriptor-L-384 (`BVRA/...`) with the `wildlife-tools` toolkit for ArcFace training and evaluation.
-- **SSL backbone / dense features — DINOv3** for part alignment and depigmentation texture.
-- **Local matching — ALIKED or SuperPoint + LightGlue** (zero-shot, and it produces explainable keypoint overlays for the review UI), or LoFTR.
-- **Contour — CurvRank + LNBNN.** Reference material exists in the repo, but note the field experience below.
+Additional signals should earn inclusion through separate evaluation. The current restructuring does not preserve speculative multi-signal abstractions.
 
-Field note: a direct CurvRank trial on this dataset was rejected - it did not perform well, and it is an engineered rather than learned descriptor. Treat it as prior art to improve past, not a drop-in.
+## Broader Retrieval
 
-## Target Architecture — Calibrated Fusion
+Later work may explore:
 
-The intended shape follows **WildFusion** (arXiv 2408.12934):
+- one-sided queries;
+- open-set rejection for elephants absent from the catalog;
+- approximate retrieval for much larger catalogs;
+- identity- and time-aware fixed test sets;
+- uncertainty estimates across repeated sightings.
 
-1. Calibrate each descriptor's raw similarity into a probability via isotonic regression.
-2. Average the calibrated scores across descriptors.
-3. Shortlist the top ~300 candidates with a cheap global embedding, then run the expensive local/curvature descriptors only on the shortlist (~30x speedup).
+These extensions should preserve the distinction between similarity-based candidate ranking and a final identity decision.
 
-This generalizes ElephantBook's fusion finding and solves the "scores must be hand-tuned to be combinable" problem in a principled way. It is the same lesson the tear matcher already learned at small scale: calibration is what makes independent signals addable (see [reference/matching.md](reference/matching.md)).
+## Application Research
 
-## Open-Set Is Mandatory
-
-New individuals must never be force-matched onto a known elephant. Threshold the fused probability to detect a "new individual" decision. Evaluate with **BAKS/BAUS** (WildlifeReID-10k, arXiv 2406.09211), and use **identity- and time-aware splits** to avoid leakage — the same discipline the current evaluation harness already applies.
+A future application must select an ear pair from all available sighting photos. That may combine automated quality heuristics, human review, and evidence correction. Once selected, the application uses the same AlphaPhant analysis and matching pipeline as research; see [workflow.md](workflow.md).

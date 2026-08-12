@@ -1,7 +1,7 @@
 [project]
 name = "elephant-id"
 version = "0.1.0"
-description = "System for identifying individual elephants from photos using SEEK coding system."
+description = "Automated candidate-ranking algorithm for elephant re-identification."
 readme = "README.md"
 requires-python = ">=3.12,<3.14"
 dependencies = [

@@ -1,189 +1,88 @@
 # Agent Guidelines
 
-## Project Description
+## Project
 
-Elephant ID is a human-in-the-loop system for identifying individual African elephants from grouped sighting photo folders. It uses AI evidence extraction, reviewer correction, tear-profile matching, and human identity decisions to help scale elephant identification while preserving expert oversight. The product direction is an offline-capable desktop workflow: import a sighting folder into an App Library, review and correct the analysis package, compare aligned known-elephant candidates, and log the final identity decision.
+AlphaPhant is a fully automated candidate-ranking algorithm for elephant re-identification. Given one high-quality image of each ear from the same sighting, it localizes and segments the ears, detects anatomical landmarks, extracts alpha-shape-derived tear profiles, computes similarity scores, and ranks the known-elephant catalog.
+
+## Start Here
+
+- Current state or cleanup scope: read [docs/status.md](docs/status.md).
+- Analysis or matching behavior: read [docs/pipeline.md](docs/pipeline.md).
+- Retrieval evaluation, splits, failures, or metrics: read [docs/evaluation.md](docs/evaluation.md).
+- Module placement or caching: read [docs/architecture.md](docs/architecture.md).
+- Domain or technical naming: read [docs/context.md](docs/context.md).
+- Future application work: read [docs/workflow.md](docs/workflow.md).
+- Later research ideas: read [docs/future.md](docs/future.md).
+- Surprising durable decisions: read [docs/adr/](docs/adr/).
 
 ## Commands
 
-Run Python commands from the repo root with `uv`; do not activate `.venv` or call `python` directly.
+Run Python from the repository root with `uv`. Do not activate `.venv` or call `python` directly.
 
 ```bash
 uv run pytest
-uv run pytest tests/test_boxes.py
 uv run ruff check .
-uv run python -m apps.visualization
-uv sync
-uv sync --group visualization # dependencies for the visualization app
-uv sync --group local # dependencies for local AI; should always be installed
+uv sync --all-groups local
 ```
 
-After Python code changes, run `uv run ruff check .` and fix reported issues. `legacy/` is excluded from Ruff; avoid incidental cleanup there.
+After Python changes, run `uv run ruff check .` and relevant tests. `legacy` is excluded from Ruff; avoid incidental cleanup there.
 
-## Stack
+## Scope and Safety
 
-- Python package: Python `>=3.12,<3.14`, `uv`, `pytest`, `ruff`, `numpy`, `opencv-python`, `pandas`, `pycocotools`.
-- Local AI extras: `inference-sdk`, `roboflow`, `torch`, `torchvision`, `ultralytics`.
-- Visualization app: Flask, development-only, local dataset reviewer.
+- `dataset` is private user data. Preserve it unless a request explicitly names a mutation. Never commit dataset contents, credentials, environment files, API keys, or model secrets.
+- Preserve existing user changes. Check `git status --short` before editing and never revert unrelated work.
+- Do not modernize `legacy` or `.curvrank_ref` unless explicitly asked.
+- Do not commit unless explicitly asked.
 
-## Project Structure
+## Active Architecture
 
-- `src/elephant_id/`: Python package.
-- `tests/`: Python unit tests.
-- `apps/visualization/`: development-only Flask reviewer for local `dataset/`.
-- `apps/web/`: a next.js landing page; do not touch.
-- `scripts/`: local exploration and model/demo scripts.
-- `legacy/` and `.curvrank_ref/`: historical/reference material; do not modernize unless asked.
-- `docs/`: current status, product workflow, architecture, glossary, and technical reference notes.
+- **analysis** owns sighting analysis, ear-contour geometry, alpha shapes, and tear-profile extraction.
+- **inference** owns swappable implementations of ear localization, ear segmentation, and ear landmark detection.
+- **matching** owns tear-profile similarity and catalog ranking.
+- **eval** owns implementation-independent identity-retrieval evaluation.
+- **image** owns BGR image and geometry utilities.
 
-## Documentation Context
+Keep interfaces narrow and justified by current variation. Research supplies a sighting ear pair directly. Future application ear selection remains upstream of the shared AlphaPhant pipeline.
 
-- Read `docs/status.md` first to understand what is current, what is legacy, and what is cleanup debt.
-- Read `docs/workflow.md` for the product flow and `docs/architecture.md` for broad technical constraints.
-- Use `docs/context.md` as the canonical glossary. Prefer its terms: App Library, analysis package, known-elephant catalog, reviewer, evidence review, tear profile, and identity decision.
-- SEEK coding is no longer the product direction. Treat `SeekCode`, `SeekCoder`, and SEEK metadata as legacy compatibility or cleanup debt unless the user explicitly asks to work on them.
-- V1 optimizes for offline review of one already-grouped one-elephant sighting folder. Matching requires one approved left ear and one approved right ear; one-sided matching is a later capability.
+## Python Style
 
-## Boundaries
+- Type every function and method signature.
+- Give every package, module, class, function, and method a concise accurate docstring.
+- Add `Args`, `Returns`, `Yields`, or `Raises` sections only when they clarify a non-obvious interface. Document validation errors that are part of the interface.
+- Prefer clear names and structure over comments. Comment only non-trivial reasoning.
+- Use `loguru` for logging. Library code never configures logging; entry points call `elephant_id.log.configure_logging` once.
+- Log identifiers, counts, durations, and cache hits at appropriate levels. Never log credentials or raw image and mask buffers.
+- Avoid over-engineering by making unnecessary abstractions or defensive guards that you don't need. Never hesitate to ask when in doubt.
 
-- Never commit secrets, `.env` contents, API keys, model credentials, or private dataset contents.
-- `dataset/` is user data. Do not delete, move, overwrite, or bulk-clean anything inside it unless explicitly instructed.
-- Undo behavior must only remove artifacts created in the current session.
-- Ignore `apps/web/` unless explicitly asked to work on it.
-- Do not touch generated/vendor/runtime directories such as `.venv/`, `.next/`, `node_modules/`, `__pycache__/`, `.ruff_cache/`, or `.pytest_cache/` except for explicit maintenance.
-- Never revert or overwrite existing user changes unless explicitly asked.
+## Images and Geometry
 
-## Code Style
+- `BgrImage` is the canonical in-memory image: HWC, BGR, `uint8`, OpenCV-native.
+- Decode and encode with OpenCV at real boundaries. Avoid PIL/RGB conversions inside the package without a boundary reason.
+- Float boxes use half-open `xyxy` coordinates. Convert to integer pixels only at raster boundaries through the image geometry helpers.
+- OpenCV drawing endpoints are inclusive; draw a half-open box through `x2 - 1` and `y2 - 1`.
+- Public color and background arguments are human-facing RGB; convert to BGR at the write boundary.
+- COCO RLE uses `size=[height, width]` and string or byte counts. Decoded masks are two-dimensional boolean arrays.
 
-- Type annotations are required on function and method signatures.
-- Every module, package, function, and class has a docstring.
-- Keep docstrings concise and accurate. Use `Args:`, `Returns:`/`Yields:`, and `Raises:` only when they add non-obvious information.
-- Use `Raises:` when validation is part of the contract.
-- Prefer clear names and structure over comments; add comments only for non-trivial logic.
+## Caching
 
-Good docstring styles:
-
-```python
-def clip_xyxy(
-    x1: float,
-    y1: float,
-    x2: float,
-    y2: float,
-    image_width: int,
-    image_height: int,
-) -> tuple[int, int, int, int]:
-    """Clip a half-open xyxy box to image bounds.
-
-    Args:
-        x1: Left edge, inclusive.
-        y1: Top edge, inclusive.
-        x2: Right edge, exclusive.
-        y2: Bottom edge, exclusive.
-        image_width: Image width in pixels.
-        image_height: Image height in pixels.
-
-    Returns:
-        Integer coordinates expanded outward to whole pixels.
-
-    Raises:
-        ValueError: If the image or box is invalid, or the box misses the image.
-    """
-```
-
-```python
-def center_to_xyxy(
-    x: float,
-    y: float,
-    width: float,
-    height: float,
-) -> tuple[float, float, float, float]:
-    """Convert center-format coordinates to half-open xyxy coordinates."""
-```
-
-## Logging
-
-- Use `loguru`: `from loguru import logger`, then `logger.info(...)`, `logger.warning(...)`, etc. Put detail in the message with an f-string, e.g. `logger.info(f"Ran SAM3 {preset} for {photo.identifier}: {n} detections")`.
-- Never configure logging in library code. Entry points call `configure_logging()` from `elephant_id.log` once; it sets the loguru level from `LOG_LEVEL` or the parameter (default `INFO`). (The dev Flask app additionally configures stdlib `logging` for its own logs.)
-- Levels: `debug` for cache hits/misses and fine detail; `info` for milestones (a model run finishing, evidence being approved, matching completing, or an identity decision being logged); `warning` for recoverable or needs-review cases (log a `warning` before skipping on a known failure path); `error`/`exception` for flat-out errors.
-- Never log secrets (API keys) or raw image/mask buffers — log identifiers, counts, and durations.
-
-## Images And Geometry
-
-- The canonical in-memory image type is `BgrImage` from `elephant_id.image`.
-- `BgrImage` means HWC, BGR, `uint8`, OpenCV-native.
-- Do not introduce PIL/RGB conversions inside the package unless there is a clear boundary reason.
-- Decode and encode with `cv2.imread`, `cv2.imdecode`, or `cv2.imencode` at call sites; do not add thin codec wrapper modules.
-- `elephant_id.image` deliberately re-exports only `BgrImage`; import helpers from `elephant_id.image.boxes`, `elephant_id.image.masks`, or `elephant_id.image.transforms`.
-- Geometry is float `xyxy`, half-open: `x2`/`y2` are exclusive.
-- Convert to integer pixels only at raster boundaries, preferably through `clip_xyxy()` or `mask_bounds()`.
-- OpenCV drawing APIs use inclusive endpoints; draw half-open boxes with `x2 - 1`, `y2 - 1`.
-- Public color/background arguments are human-facing RGB even though buffers are BGR; flip to BGR only at the write boundary.
-- COCO RLE masks use `size=[height, width]` and `counts: str | bytes`; decoded masks are 2D boolean arrays.
-
-## Domain And Dataset
-
-- Current `Photo`, `Sighting`, and `SeekCode` domain objects describe the labeled historical dataset path, not the target product identity model.
-- In the current dataset path, `Photo.image_path` must be relative, non-escaping, and match the identifier stem.
-- In the current dataset path, `Sighting.sighting_id` is `{elephant_name}_{iso_date}`, and all photos must belong to that sighting.
-- Do not extend filename-derived identity conventions into new product storage. Product photos should use generated IDs and store metadata in the App Library.
-- Preserve existing `SeekCode` behavior when maintaining legacy parser/tests, but do not add new product features centered on SEEK codes.
-- `Dataset` lazy-loads metadata CSVs. Iteration order matters and must preserve CSV row order.
-- `Dataset.read_image()` returns fresh image copies and uses an internal LRU cache.
-
-## Cache And AI Services
-
-- Cache files are JSON envelopes under `.cache/{namespace}/{key}.json`.
-- Cache namespaces and keys must not escape their roots.
-- Keep cache writes atomic using temp-file replacement.
-- Prefer service wrappers over direct runner use. Services handle caching, key construction, coordinate normalization, and serialization.
-- Local model services may require optional local dependencies, model weights, dataset files, `.env`, and `ROBOFLOW_API_KEY`.
-- Avoid broad imports from `elephant_id.ai` in core code when optional local model dependencies may be missing.
-
-## Visualization App
-
-- `apps/visualization` is local development tooling, not production UI.
-- Flask route JSON field names are an API contract with `apps/visualization/static/app.js`.
-- The visualization app can create, rename, delete, and mirror files under `dataset/samples`; priority state is encoded by the `** ` filename prefix.
+- One generic cache store serves immutable named producers and final per-ear tear profiles.
+- Cache expensive computation, not orchestration.
+- Use content hash, not path or photo identity, for source-content identity. Human-readable source information is cache metadata.
+- A producer name is immutable: any output-changing model, weight, prompt, preprocessing, configuration, or algorithm change gets a new name.
+- Keep writes atomic and validate producer payloads on load.
+- `ELEPHANT_ID_CACHE_MODE` selects `read_write`, `read_only`, or `disabled` globally.
+- Preserve SAM3 body and multi-feature outputs, current anchor outputs, and heuristic records during migration. Age and gender records may be removed.
 
 ## Testing
 
-- Test all code within the `src/elephant_id` package; do not add tests for code outside the package or in tooling/scripts.
-- Prefer small synthetic arrays/images and fixtures over real dataset dependencies.
-- Use existing fixtures such as `rle_from_mask`, `make_photo`, and `make_sighting`.
-- Use fakes/recording stubs for model clients and caches; do not initialize real model clients in unit tests.
-- Add or update focused tests when changing validation, geometry, cache keys, serialization, or dataset ordering.
+- Test code under `src/elephant_id`; do not add unit tests for scripts or apps.
+- Use small synthetic arrays and images, fake inference implementations, and recording cache/model clients.
+- Unit tests never initialize real models, require network access, or depend on private photos.
+- Characterize current numerical behavior before moving tear-profile or matching code.
+- Add focused tests when changing validation, geometry, cache keys, serialization, dataset ordering, catalog aggregation, or evaluation splits.
 
-## Subagents
+## Git
 
-- For exploration and search subagents, pass a lighter, cheaper model rather than inheriting the parent model. Exploration is read-and-summarize work; reserve the parent model for synthesis, design, and integration. Delegating well-scoped implementation to a lighter model is also encouraged to conserve the parent model's budget.
-- ALWAYS drive Playwright browser verification from a subagent, not the main session.
-
-## Git Workflow
-
-- Check `git status --short` before editing.
-- Keep changes scoped to the request.
-- Do not commit unless explicitly asked.
-- Report noteworthy out-of-scope issues at the end of your response with file paths.
-
-## Documentation
-
-- [Current status](docs/status.md) - what exists now, what is legacy, and what is still target direction.
-- [Workflow](docs/workflow.md) - the intended product flow from import to identity decision.
-- [Architecture](docs/architecture.md) - broad system boundaries and non-negotiable architecture-level constraints for the final product.
-- [Context](docs/context.md) - canonical project vocabulary.
-- [Reference](docs/reference/README.md) - technical notes, matching details, papers, and older experiments.
-- [Future direction](docs/future.md) - forward-looking re-ID research direction beyond the current tear-profile matcher.
-
-## Agent skills
-
-### Issue tracker
-
-Local markdown under `.scratch/<feature-slug>/`. See `docs/agents/issue-tracker.md`.
-
-### Triage labels
-
-Default five canonical roles (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
-
-### Domain docs
-
-Single-context; canonical glossary is `docs/context.md` (not a root `CONTEXT.md`). See `docs/agents/domain.md`.
+- Keep changes scoped to the request and report noteworthy out-of-scope issues.
+- Commit messages use imperative style without conventional prefixes.
+- Browser or Playwright verification always runs in a subagent and only when necessary.

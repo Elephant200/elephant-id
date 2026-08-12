@@ -1,103 +1,118 @@
-# Product Workflow
+# Future Application Workflow
 
-Elephant ID turns one grouped sighting folder into a reviewed identity decision. The reviewer must be able to inspect and correct the evidence before matching runs.
+This document describes how a future application may surround AlphaPhant. It is not the current implementation target. The current research algorithm is defined in [pipeline.md](pipeline.md).
+
+The future application is an evidence-review and identity-decision tool, not a SEEK coding tool.
+
+## Shared Seam
+
+Research and application differ only before the sighting ear pair exists:
+
+```
+research dataset
+  -> preselected high-quality sighting ear pair
+  -> AlphaPhant
+
+future application
+  -> all photos from one sighting
+  -> ear selection
+  -> sighting ear pair
+  -> AlphaPhant
+```
+
+Given the ear pair, AlphaPhant is fully automated: sighting analysis, tear-profile matching, and candidate ranking. Application-specific heuristics, reviewer correction, and photo-sufficiency decisions remain upstream.
 
 ## Core User Journey
 
-1. Import one grouped sighting folder into the App Library.
-2. Analyze the source photos and build an analysis package.
-3. Review the analysis package.
-4. Approve one left-ear and one right-ear evidence set.
-5. Generate tear profiles from the approved evidence.
-6. Match the sighting against the known-elephant catalog.
-7. Compare the top aligned candidates.
-8. Log an identity decision.
+1. Import one grouped one-elephant sighting into the App Library.
+2. Run ear localization and segmentation across its photos to produce ear candidates.
+3. Review the analysis package and correct evidence as needed.
+4. Approve a sighting ear pair: one usable left-ear reference photo and one usable right-ear reference photo.
+5. Run AlphaPhant on the approved ear pair.
+6. Compare ranked matching candidates and inspect the independently selected left- and right-ear catalog evidence behind each similarity score.
+7. Record an identity decision.
 
-The product is not a SEEK coding tool. It is an evidence-review and identity-decision tool.
-
-## App Library
-
-The App Library is an app-controlled workspace folder. It may live on an external drive or on the user's regular hard drive.
-
-The app controls import into the App Library. For v1, the reviewer imports one folder that already represents one sighting of one elephant. The app copies source photos into the App Library by default, stores metadata in SQLite, and assigns generated product identifiers. Filenames must not encode elephant identity, because the identity may be unknown at import time.
-
-V2 may add batch import of multiple sighting folders or raw camera-dump grouping. V1 does not require those workflows.
+Candidate ranking and identity decision are distinct. AlphaPhant ranks known elephants; it does not decide whether the sighting belongs to an existing individual, should create a new known elephant, or remains unresolved.
 
 ## Analysis Package
 
-The analysis package is the intermediate review artifact for one sighting. It contains the source-photo references, segmentation results, candidate ear crops, selected ear evidence, generated tear profiles, and any reviewer corrections.
+The analysis package is the intermediate review artifact for one sighting. It contains sighting photos, automated evidence, ear candidates, the selected sighting ear pair once approved, tear profiles, and correction state.
 
-The reviewer first asks: did the system extract the right evidence from this sighting?
+During ear selection, the reviewer asks: did the system extract usable evidence from this sighting?
 
-For v1, the analysis package must support:
+The analysis package should support:
 
-- viewing source photos,
-- viewing segmentation overlays,
-- viewing ranked left-ear and right-ear crop candidates,
-- selecting one best left ear and one best right ear,
-- editing the crop and ear polygon or segmentation region,
-- viewing the resulting tear profile next to the crop and overlay,
-- saving whether the evidence was manually corrected.
+- viewing source photos;
+- viewing segmentation overlays;
+- viewing ranked left-ear and right-ear ear candidates;
+- selecting one best ear per side;
+- editing the crop and ear segmentation region;
+- previewing the resulting tear profile beside the crop and overlay;
+- recording whether evidence was manually corrected.
 
-The app should show a ranked candidate grid for each side, not an unfiltered wall of images. Show the top three ear candidates per side by default.
+Preview tear profiles during review help the reviewer judge ear selection. After approval, AlphaPhant produces the final tear profiles used for candidate ranking.
 
 ## Evidence Review Gate
 
-Matching must not run until evidence review is complete.
+Candidate ranking must not run until ear selection is complete.
 
-For v1, the reviewer must approve both:
+For the initial application scope, the reviewer must approve both sides:
 
-- one usable left-ear crop and segmentation,
-- one usable right-ear crop and segmentation.
+- one usable left-ear reference photo and segmentation, and
+- one usable right-ear reference photo and segmentation.
 
-If either side cannot be approved, the sighting is saved as unresolved. One-sided matching is a v2 capability and should arrive with stronger learned embeddings or other compensating signals.
+If either side cannot be approved, the sighting is saved as an unresolved sighting. One-sided matching is future work; see [future.md](future.md).
 
-After the reviewer changes a selected ear, crop, or segmentation, the app regenerates the tear profile from the corrected evidence. Candidate matching starts only after the approved profiles exist.
+After the reviewer changes a selected ear, crop, or segmentation, the application regenerates preview tear profiles from the corrected evidence. AlphaPhant runs only after the sighting ear pair is approved.
 
 ## Candidate Comparison
 
-After evidence review, the app matches the sighting against the known-elephant catalog.
+After AlphaPhant returns candidate ranking, the comparison view should show matching candidates with the query left and right ears beside each candidate's strongest supporting left-ear and right-ear catalog evidence. Aligned tear profiles should be visible so the reviewer can judge whether the similarity is meaningful.
 
-The default comparison view should show the top five known-elephant candidates, with an option to show more. Each candidate should show the query left and right ears beside the matched catalog ears, with aligned tear profiles so the reviewer can judge whether the similarity is meaningful.
+The winning left and right catalog evidence for a candidate may come from different historical sightings; the view should preserve that per-side provenance.
 
 The reviewer asks: do these aligned signals support this identity?
 
-The current matching signal is the tear-profile matcher. Future matching may combine tear profiles with learned embeddings, visual descriptors, scars, body features, reviewer history, or other evidence.
+Tear-profile matching is the current ranking signal. Additional identity signals are research directions in [future.md](future.md).
 
 ## Identity Decision
 
-The reviewer owns the final decision. The system ranks and explains candidates; it does not silently identify the elephant.
+The reviewer owns the identity decision. The system ranks and explains candidates; it does not silently identify the elephant.
 
 The decision states are:
 
-- existing known elephant,
-- new known elephant,
-- unresolved.
+- link the sighting to an existing known elephant,
+- create a new known elephant, or
+- leave the sighting unresolved.
 
-Unresolved means the intermediate analysis has been saved, but the sighting is not filed into the known-elephant catalog.
+An unresolved sighting keeps its intermediate analysis without filing it into the known-elephant catalog.
 
-The decision log should include:
+## Initial Application Scope
 
-- decision state,
-- selected known elephant when applicable,
-- reviewer and timestamp,
-- selected left and right evidence references,
-- whether each evidence set was corrected,
-- candidate scores shown at decision time,
-- optional reviewer note.
+The first application version is intentionally narrow:
 
-Operational telemetry should exist so analysis quality, correction frequency, and workflow problems can be understood later. The product documentation does not require a detailed telemetry schema yet.
-
-## V1 Boundaries
-
-V1 is intentionally narrow:
-
-- input is one already-grouped one-elephant sighting folder,
-- normal use works offline after setup,
-- original source locations are not mutated,
-- user-facing review must be obvious and responsive,
-- analysis can run in the background and may be slower than review,
-- both ears are required for matching,
+- input is one already-grouped one-elephant sighting;
+- normal use works offline after setup;
+- original source locations are not mutated;
+- review must be obvious and responsive;
+- preprocessing for ear selection may run in the background and may be slower than review;
+- both ears are required before candidate ranking;
 - the reviewer makes every identity decision.
 
 The design should not prevent later batch import, raw camera-dump grouping, one-sided matching, learned embedding models, remote collaboration, or field-time sufficiency feedback.
+
+## Deferred Application Concerns
+
+The research restructuring does not choose:
+
+- storage schema or App Library layout;
+- desktop shell or UI framework;
+- background-job mechanism;
+- model packaging or update delivery;
+- detailed review-interface layout;
+- identity-decision log schema or operational telemetry;
+- catalog update workflow;
+- backup, synchronization, or collaboration;
+- one-sided matching behavior.
+
+These choices should be made from application requirements when that work resumes. They must enter the shared pipeline through ear selection rather than forking AlphaPhant.

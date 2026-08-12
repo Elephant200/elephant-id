@@ -1,52 +1,67 @@
 # Current Status
 
-This file describes where the project is today. The workflow and architecture docs describe the intended product direction.
+AlphaPhant is being reorganized around one research pipeline: automated preprocessing of a sighting ear pair, alpha-shape-derived tear-profile extraction, tear-profile matching, and known-elephant candidate ranking.
 
-## Product Direction
+Read [pipeline.md](pipeline.md) for target behavior and [evaluation.md](evaluation.md) for the benchmark protocol.
 
-Elephant ID is moving toward a folder-to-identity-decision product:
+## Working Numerical Core
 
-1. Import one grouped sighting folder into an app-controlled App Library.
-2. Generate an analysis package from source photos.
-3. Let the reviewer select and correct one left-ear and one right-ear evidence set.
-4. Generate tear profiles from the approved evidence.
-5. Rank known-elephant candidates.
-6. Let the reviewer compare aligned matches and log an identity decision.
+The repository already contains:
 
-SEEK coding is no longer the product target. New product work should not treat a SEEK code as the main output, review artifact, matching key, or storage model.
+- SAM3 model access and cached segmentation results;
+- a YOLO keypoint model for ear landmark detection;
+- ear-mask contour preparation and side inference;
+- alpha-shape-derived tear-profile extraction;
+- directional tear-profile alignment and similarity scoring;
+- experimental catalog-ranking logic.
 
-## What Exists
+The numerical tear-profile and pairwise-matching behavior should survive restructuring. Characterization tests establish that boundary before code moves.
 
-The repository currently contains several eras of implementation:
+## Structural Debt
 
-- Domain models for labeled historical dataset photos and sightings.
-- Legacy SEEK parsing and coding code used by older tests, metadata, and visualization paths.
-- AI service wrappers for model outputs and cached detections.
-- Ear segmentation, anchored-ear preparation, tear-profile extraction, and tear-profile matching.
-- A local Flask visualization app for reviewing local dataset material.
-- Early API/store/matching code for sighting folders, tear profiles, candidate ranking, and review decisions.
+The active implementation is obscured by older directions:
 
-The current tear-profile matcher is the primary working identity signal. Future versions may add learned embedding models and other visual signals.
+- SEEK parsing, coding, and fixed-field domain objects;
+- age and gender inference and analysis;
+- body, trunk, tail, and tusk orchestration;
+- a general `PhotoAnalyzer` joining unrelated features;
+- identity-bearing dataset objects used directly by model wrappers;
+- normalization and calibration layers outside the selected matcher;
+- an evaluator that manufactures left/right pairs;
+- API and application prototypes.
 
-## Legacy SEEK Paths
+New research code should not depend on these paths.
 
-`SeekCode`, `SeekCoder`, SEEK metadata, and older docs/tests may still exist while the codebase transitions. Treat those paths as compatibility or cleanup debt, not as product direction.
+## Preservation Boundaries
 
-Do not add new product concepts that require:
+- Historical dataset files remain untouched, including SEEK columns and source lists.
+- Existing SAM3 body and multi-feature results are migrated and retained under immutable producer names.
+- Existing anchor-model results are migrated.
+- Heuristic caches and scripts remain untouched, even though the scripts may temporarily break when `legacy` imports disappear.
+- Every file under `apps/` remains byte-for-byte untouched and unsupported.
+- The API prototype is preserved on the `desktop-prototype` branch and removed from the active branch.
+- Unrelated user work and private `dataset` contents stay outside cleanup.
 
-- identity encoded in filenames,
-- final SEEK code generation,
-- manual SEEK review,
-- matching by SEEK string,
-- storage centered on fixed-width SEEK fields.
+## Intended Top-Level Shape
 
-## Immediate Documentation Shape
+Responsibilities will move toward:
 
-The core documentation is intentionally small:
+```
+analysis/    sighting analysis and tear-profile extraction
+inference/   swappable model implementations
+matching/    similarity scoring and catalog ranking
+eval/        implementation-independent identity-retrieval evaluation
+image/       BGR image and geometry utilities
+```
 
-- `docs/status.md` for current reality.
-- `docs/workflow.md` for the target product workflow.
-- `docs/architecture.md` for broad constraints and boundaries.
-- `docs/context.md` for glossary language.
+Exact files, class names, and data representations remain provisional. Prefer the smallest interface justified by current callers.
 
-Technical details and historical notes live under `docs/reference/`.
+## Documentation Map
+
+- Current pipeline or matching change: read [pipeline.md](pipeline.md).
+- Retrieval benchmark, split, failure, or metric change: read [evaluation.md](evaluation.md).
+- Module placement, inference seam, or cache change: read [architecture.md](architecture.md).
+- Domain or technical naming: read [context.md](context.md).
+- Future application work: read [workflow.md](workflow.md).
+- Research beyond the locked pipeline: read [future.md](future.md).
+- Surprising durable decisions: read [adr/](adr/).
