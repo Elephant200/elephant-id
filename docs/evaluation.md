@@ -4,14 +4,14 @@ This document defines the implementation-independent benchmark for complete Alph
 
 ## Evaluation Seam
 
-The evaluator owns ground truth. A system under evaluation receives:
+The evaluator owns ground truth. A system under evaluation receives, for each query and catalog ear:
 
-- opaque photo keys for each query ear pair;
-- opaque candidate keys grouping the catalog evidence it may use.
+- the photo's content SHA-256 as its opaque key, together with the photo's image bytes;
+- an opaque candidate key grouping the catalog evidence for one known elephant.
 
-It returns every candidate key exactly once with a finite similarity score, ordered from highest to lowest. The evaluator does not expose elephant names, original file paths, dates, masks, anchors, ear contours, tear profiles, model settings, or pipeline classes.
+The content hash is a legitimate opaque handle: it is already computed for caching, it reveals nothing about identity (two photos of one elephant have unrelated hashes), and it doubles as the ranker's cache key. So the photo key and the cache key are the same object, and no separate key-resolver or image-loader is introduced — the ranker receives the bytes it needs and the content-hash key, and nothing that identifies the elephant. The candidate key is a fresh per-run token standing in for one known elephant, so a ranker can group that elephant's catalog ears without learning which elephant it is.
 
-An evaluation adapter resolves opaque photo keys to images internally and composes the concrete analysis and matching implementation. The exact adapter and internal data representation remain implementation choices.
+The system returns every candidate key exactly once with a finite similarity score, ordered from highest to lowest. The evaluator never exposes elephant names, original file paths, dates, or the ground-truth label, nor masks, anchors, ear contours, tear profiles, model settings, or pipeline classes.
 
 ## Evaluation Suite
 
@@ -19,7 +19,7 @@ The evaluation suite is a directory of real sighting ear pairs authored by the i
 
 Because the suite lives under the gitignored dataset it is never committed, so no private identity data enters version control and no separate manifest or key-resolver file is needed. Exact-benchmark reproduction reads this directory directly, consistent with [adr/0007-pin-evaluation-by-git-commit.md](adr/0007-pin-evaluation-by-git-commit.md); a reader without the private data gets the code, the method, and the reported metrics. Image hashes stay authoritative in the dataset hash index.
 
-For leakage prevention the evaluator assigns opaque photo and candidate keys in memory before calling a system and resolves them to images internally. These keys are a per-run device, not a stored artifact. Suite validation requires exactly one left and one right file per sighting directory and rejects a source image reused across pairs; cross-sighting pairs cannot occur by construction.
+For leakage prevention the evaluator hands a system only the photo's content hash (from the dataset hash index) and its image bytes, plus a fresh per-run candidate token for each known elephant. The content hash is stable and doubles as the cache key; the candidate token is a per-run device, not a stored artifact. Names, paths, dates, and the ground-truth label stay with the evaluator. Suite validation requires exactly one left and one right file per sighting directory and rejects a source image reused across pairs; cross-sighting pairs cannot occur by construction.
 
 ## Leave-One-Sighting-Out Protocol
 
