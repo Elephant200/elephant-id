@@ -32,7 +32,7 @@ After Python changes, run `uv run ruff check .` and relevant tests. `legacy` is 
 - `dataset` is private user data. Preserve it unless a request explicitly names a mutation. Never commit dataset contents, credentials, environment files, API keys, or model secrets.
 - Preserve existing user changes. Check `git status --short` before editing and never revert unrelated work.
 - Do not modernize `legacy` or `.curvrank_ref` unless explicitly asked.
-- Do not commit unless explicitly asked.
+- Do not commit unless explicitly asked. You must receive explicit confirmation before writing a commit.
 
 ## Active Architecture
 
