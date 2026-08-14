@@ -135,6 +135,6 @@ Keep the palette centralized as CSS variables in `apps/desktop/src/styles.css` s
 
 ### Layout and Density
 
-Prefer more, simpler pages over dense single pages. The workflow is split into separate step pages — Ingest, Photos, Match, Review — rather than stacked panels on one screen. When adding a feature, add a new page or step rather than growing an existing page.
+Prefer more, simpler pages over dense single pages. The workflow is split into separate step pages - Ingest, Photos, Match, Review - rather than stacked panels on one screen. When adding a feature, add a new page or step rather than growing an existing page.
 
 Images, graphics, and text should be scaled generously for a laptop screen; the first versions ran too small. Large visual changes are acceptable as long as they respect the API contract with the sidecar: route JSON field names are a contract with the renderer, the same way `apps/visualization` field names are.

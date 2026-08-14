@@ -4,15 +4,15 @@ This document defines the implementation-independent benchmark for complete elep
 
 ## Evaluation Seam
 
-The evaluator owns ground truth and the research Dataset. It hands a ranker only neutral SightingEarPair objects, an image-only PhotoStore, and fresh opaque candidate keys for grouping — opaque IDs and image bytes, nothing more. The known-elephant label stays with the Dataset, which the ranker never receives; paths serve solely as PhotoStore locators, never read as strings.
+The evaluator owns ground truth and the research Dataset. It hands a ranker only neutral SightingEarPair objects, an image-only PhotoStore, and fresh opaque candidate keys for grouping - opaque IDs and image bytes, nothing more. The known-elephant label stays with the Dataset, which the ranker never receives; paths serve solely as PhotoStore locators, never read as strings.
 
 The ranker uses `PhotoStore.read(photo)` to obtain original encoded bytes and returns every candidate key exactly once with a finite similarity score in descending order. The PhotoStore exposes no identity resolution.
 
 ## Retrieval Benchmark
 
-The private retrieval benchmark set at `dataset/elephants-alive/benchmark/` contains real same-sighting ear-pair selections. Each selection references its source Photos by opaque `photo_id`. Dataset resolves each ID to its canonical Photo, original bytes, sighting, and private known-elephant label.
+The private retrieval benchmark set at `dataset/elephants-alive/benchmark/` contains a `manifest.csv` and the sighting folders. The manifest lists real same-sighting ear pairs - each referencing its two source Photos by `photo_id` - with their true known-elephant identities, and is what the evaluator reads; the folders hold the declared left and right photo references. Dataset resolves each `photo_id` to its canonical Photo and original bytes.
 
-Evaluation code never derives names, dates, labels, or grouping from paths or filenames. The benchmark set and Dataset metadata supply those facts directly. The private benchmark set is gitignored, so no identity data enters version control.
+Evaluation code never derives names, dates, labels, or grouping from paths or filenames. The manifest and Dataset metadata supply those facts directly. The private benchmark set is gitignored, so no identity data enters version control.
 
 Benchmark-set validation requires one declared left Photo and one declared right Photo per pair. Both carry the pair's sighting ID; the same Photo may serve both sides.
 
@@ -34,8 +34,7 @@ A query whose elephant has no remaining catalog sighting is a protocol exclusion
 
 Every ranker uses the same protocol-eligible query denominator.
 
-- A query extraction failure counts as a retrieval miss, reported by side and reason. Its sentinel rank is catalog size plus one and its reciprocal-rank contribution is zero.
-- The benchmark set guarantees valid two-sided catalog evidence, so a catalog-side extraction failure is unexpected: it fails the run rather than scoring a candidate. Missing photo bytes, weights, or required infrastructure, corrupt required cache state, and invalid ranker results also fail the run.
+The benchmark set is curated so every selected image yields a valid two-sided extraction. Any extraction failure - query or catalog side - is therefore unexpected: it fails the run with a clear error naming the curation expectation, rather than being scored or counted. A failure signals a selection error, not a retrieval outcome. Missing photo bytes, weights, or required infrastructure, corrupt required cache state, and invalid ranker results also fail the run.
 
 ## Ranking and Metrics
 
@@ -48,8 +47,7 @@ Initial metrics are:
 - top-1, top-3, top-5, top-10, and top-15 retrieval rate;
 - mean reciprocal rank;
 - median rank;
-- protocol-eligible query count;
-- query extraction-failure rate and reasons.
+- protocol-eligible query count.
 
 Uncertainty is estimated by seeded bootstrap resampling over eligible queries. System comparisons use the same resamples for paired intervals. Extraction parameters are set qualitatively from the alpha shapes; matching parameters are tuned on a separate parameter-tuning set. Neither uses the benchmark, so its numbers carry no tuning leakage.
 
