@@ -1,5 +1,7 @@
 # Tear Profile Reference
 
+> **Historical.** Design history behind the tear-profile representation, kept for technical detail. Current pipeline behavior lives in [../pipeline.md](../pipeline.md).
+
 This document preserves the substantive design history behind the current tear-profile representation. It merges the original tear embedding note and the later angular-coordinate update.
 
 ## Goal

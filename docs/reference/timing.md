@@ -1,5 +1,7 @@
 # Timing Notes
 
+> **Historical.** Point-in-time performance numbers, kept for reference only; not maintained against the current code.
+
 These timings are a point-in-time reference for local analysis performance; to be referenced when implementing performance optimizations.
 
 ## `analyze()` Per Phase
