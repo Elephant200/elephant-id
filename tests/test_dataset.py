@@ -1,229 +1,123 @@
+"""Tests for the research Dataset and image-only PhotoStore seam."""
+
+import csv
 from datetime import date
 from pathlib import Path
+from uuid import UUID
 
-import cv2
-import numpy as np
-import pandas as pd
 import pytest
 
-from elephant_id.dataset import Dataset
-from elephant_id.domain import Photo, SeekCode, Sighting
+from elephant_id.dataset import Dataset, PhotoStore
+from elephant_id.domain import Photo
 
-# Real subset of dataset/elephants-alive/images.csv: two elephants, three
-# sightings. Order matters for iter_sightings (preserves CSV row order).
-# Tuple: (identifier, name, date_str, color, seek_code). image_path is derived.
-AARON_CODE = "B80T11E____-3_3_X_0S_01"
-DEVIN_CODE = "B__T11E____-4_3_X00S___"
-ROWS = [
-    ("Aaron_2008-11-24_01", "Aaron", "2008-11-24", (10, 20, 30), AARON_CODE),
-    ("Aaron_2008-11-24_02", "Aaron", "2008-11-24", (40, 50, 60), AARON_CODE),
-    ("Aaron_2008-11-24_03", "Aaron", "2008-11-24", (70, 80, 90), AARON_CODE),
-    ("Devin_2015-11-05_01", "Devin", "2015-11-05", (100, 110, 120), DEVIN_CODE),
-    ("Devin_2015-11-05_02", "Devin", "2015-11-05", (130, 140, 150), DEVIN_CODE),
-    ("Devin_2017-06-27_01", "Devin", "2017-06-27", (160, 170, 180), ""),
-]
+SIGHTING_A = UUID("919bc2ca-0817-45d5-b81e-780deb7bfbf8")
+SIGHTING_B = UUID("36ca67fc-d693-41ec-a7d5-1ae88e36cfa0")
+PHOTO_A1 = UUID("2ba8e9c1-b6e4-4f66-9f3d-66bc5700ef49")
+PHOTO_A2 = UUID("0042cc08-5de2-4fc9-bb1b-82fb7478b25d")
+PHOTO_B1 = UUID("04f5cf3c-dcaa-4855-9043-cb2b3f26b297")
+
+METADATA_ROWS = (
+    {
+        "photo_id": str(PHOTO_A1),
+        "sighting_id": str(SIGHTING_A),
+        "date": "2020-01-02",
+        "name": "Ada",
+        "image_path": "Ada/2020-01-02/one.jpg",
+    },
+    {
+        "photo_id": str(PHOTO_A2),
+        "sighting_id": str(SIGHTING_A),
+        "date": "2020-01-02",
+        "name": "Ada",
+        "image_path": "Ada/2020-01-02/two.jpg",
+    },
+    {
+        "photo_id": str(PHOTO_B1),
+        "sighting_id": str(SIGHTING_B),
+        "date": "2021-03-04",
+        "name": "Bea",
+        "image_path": "Bea/2021-03-04/one.jpg",
+    },
+)
 
 
-def _image_path(identifier: str, name: str, date_str: str) -> str:
-    return f"{name}/{date_str}/{identifier}.jpg"
+def _write_metadata(path: Path, rows: tuple[dict[str, str], ...]) -> None:
+    """Write canonical assigned metadata for a synthetic Dataset."""
+    with path.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=METADATA_ROWS[0].keys())
+        writer.writeheader()
+        writer.writerows(rows)
 
 
 @pytest.fixture
 def dataset(tmp_path: Path) -> Dataset:
-    root = tmp_path / "coded"
-    root.mkdir()
-    pd.DataFrame(
-        [
-            {
-                "identifier": identifier,
-                "date": date_str,
-                "name": name,
-                "image_path": _image_path(identifier, name, date_str),
-                "seek_code": seek_code,
-            }
-            for identifier, name, date_str, _, seek_code in ROWS
-        ]
-    ).to_csv(tmp_path / "images.csv", index=False)
-    for identifier, name, date_str, color, _ in ROWS:
-        path = root / _image_path(identifier, name, date_str)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        # PNG bytes written to the .jpg path: cv2 sniffs format from content, so
-        # the fixture stays lossless and pixel assertions are exact.
-        _ok, buf = cv2.imencode(".png", np.full((4, 4, 3), color, dtype=np.uint8))
-        path.write_bytes(buf.tobytes())
-    return Dataset(dataset_root=root, metadata_path=tmp_path / "images.csv")
+    """Create a Dataset backed by synthetic metadata and encoded bytes."""
+    image_root = tmp_path / "coded"
+    image_root.mkdir()
+    metadata_path = tmp_path / "images.csv"
+    _write_metadata(metadata_path, METADATA_ROWS)
+    for row in METADATA_ROWS:
+        image_path = image_root / row["image_path"]
+        image_path.parent.mkdir(parents=True, exist_ok=True)
+        image_path.write_bytes(f"original:{row['photo_id']}".encode())
+    return Dataset(dataset_root=image_root, metadata_path=metadata_path)
 
 
-def test_init_rejects_missing_root(tmp_path, dataset):
-    with pytest.raises(FileNotFoundError, match="Dataset root"):
-        Dataset(dataset_root=tmp_path / "missing", metadata_path=dataset.metadata_path)
+def test_dataset_constructs_and_resolves_neutral_domain_values(
+    dataset: Dataset,
+) -> None:
+    """Dataset resolves UUIDs, global values, and private identity metadata."""
+    photo = dataset.photo(PHOTO_A1)
+    sighting = dataset.sighting(SIGHTING_A)
+
+    assert photo == Photo(photo_id=PHOTO_A1, sighting_id=SIGHTING_A)
+    assert sighting.sighting_date == date(2020, 1, 2)
+    assert {item.photo_id for item in sighting.photos} == {PHOTO_A1, PHOTO_A2}
+    assert dataset.known_elephant_name(SIGHTING_A) == "Ada"
+    assert {item.photo_id for item in dataset.iter_photos()} == {
+        PHOTO_A1,
+        PHOTO_A2,
+        PHOTO_B1,
+    }
+    assert {item.sighting_id for item in dataset.iter_sightings()} == {
+        SIGHTING_A,
+        SIGHTING_B,
+    }
 
 
-def test_init_rejects_file_as_root(tmp_path, dataset):
-    file_path = tmp_path / "not-a-dir"
-    file_path.write_text("x")
-    with pytest.raises(NotADirectoryError, match="not a directory"):
-        Dataset(dataset_root=file_path, metadata_path=dataset.metadata_path)
+def test_photo_store_reads_original_encoded_bytes(dataset: Dataset) -> None:
+    """PhotoStore resolves immutable bytes solely through photo identity."""
+    photo = dataset.photo(PHOTO_A1)
+    store: PhotoStore = dataset.photo_store
+
+    encoded = store.read(photo)
+
+    assert encoded == f"original:{PHOTO_A1}".encode()
 
 
-def test_init_rejects_missing_metadata(dataset):
-    with pytest.raises(FileNotFoundError, match="Metadata path"):
-        Dataset(dataset_root=dataset.dataset_root, metadata_path=dataset.dataset_root / "missing.csv")
+def test_photo_store_reports_missing_mapped_bytes(
+    dataset: Dataset,
+    tmp_path: Path,
+) -> None:
+    """A mapped Photo with no file raises a clear storage error."""
+    photo = dataset.photo(PHOTO_A1)
+    stored_path = tmp_path / "coded" / METADATA_ROWS[0]["image_path"]
+    stored_path.unlink()
+
+    with pytest.raises(FileNotFoundError, match=str(PHOTO_A1)):
+        dataset.photo_store.read(photo)
 
 
-def test_init_rejects_non_csv_metadata(dataset):
-    bad = dataset.dataset_root / "metadata.json"
-    bad.write_text("{}")
-    with pytest.raises(ValueError, match="must be a CSV"):
-        Dataset(dataset_root=dataset.dataset_root, metadata_path=bad)
-
-
-def test_metadata_is_lazy_and_dates_parsed(dataset: Dataset):
-    assert dataset.metadata is None
-    dataset._ensure_loaded()
-    assert len(dataset.metadata) == len(ROWS)
-    assert isinstance(dataset.metadata["date"].iloc[0], date)
-
-
-def test_path_for_resolves_to_existing_file(dataset: Dataset):
-    photo = dataset.get_photo("Aaron_2008-11-24_01")
-    assert dataset.path_for(photo) == dataset.dataset_root / photo.image_path
-    assert dataset.path_for(photo).exists()
-
-
-def test_path_for_rejects_escaping_image_path(dataset: Dataset):
-    # Defense in depth: a photo-like object whose path escapes the root.
-    class _Escaping:
-        image_path = Path("../../etc/passwd")
-
-    with pytest.raises(ValueError, match="escapes dataset root"):
-        dataset.path_for(_Escaping())
-
-
-def test_get_photo_returns_fully_populated_photo(dataset: Dataset):
-    assert dataset.get_photo("Devin_2017-06-27_01") == Photo(
-        identifier="Devin_2017-06-27_01",
-        image_path=Path("Devin/2017-06-27/Devin_2017-06-27_01.jpg"),
-        elephant_name="Devin",
-        sighting_id="Devin_2017-06-27",
+def test_dataset_rejects_inconsistent_sighting_metadata(tmp_path: Path) -> None:
+    """One sighting UUID cannot resolve to multiple known elephants."""
+    image_root = tmp_path / "coded"
+    image_root.mkdir()
+    metadata_path = tmp_path / "images.csv"
+    inconsistent = (
+        METADATA_ROWS[0],
+        METADATA_ROWS[1] | {"name": "Someone else"},
     )
+    _write_metadata(metadata_path, inconsistent)
 
-
-def test_get_photo_unknown_identifier_raises(dataset: Dataset):
-    with pytest.raises(KeyError, match="No photo with identifier"):
-        dataset.get_photo("Ghost_2099-01-01_01")
-
-
-def test_iter_photos_yields_all_rows_in_order(dataset: Dataset):
-    assert [p.identifier for p in dataset.iter_photos()] == [r[0] for r in ROWS]
-
-
-def test_get_sighting_aggregates_all_photos_for_day(dataset: Dataset):
-    sighting = dataset.get_sighting("Aaron", date(2008, 11, 24))
-    assert isinstance(sighting, Sighting)
-    assert sighting.sighting_id == "Aaron_2008-11-24"
-    assert [p.identifier for p in sighting.photos] == [
-        "Aaron_2008-11-24_01", "Aaron_2008-11-24_02", "Aaron_2008-11-24_03",
-    ]
-
-
-def test_get_sighting_separates_same_elephant_by_date(dataset: Dataset):
-    a = dataset.get_sighting("Devin", date(2015, 11, 5))
-    b = dataset.get_sighting("Devin", date(2017, 6, 27))
-    assert (len(a), len(b)) == (2, 1)
-    assert {p.identifier for p in a.photos}.isdisjoint(p.identifier for p in b.photos)
-
-
-def test_get_sighting_unknown_elephant_raises(dataset: Dataset):
-    with pytest.raises(KeyError, match="No sighting"):
-        dataset.get_sighting("Ghost", date(2008, 11, 24))
-
-
-def test_get_sighting_unknown_date_raises(dataset: Dataset):
-    with pytest.raises(KeyError, match="2099-01-01"):
-        dataset.get_sighting("Aaron", date(2099, 1, 1))
-
-
-def test_iter_sightings_preserves_csv_order_and_groups(dataset: Dataset):
-    assert [(s.elephant_name, s.sighting_date, len(s)) for s in dataset.iter_sightings()] == [
-        ("Aaron", date(2008, 11, 24), 3),
-        ("Devin", date(2015, 11, 5), 2),
-        ("Devin", date(2017, 6, 27), 1),
-    ]
-
-
-def test_get_ground_truth_returns_parsed_seek_code(dataset: Dataset):
-    sighting = dataset.get_sighting("Aaron", date(2008, 11, 24))
-    code = dataset.get_ground_truth(sighting)
-    assert isinstance(code, SeekCode)
-    assert str(code) == AARON_CODE
-
-
-def test_get_ground_truth_unknown_sighting_raises(dataset: Dataset):
-    ghost = Sighting(
-        elephant_name="Aaron",
-        sighting_date=date(2099, 1, 1),
-        sighting_id="Aaron_2099-01-01",
-        photos=(Photo(
-            identifier="Aaron_2099-01-01_01",
-            image_path=Path("Aaron/2099-01-01/Aaron_2099-01-01_01.jpg"),
-            elephant_name="Aaron",
-            sighting_id="Aaron_2099-01-01",
-        ),),
-    )
-    with pytest.raises(KeyError, match="Sighting not found"):
-        dataset.get_ground_truth(ghost)
-
-
-def test_get_ground_truth_missing_code_raises(dataset: Dataset):
-    sighting = dataset.get_sighting("Devin", date(2017, 6, 27))
-    with pytest.raises(ValueError, match="no seek code"):
-        dataset.get_ground_truth(sighting)
-
-
-def test_read_image_returns_copy_and_caches(dataset: Dataset):
-    photo = dataset.get_photo("Aaron_2008-11-24_01")
-    image = dataset.read_image(photo)
-    assert image.shape == (4, 4, 3) and image.dtype == np.uint8
-    assert tuple(image[0, 0]) == ROWS[0][3]
-    assert image is not dataset._image_cache[photo.identifier]
-
-
-def test_read_image_raises_for_missing_file(dataset: Dataset):
-    photo = dataset.get_photo("Aaron_2008-11-24_01")
-    dataset.path_for(photo).unlink()
-    with pytest.raises(FileNotFoundError, match="Could not read image"):
-        dataset.read_image(photo)
-
-
-def test_read_image_repeated_reads_return_distinct_copies(dataset: Dataset):
-    photo = dataset.get_photo("Aaron_2008-11-24_01")
-    first, second = dataset.read_image(photo), dataset.read_image(photo)
-    assert first is not second
-    assert np.array_equal(first, second)
-
-
-def test_read_image_lru_eviction(dataset: Dataset):
-    dataset.image_cache_size = 2
-    photos = list(dataset.iter_photos())[:3]
-    for p in photos:
-        dataset.read_image(p)
-    assert list(dataset._image_cache) == [photos[1].identifier, photos[2].identifier]
-
-
-def test_read_image_cache_hit_refreshes_recency(dataset: Dataset):
-    dataset.image_cache_size = 2
-    a, b, c = list(dataset.iter_photos())[:3]
-
-    dataset.read_image(a)
-    dataset.read_image(b)
-    dataset.read_image(a)  # cache hit: touch a so b becomes least-recent
-    dataset.read_image(c)  # evicts b, not a
-
-    assert list(dataset._image_cache) == [a.identifier, c.identifier]
-
-
-def test_clear_image_cache(dataset: Dataset):
-    dataset.read_image(dataset.get_photo("Aaron_2008-11-24_01"))
-    dataset.clear_image_cache()
-    assert not dataset._image_cache
+    with pytest.raises(ValueError, match="inconsistent metadata"):
+        Dataset(dataset_root=image_root, metadata_path=metadata_path)

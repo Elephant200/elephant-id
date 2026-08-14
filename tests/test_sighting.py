@@ -1,78 +1,110 @@
+"""Tests for neutral sighting domain values."""
+
+import dataclasses
 from datetime import date
+from uuid import UUID
 
 import pytest
 
-from elephant_id.domain import Sighting
+from elephant_id.domain import Photo, Sighting, SightingEarPair
+
+SIGHTING_ID = UUID("919bc2ca-0817-45d5-b81e-780deb7bfbf8")
+OTHER_SIGHTING_ID = UUID("36ca67fc-d693-41ec-a7d5-1ae88e36cfa0")
+LEFT_PHOTO_ID = UUID("2ba8e9c1-b6e4-4f66-9f3d-66bc5700ef49")
+RIGHT_PHOTO_ID = UUID("0042cc08-5de2-4fc9-bb1b-82fb7478b25d")
 
 
-def test_sighting_one_photo_and_len(make_sighting):
-    s = make_sighting()
-    assert len(s) == 1
-    assert s.elephant_name == "Devin"
-    assert s.sighting_date == date(2015, 11, 5)
-    assert s.sighting_id == "Devin_2015-11-05"
-    assert str(s) == "Sighting('Devin_2015-11-05', num_photos=1)"
+def _photo(
+    photo_id: UUID = LEFT_PHOTO_ID,
+    sighting_id: UUID = SIGHTING_ID,
+) -> Photo:
+    """Construct a neutral Photo for domain tests."""
+    return Photo(photo_id=photo_id, sighting_id=sighting_id)
 
 
-def test_sighting_multiple_photos(make_photo, make_sighting):
-    s = make_sighting(photos=(make_photo(sequence=1), make_photo(sequence=2)))
-    assert len(s) == 2
+def test_sighting_groups_neutral_photos() -> None:
+    """A Sighting exposes only event identity, date, and its Photos."""
+    photos = (_photo(), _photo(RIGHT_PHOTO_ID))
+
+    sighting = Sighting(
+        sighting_id=SIGHTING_ID,
+        sighting_date=date(2020, 1, 2),
+        photos=photos,
+    )
+
+    assert [field.name for field in dataclasses.fields(sighting)] == [
+        "sighting_id",
+        "sighting_date",
+        "photos",
+    ]
+    assert sighting.photos == photos
 
 
-def test_sighting_id_must_match_name_and_date(make_sighting):
-    with pytest.raises(ValueError, match="does not match"):
-        make_sighting(sighting_id="Wrong_2015-11-05")
-
-
-def test_sighting_id_uses_zero_padded_iso_date(make_sighting):
-    s = make_sighting(sighting_date=date(2015, 1, 5))
-    assert s.sighting_id == "Devin_2015-01-05"
-
-
-@pytest.mark.parametrize(
-    "field, value",
-    [
-        ("elephant_name", ""),
-        ("sighting_id", ""),
-    ],
-)
-def test_sighting_rejects_empty_identity_fields(make_sighting, field, value):
-    with pytest.raises(ValueError):
-        make_sighting(**{field: value})
-
-
-def test_sighting_rejects_missing_date(make_photo):
-    with pytest.raises(ValueError, match="Sighting date"):
+def test_sighting_requires_photos() -> None:
+    """An observed Sighting cannot contain no Photos."""
+    with pytest.raises(ValueError, match="at least one Photo"):
         Sighting(
-            elephant_name="Devin",
-            sighting_date=None,
-            sighting_id="Devin_2015-11-05",
-            photos=(make_photo(),),
+            sighting_id=SIGHTING_ID,
+            sighting_date=date(2020, 1, 2),
+            photos=(),
         )
 
 
-def test_requires_at_least_one_photo(make_sighting):
-    with pytest.raises(ValueError, match="At least one photo"):
-        make_sighting(photos=())
+def test_sighting_rejects_duplicate_photos() -> None:
+    """A Sighting cannot contain one photo identity more than once."""
+    photo = _photo()
+
+    with pytest.raises(ValueError, match="duplicate photo_id"):
+        Sighting(
+            sighting_id=SIGHTING_ID,
+            sighting_date=date(2020, 1, 2),
+            photos=(photo, photo),
+        )
 
 
-def test_duplicate_photo_identifiers_raise(make_photo, make_sighting):
-    p = make_photo()
-    with pytest.raises(ValueError, match="duplicated"):
-        make_sighting(photos=(p, p))
+def test_sighting_rejects_photo_from_another_sighting() -> None:
+    """Every grouped Photo must belong to the Sighting."""
+    with pytest.raises(ValueError, match="does not belong"):
+        Sighting(
+            sighting_id=SIGHTING_ID,
+            sighting_date=date(2020, 1, 2),
+            photos=(_photo(sighting_id=OTHER_SIGHTING_ID),),
+        )
 
 
-def test_photo_sighting_id_must_match_sighting(make_photo, make_sighting):
-    other = make_photo(name="Aaron", sighting_date="2008-11-24")
-    with pytest.raises(ValueError, match="sighting_id"):
-        make_sighting(photos=(other,))
+def test_ear_pair_declares_one_photo_per_side() -> None:
+    """An ear pair preserves its explicitly declared left and right Photos."""
+    left = _photo()
+    right = _photo(RIGHT_PHOTO_ID)
+
+    pair = SightingEarPair(
+        sighting_id=SIGHTING_ID,
+        left_photo=left,
+        right_photo=right,
+    )
+
+    assert pair.left_photo is left
+    assert pair.right_photo is right
 
 
-def test_photo_elephant_name_must_match_sighting(make_sighting):
-    class MismatchedPhoto:
-        identifier = "Devin_2015-11-05_99"
-        sighting_id = "Devin_2015-11-05"
-        elephant_name = "Aaron"
+def test_ear_pair_allows_one_photo_for_both_sides() -> None:
+    """One source Photo may provide both declared ear sides."""
+    photo = _photo()
 
-    with pytest.raises(ValueError, match="elephant name"):
-        make_sighting(photos=(MismatchedPhoto(),))
+    pair = SightingEarPair(
+        sighting_id=SIGHTING_ID,
+        left_photo=photo,
+        right_photo=photo,
+    )
+
+    assert pair.left_photo == pair.right_photo
+
+
+def test_ear_pair_rejects_photo_from_another_sighting() -> None:
+    """Both declared ear Photos must belong to the pair's Sighting."""
+    with pytest.raises(ValueError, match="right_photo does not belong"):
+        SightingEarPair(
+            sighting_id=SIGHTING_ID,
+            left_photo=_photo(),
+            right_photo=_photo(RIGHT_PHOTO_ID, OTHER_SIGHTING_ID),
+        )

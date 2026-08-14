@@ -1,212 +1,161 @@
-from collections import OrderedDict
-from collections.abc import Iterator
+"""Research metadata and image-only storage for the assigned dataset."""
+
+import csv
+from collections.abc import Iterator, Mapping
 from datetime import date
 from pathlib import Path
+from typing import Protocol
+from uuid import UUID
 
-import cv2
-import pandas as pd
+from elephant_id.domain import Photo, Sighting
 
-from elephant_id.domain import Photo, SeekCode, Sighting
-from elephant_id.image import BgrImage
+_METADATA_COLUMNS = ("photo_id", "sighting_id", "date", "name", "image_path")
+
+
+class PhotoStore(Protocol):
+    """Retrieve immutable original encoded bytes for neutral Photos."""
+
+    def read(self, photo: Photo) -> bytes:
+        """Return the original encoded bytes associated with a Photo."""
+        ...
+
+
+class _FilesystemPhotoStore:
+    """Resolve original photo bytes from assigned filesystem metadata."""
+
+    def __init__(self, paths_by_photo_id: Mapping[UUID, Path]) -> None:
+        """Copy the private mapping used for photo storage lookup."""
+        self._paths_by_photo_id = dict(paths_by_photo_id)
+
+    def read(self, photo: Photo) -> bytes:
+        """Return original bytes for a mapped Photo.
+
+        Raises:
+            KeyError: If the photo ID has no storage mapping.
+            FileNotFoundError: If the mapped bytes are missing.
+        """
+        try:
+            path = self._paths_by_photo_id[photo.photo_id]
+        except KeyError:
+            raise KeyError(f"No storage mapping for photo {photo.photo_id}") from None
+        try:
+            return path.read_bytes()
+        except FileNotFoundError:
+            raise FileNotFoundError(f"Stored bytes are missing for photo {photo.photo_id}") from None
 
 
 class Dataset:
-    """Interface to the SEEK elephant ID dataset on disk."""
+    """Identity-aware research metadata with an image-only PhotoStore."""
 
-    def __init__(
-        self,
-        dataset_root: Path,
-        metadata_path: Path,
-        image_cache_size: int = 32,
-    ) -> None:
-        """Validate paths and prepare lazy metadata loading.
+    def __init__(self, dataset_root: Path, metadata_path: Path) -> None:
+        """Load assigned metadata and construct neutral domain indexes.
 
         Args:
-            dataset_root: Directory containing the image files.
-            metadata_path: Path to the metadata CSV.
-            image_cache_size: Maximum decoded images to keep in memory.
-        """
-        self.dataset_root: Path = dataset_root
-        if not self.dataset_root.exists():
-            raise FileNotFoundError(f"Dataset root does not exist: {self.dataset_root}")
-        if not self.dataset_root.is_dir():
-            raise NotADirectoryError(f"Dataset root is not a directory: {self.dataset_root}")
-
-        self.metadata_path: Path = metadata_path
-        if not self.metadata_path.exists():
-            raise FileNotFoundError(f"Metadata path does not exist: {self.metadata_path}")
-        if self.metadata_path.suffix != ".csv":
-            raise ValueError(f"Metadata path must be a CSV file: {self.metadata_path}")
-
-        self.metadata: pd.DataFrame | None = None # Lazily loaded
-        self._image_cache: OrderedDict[str, BgrImage] = OrderedDict()
-        self.image_cache_size: int = image_cache_size
-
-    def path_for(self, photo: Photo) -> Path:
-        """Resolve a photo's image path against the dataset root.
-
-        Args:
-            photo: The photo whose path to resolve.
-
-        Returns:
-            Path to the photo's image file, under the dataset root.
+            dataset_root: Root directory containing paths from the metadata.
+            metadata_path: Assigned canonical image metadata CSV.
 
         Raises:
-            ValueError: If the resolved path escapes the dataset root.
+            FileNotFoundError: If the root or metadata file is missing.
+            NotADirectoryError: If the dataset root is not a directory.
+            ValueError: If metadata cannot construct unambiguous domain values.
         """
-        candidate = self.dataset_root / photo.image_path
-        if not candidate.resolve().is_relative_to(self.dataset_root.resolve()):
-            raise ValueError(
-                f"Image path escapes dataset root: {photo.image_path}"
+        if not dataset_root.exists():
+            raise FileNotFoundError(f"Dataset root does not exist: {dataset_root}")
+        if not dataset_root.is_dir():
+            raise NotADirectoryError(f"Dataset root is not a directory: {dataset_root}")
+        if not metadata_path.is_file():
+            raise FileNotFoundError(f"Metadata file does not exist: {metadata_path}")
+
+        root = dataset_root.resolve()
+        photos_by_id: dict[UUID, Photo] = {}
+        paths_by_photo_id: dict[UUID, Path] = {}
+        photos_by_sighting_id: dict[UUID, list[Photo]] = {}
+        dates_by_sighting_id: dict[UUID, date] = {}
+        names_by_sighting_id: dict[UUID, str] = {}
+
+        with metadata_path.open(encoding="utf-8", newline="") as handle:
+            reader = csv.DictReader(handle)
+            if tuple(reader.fieldnames or ()) != _METADATA_COLUMNS:
+                raise ValueError(f"Metadata columns must be {_METADATA_COLUMNS}, got {reader.fieldnames}")
+
+            for row_number, row in enumerate(reader, start=2):
+                photo_id = self._parse_uuid4(row["photo_id"], "photo_id", row_number)
+                sighting_id = self._parse_uuid4(
+                    row["sighting_id"], "sighting_id", row_number
+                )
+                try:
+                    sighting_date = date.fromisoformat(row["date"])
+                except ValueError:
+                    raise ValueError(f"Invalid date at metadata row {row_number}: {row['date']!r}") from None
+                name = row["name"]
+                if not name:
+                    raise ValueError(f"Missing name at metadata row {row_number}")
+                image_path = Path(row["image_path"])
+                if image_path.is_absolute() or ".." in image_path.parts:
+                    raise ValueError(f"Unsafe image_path at metadata row {row_number}: {image_path}")
+                if photo_id in photos_by_id:
+                    raise ValueError(f"Duplicate photo_id in metadata: {photo_id}")
+
+                existing_date = dates_by_sighting_id.setdefault(
+                    sighting_id, sighting_date
+                )
+                existing_name = names_by_sighting_id.setdefault(sighting_id, name)
+                if existing_date != sighting_date or existing_name != name:
+                    raise ValueError(f"Sighting {sighting_id} has inconsistent metadata")
+
+                photo = Photo(photo_id=photo_id, sighting_id=sighting_id)
+                photos_by_id[photo_id] = photo
+                paths_by_photo_id[photo_id] = root / image_path
+                photos_by_sighting_id.setdefault(sighting_id, []).append(photo)
+
+        self._photos_by_id = photos_by_id
+        self._sightings_by_id = {
+            sighting_id: Sighting(
+                sighting_id=sighting_id,
+                sighting_date=dates_by_sighting_id[sighting_id],
+                photos=tuple(photos),
             )
-        return candidate
+            for sighting_id, photos in photos_by_sighting_id.items()
+        }
+        self._names_by_sighting_id = names_by_sighting_id
+        self.photo_store: PhotoStore = _FilesystemPhotoStore(paths_by_photo_id)
 
-    def get_photo(self, identifier: str) -> Photo:
-        """Look up a single photo by identifier."""
-        self._ensure_loaded()
+    @staticmethod
+    def _parse_uuid4(value: str, field_name: str, row_number: int) -> UUID:
+        """Parse a canonical UUIDv4 metadata value."""
+        try:
+            parsed = UUID(value)
+        except ValueError:
+            raise ValueError(f"Invalid {field_name} at metadata row {row_number}: {value!r}") from None
+        if parsed.version != 4:
+            raise ValueError(f"Invalid {field_name} at metadata row {row_number}: not UUIDv4")
+        return parsed
 
-        rows = self.metadata[self.metadata["identifier"] == identifier]
-        if rows.empty:
-            raise KeyError(f"No photo with identifier: {identifier}")
-        row = rows.iloc[0]
-        return Photo(
-            identifier=row["identifier"],
-            image_path=Path(row["image_path"]),
-            elephant_name=row["name"],
-            sighting_id=f"{row['name']}_{row['date'].isoformat()}",
-        )
+    def photo(self, photo_id: UUID) -> Photo:
+        """Resolve a neutral Photo by permanent photo ID."""
+        try:
+            return self._photos_by_id[photo_id]
+        except KeyError:
+            raise KeyError(f"Unknown photo_id: {photo_id}") from None
+
+    def sighting(self, sighting_id: UUID) -> Sighting:
+        """Resolve a neutral Sighting by permanent sighting ID."""
+        try:
+            return self._sightings_by_id[sighting_id]
+        except KeyError:
+            raise KeyError(f"Unknown sighting_id: {sighting_id}") from None
+
+    def known_elephant_name(self, sighting_id: UUID) -> str:
+        """Resolve the private known-elephant name for a sighting ID."""
+        try:
+            return self._names_by_sighting_id[sighting_id]
+        except KeyError:
+            raise KeyError(f"Unknown sighting_id: {sighting_id}") from None
 
     def iter_photos(self) -> Iterator[Photo]:
-        """Yield every photo in CSV row order.
-
-        Yields:
-            Each Photo in the dataset.
-        """
-        self._ensure_loaded()
-        for _, row in self.metadata.iterrows():
-            yield Photo(
-                identifier=row["identifier"],
-                image_path=Path(row["image_path"]),
-                elephant_name=row["name"],
-                sighting_id=f"{row['name']}_{row['date'].isoformat()}",
-            )
-
-    def get_sighting(self, elephant_name: str, sighting_date: date) -> Sighting:
-        """Look up the sighting for an elephant on a given date."""
-        self._ensure_loaded()
-
-        mask = (
-            (self.metadata["name"] == elephant_name)
-            & (self.metadata["date"] == sighting_date)
-        )
-        rows = self.metadata[mask]
-        if rows.empty:
-            raise KeyError(
-                f"No sighting for {elephant_name} on {sighting_date.isoformat()}"
-            )
-
-        sighting_id = f"{elephant_name}_{sighting_date.isoformat()}"
-        photos = tuple(
-            Photo(
-                identifier=row["identifier"],
-                image_path=Path(row["image_path"]),
-                elephant_name=elephant_name,
-                sighting_id=sighting_id,
-            )
-            for _, row in rows.iterrows()
-        )
-        return Sighting(
-            elephant_name=elephant_name,
-            sighting_date=sighting_date,
-            sighting_id=sighting_id,
-            photos=photos,
-        )
+        """Iterate over every Photo."""
+        return iter(self._photos_by_id.values())
 
     def iter_sightings(self) -> Iterator[Sighting]:
-        """Yield sightings in first-seen CSV row order."""
-        self._ensure_loaded()
-        for (name, sighting_date), rows in self.metadata.groupby(
-            ["name", "date"], sort=False
-        ):
-            sighting_id = f"{name}_{sighting_date.isoformat()}"
-            photos = tuple(
-                Photo(
-                    identifier=row["identifier"],
-                    image_path=Path(row["image_path"]),
-                    elephant_name=name,
-                    sighting_id=sighting_id,
-                )
-                for _, row in rows.iterrows()
-            )
-            yield Sighting(
-                elephant_name=name,
-                sighting_date=sighting_date,
-                sighting_id=sighting_id,
-                photos=photos,
-            )
-
-    def get_ground_truth(self, sighting: Sighting) -> SeekCode:
-        """Return the SEEK code recorded for a sighting.
-
-        Assumes all rows for the sighting share one code.
-
-        Args:
-            sighting: The sighting to look up.
-
-        Returns:
-            The parsed SeekCode for the sighting.
-        """
-        self._ensure_loaded()
-        rows = self.metadata[(self.metadata["name"] == sighting.elephant_name) & (self.metadata["date"] == sighting.sighting_date)]
-        if rows.empty:
-            raise KeyError(
-                f"Sighting not found: {sighting.elephant_name} on {sighting.sighting_date.isoformat()}"
-            )
-        code = rows.iloc[0]["seek_code"]
-        if pd.isna(code) or code == "":
-            raise ValueError(
-                f"Sighting has no seek code: {sighting.elephant_name} on {sighting.sighting_date.isoformat()}"
-            )
-        return SeekCode.from_str(code)
-
-    def read_image(self, photo: Photo) -> BgrImage:
-        """Load a photo's image as a BgrImage, using an LRU cache.
-
-        Args:
-            photo: The photo to load.
-
-        Returns:
-            A fresh copy of the decoded image.
-
-        Raises:
-            FileNotFoundError: If the image is missing or undecodable.
-        """
-        key = f"{photo.identifier}"
-
-        if key in self._image_cache:
-            image = self._image_cache.pop(key)
-            self._image_cache[key] = image
-            return image.copy()
-
-        path = self.path_for(photo)
-        loaded = cv2.imread(str(path), cv2.IMREAD_COLOR)
-        if loaded is None:
-            raise FileNotFoundError(f"Could not read image: {path}")
-
-        self._image_cache[key] = loaded
-
-        if len(self._image_cache) > self.image_cache_size:
-            self._image_cache.popitem(last=False)
-
-        return loaded.copy()
-
-    def clear_image_cache(self) -> None:
-        """Empty the image cache."""
-        self._image_cache.clear()
-
-    def _ensure_loaded(self) -> None:
-        """Lazily load the metadata CSV on first access."""
-        if self.metadata is not None:
-            return
-        self.metadata = pd.read_csv(self.metadata_path, parse_dates=["date"])
-        self.metadata["date"] = self.metadata["date"].dt.date
+        """Iterate over every Sighting."""
+        return iter(self._sightings_by_id.values())

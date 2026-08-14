@@ -1,9 +1,9 @@
 """Image types and operations for elephant-id.
 
-Only the canonical :data:`BgrImage` type is re-exported here. Import
-functions directly from the boxes, masks, and transforms submodules.
+The encoded-byte decode boundary is exported beside the canonical
+:data:`BgrImage` type. Import other operations from their submodules.
 """
 
-from elephant_id.image.bgr import BgrImage
+from elephant_id.image.bgr import BgrImage, decode_image
 
-__all__ = ["BgrImage"]
+__all__ = ["BgrImage", "decode_image"]

@@ -1,11 +1,6 @@
-"""
-Data models for the SEEK elephant ID system.
-
-These models represent system data and validate dataset structure.
-"""
+"""Neutral immutable domain values shared across AlphaPhant."""
 
 from .photo import Photo
-from .seek_code import SeekCode
-from .sighting import Sighting
+from .sighting import Sighting, SightingEarPair
 
-__all__ = ["Photo", "SeekCode", "Sighting"]
+__all__ = ["Photo", "Sighting", "SightingEarPair"]
