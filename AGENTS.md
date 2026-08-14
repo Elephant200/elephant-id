@@ -9,9 +9,9 @@ AlphaPhant is a fully automated candidate-ranking algorithm for elephant re-iden
 - Current state or cleanup scope: read [docs/status.md](docs/status.md).
 - Analysis or matching behavior: read [docs/pipeline.md](docs/pipeline.md).
 - Retrieval evaluation, splits, failures, or metrics: read [docs/evaluation.md](docs/evaluation.md).
-- Module placement or caching: read [docs/architecture.md](docs/architecture.md).
-- Domain or technical naming: read [docs/context.md](docs/context.md).
-- Future application work: read [docs/workflow.md](docs/workflow.md).
+- Module placement, domain/storage boundaries, or caching: read [docs/architecture.md](docs/architecture.md).
+- Naming, domain or technical terms: read [docs/context.md](docs/context.md).
+- Future application work: read [docs/reference/application.md](docs/reference/application.md).
 - Later research ideas: read [docs/future.md](docs/future.md).
 - Surprising durable decisions: read [docs/adr/](docs/adr/).
 
@@ -29,20 +29,22 @@ After Python changes, run `uv run ruff check .` and relevant tests. `legacy` is 
 
 ## Scope and Safety
 
-- `dataset` is private user data. Preserve it unless a request explicitly names a mutation. Never commit dataset contents, credentials, environment files, API keys, or model secrets.
+- `dataset` is private user data. Preserve it unless a request explicitly names an identity assignment, cache migration, or mutation. Never commit dataset contents, credentials, environment files, API keys, or model secrets.
 - Preserve existing user changes. Check `git status --short` before editing and never revert unrelated work.
 - Do not modernize `legacy` or `.curvrank_ref` unless explicitly asked.
 - Do not commit unless explicitly asked. You must receive explicit confirmation before writing a commit.
 
 ## Active Architecture
 
+- **domain** owns neutral immutable `Photo`, `Sighting`, and `SightingEarPair` values with permanent opaque UUID identity.
+- **dataset** owns private metadata and known-elephant resolution; its **PhotoStore** resolves a `Photo` to original encoded bytes without exposing identity.
 - **analysis** owns sighting analysis, ear-contour geometry, alpha shapes, and tear-profile extraction.
 - **inference** owns swappable implementations of ear localization, ear segmentation, and ear landmark detection.
 - **matching** owns tear-profile similarity and catalog ranking.
 - **eval** owns implementation-independent identity-retrieval evaluation.
-- **image** owns BGR image and geometry utilities.
+- **image** owns encoded-byte decoding, BGR images, and basic + universal geometry utilities.
 
-Keep interfaces narrow and justified by current variation. Research supplies a sighting ear pair directly. Future application ear selection remains upstream of the shared AlphaPhant pipeline.
+Keep interfaces narrow and justified by current variation. Rankers receive neutral domain objects and an image-only PhotoStore, never the identity-aware Dataset. Research supplies a sighting ear pair directly; future application ear selection remains upstream of the shared AlphaPhant pipeline.
 
 ## Python Style
 
@@ -57,7 +59,7 @@ Keep interfaces narrow and justified by current variation. Research supplies a s
 ## Images and Geometry
 
 - `BgrImage` is the canonical in-memory image: HWC, BGR, `uint8`, OpenCV-native.
-- Decode and encode with OpenCV at real boundaries. Avoid PIL/RGB conversions inside the package without a boundary reason.
+- PhotoStore returns encoded bytes. Decode them through the shared image-package OpenCV decoder at the image boundary. Avoid PIL/RGB conversions inside the package without a boundary reason.
 - Float boxes use half-open `xyxy` coordinates. Convert to integer pixels only at raster boundaries through the image geometry helpers.
 - OpenCV drawing endpoints are inclusive; draw a half-open box through `x2 - 1` and `y2 - 1`.
 - Public color and background arguments are human-facing RGB; convert to BGR at the write boundary.
@@ -67,16 +69,16 @@ Keep interfaces narrow and justified by current variation. Research supplies a s
 
 - One generic cache store serves immutable named producers and final per-ear tear profiles.
 - Cache expensive computation, not orchestration.
-- Use content hash, not path or photo identity, for source-content identity. Human-readable source information is cache metadata.
-- A producer name is immutable: any output-changing model, weight, prompt, preprocessing, configuration, or algorithm change gets a new name.
+- Use the permanent photo UUID directly for photo-level source identity. Add only actual dependent inputs such as crop coordinates; keep keys readable rather than hashing them again.
+- A producer name carries model, weight, prompt, preprocessing, threshold, configuration, and algorithm identity. Any output-changing change gets a new immutable name; those settings do not enter cache keys.
 - Keep writes atomic and validate producer payloads on load.
 - `ELEPHANT_ID_CACHE_MODE` selects `read_write`, `read_only`, or `disabled` globally.
-- Preserve SAM3 body and multi-feature outputs, current anchor outputs, and heuristic records during migration. Age and gender records may be removed.
+- Preserve SAM3 body and multi-feature outputs, current anchor outputs, and heuristic records during cache migration. Age and gender records may be removed.
 
 ## Testing
 
 - Test code under `src/elephant_id`; do not add unit tests for scripts or apps.
-- Use small synthetic arrays and images, fake inference implementations, and recording cache/model clients.
+- Use small synthetic arrays and encoded images, fake PhotoStores and inference implementations, and recording cache/model clients.
 - Unit tests never initialize real models, require network access, or depend on private photos.
 - Characterize current numerical behavior before moving tear-profile or matching code.
 - Add focused tests when changing validation, geometry, cache keys, serialization, dataset ordering, catalog aggregation, or evaluation splits.

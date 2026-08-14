@@ -39,4 +39,6 @@ These extensions should preserve the distinction between similarity-based candid
 
 ## Application Research
 
-A future application must select an ear pair from all available sighting photos. That may combine automated quality heuristics, human review, and evidence correction. Once selected, the application uses the same AlphaPhant analysis and matching pipeline as research; see [workflow.md](workflow.md).
+A future application must select an ear pair from all available sighting photos. That may combine automated quality heuristics, human review, and evidence correction. Once selected, the application uses the same opaque Photo and Sighting values, PhotoStore capability, and AlphaPhant analysis and matching pipeline as research; see [reference/application.md](reference/application.md).
+
+Application import may later add duplicate detection or content identity across external systems. Permanent opaque IDs and immutable original-photo semantics remain shared with the research system.

@@ -1,6 +1,8 @@
 # Tear-Profile Matching
 
-This document describes the current tear-profile matching pipeline: how an approved ear crop becomes a tear profile, how two profiles become a score, how scores become comparable across elephants and combinable across ears, and what the evaluation metrics mean.
+> **Historical — superseded.** Describes the pre-restructure calibrated matcher (cohort normalization, learned calibration). The current design drops these for raw symmetric scores averaged across sides — see [../pipeline.md](../pipeline.md). Kept for technical detail only.
+
+This document describes the former tear-profile matching pipeline: how an approved ear crop becomes a tear profile, how two profiles become a score, how scores become comparable across elephants and combinable across ears, and what the evaluation metrics mean.
 
 The pipeline covers one signal: ear-margin tears. It ranks known-elephant candidates; it does not make identity decisions. Final identification is always a human decision over reviewed evidence and a ranked shortlist.
 

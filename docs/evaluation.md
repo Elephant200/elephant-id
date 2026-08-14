@@ -1,63 +1,47 @@
 # Identity-Retrieval Evaluation
 
-This document defines the implementation-independent benchmark for complete AlphaPhant systems. Ear localization, ear segmentation, and ear landmark detection use separate model-specific evaluations beside their future training code.
+This document defines the implementation-independent benchmark for complete elephant candidate rankers. Model-specific localization, segmentation, and landmark evaluation belongs beside model training code.
 
 ## Evaluation Seam
 
-The evaluator owns ground truth. A system under evaluation receives, for each query and catalog ear:
+The evaluator owns ground truth and the research Dataset. It hands a ranker only neutral SightingEarPair objects, an image-only PhotoStore, and fresh opaque candidate keys for grouping — opaque IDs and image bytes, nothing more. The known-elephant label stays with the Dataset, which the ranker never receives; paths serve solely as PhotoStore locators, never read as strings.
 
-- the photo's content SHA-256 as its opaque key, together with the photo's image bytes;
-- an opaque candidate key grouping the catalog evidence for one known elephant.
+The ranker uses `PhotoStore.read(photo)` to obtain original encoded bytes and returns every candidate key exactly once with a finite similarity score in descending order. The PhotoStore exposes no identity resolution.
 
-The content hash is a legitimate opaque handle: it is already computed for caching, it reveals nothing about identity (two photos of one elephant have unrelated hashes), and it doubles as the ranker's cache key. So the photo key and the cache key are the same object, and no separate key-resolver or image-loader is introduced — the ranker receives the bytes it needs and the content-hash key, and nothing that identifies the elephant. The candidate key is a fresh per-run token standing in for one known elephant, so a ranker can group that elephant's catalog ears without learning which elephant it is.
+## Retrieval Benchmark
 
-The system returns every candidate key exactly once with a finite similarity score, ordered from highest to lowest. The evaluator never exposes elephant names, original file paths, dates, or the ground-truth label, nor masks, anchors, ear contours, tear profiles, model settings, or pipeline classes.
+The private retrieval benchmark set at `dataset/elephants-alive/benchmark/` contains real same-sighting ear-pair selections. Each selection references its source Photos by opaque `photo_id`. Dataset resolves each ID to its canonical Photo, original bytes, sighting, and private known-elephant label.
 
-## Evaluation Suite
+Evaluation code never derives names, dates, labels, or grouping from paths or filenames. The benchmark set and Dataset metadata supply those facts directly. The private benchmark set is gitignored, so no identity data enters version control.
 
-The evaluation suite is a directory of real sighting ear pairs authored by the image picker, held in the private dataset at `dataset/elephants-alive/sighting-pairs/`. It is organized as `<known elephant>/<sighting>/<photo_id>_<side>.jpg`, so the directory structure itself declares each pair, its sighting, and its ground-truth identity. A pair is exactly the two side files under one sighting directory; nothing is manufactured by shuffling or independently joining left and right photos.
-
-Because the suite lives under the gitignored dataset it is never committed, so no private identity data enters version control and no separate manifest or key-resolver file is needed. Exact-benchmark reproduction reads this directory directly, consistent with [adr/0007-pin-evaluation-by-git-commit.md](adr/0007-pin-evaluation-by-git-commit.md); a reader without the private data gets the code, the method, and the reported metrics. Image hashes stay authoritative in the dataset hash index.
-
-For leakage prevention the evaluator hands a system only the photo's content hash (from the dataset hash index) and its image bytes, plus a fresh per-run candidate token for each known elephant. The content hash is stable and doubles as the cache key; the candidate token is a per-run device, not a stored artifact. Names, paths, dates, and the ground-truth label stay with the evaluator. Suite validation requires exactly one left and one right file per sighting directory and rejects a source image reused across pairs; cross-sighting pairs cannot occur by construction.
+Benchmark-set validation requires one declared left Photo and one declared right Photo per pair. Both carry the pair's sighting ID; the same Photo may serve both sides.
 
 ## Leave-One-Sighting-Out Protocol
 
 For each protocol-eligible example:
 
-1. Hold its sighting ear pair out as the query.
-2. Exclude that exact sighting and its photos from the catalog.
+1. Hold its SightingEarPair out as the query.
+2. Exclude that sighting and its Photos from the catalog.
 3. Retain every other eligible sighting, including other sightings of the query elephant.
 4. Group catalog examples by private known-elephant label.
-5. Replace labels with fresh opaque candidate keys before calling the system.
+5. Replace labels with fresh opaque candidate keys before calling the ranker.
 6. Rank the complete candidate set.
 7. Recover the target key privately and record its rank.
 
-A query whose elephant has no remaining catalog sighting is a protocol exclusion. Exclusions are determined once before any implementation runs and are reported explicitly.
+A query whose elephant has no remaining catalog sighting is a protocol exclusion. Exclusions are determined before any ranker runs and reported explicitly.
 
 ## Failure Accounting
 
-Every implementation uses the same protocol-eligible query denominator.
+Every ranker uses the same protocol-eligible query denominator.
 
-- A query extraction failure counts as a retrieval miss and is reported by side and reason. A miss receives the sentinel rank of catalog size plus one, so median rank stays well defined; its reciprocal-rank contribution is zero.
-- Catalog extraction failure does not remove a candidate. A candidate lacking valid two-sided catalog evidence receives score `0.0` with an insufficient-evidence status so the candidate universe stays complete. When the query's own target is that `0.0` candidate, the query is scored as a miss rather than a competition-rank hit tied with other `0.0` candidates.
-- Missing weights, unreadable infrastructure, corrupt required cache state, or an invalid system result fails that implementation run.
-
-Every metric uses the same protocol-eligible denominator, so no metric silently reports over a different population. This prevents a system from improving its metrics by silently dropping difficult examples.
+- A query extraction failure counts as a retrieval miss, reported by side and reason. Its sentinel rank is catalog size plus one and its reciprocal-rank contribution is zero.
+- The benchmark set guarantees valid two-sided catalog evidence, so a catalog-side extraction failure is unexpected: it fails the run rather than scoring a candidate. Missing photo bytes, weights, or required infrastructure, corrupt required cache state, and invalid ranker results also fail the run.
 
 ## Ranking and Metrics
 
-The benchmark requires a complete ranking because mean reciprocal rank and median rank cannot be recovered from a top-k-only result.
+Each result contains every issued candidate key exactly once, no foreign keys, finite scores, descending score order, and deterministic candidate-key ordering for ties.
 
-Each result must contain:
-
-- every issued candidate key exactly once;
-- no foreign or duplicate keys;
-- finite similarity scores;
-- descending score order;
-- deterministic candidate-key ordering for equal scores.
-
-The target rank is one plus the number of candidates with a strictly higher score. Equal scores therefore share the same competition rank.
+Target rank is one plus the number of candidates with a strictly higher score. Equal scores share a competition rank.
 
 Initial metrics are:
 
@@ -65,29 +49,22 @@ Initial metrics are:
 - mean reciprocal rank;
 - median rank;
 - protocol-eligible query count;
-- query extraction-failure rate and reasons;
-- catalog insufficient-evidence rate.
+- query extraction-failure rate and reasons.
 
-Because the protocol is deterministic, uncertainty is reported by bootstrapping over the query set — resample the eligible queries with replacement, recompute the metrics, and take percentile intervals — rather than by averaging random seeds. A seeded bootstrap keeps the intervals reproducible, and two systems are compared on the same resamples (paired bootstrap) so a difference can be judged for significance rather than read off two point estimates.
-
-Extraction and matching hyperparameters, such as the alpha value and the tear-profile bin count, are set independently of the retrieval metric — qualitatively, from the resulting shapes — and are not tuned on this evaluation set. The reported numbers are therefore not optimistic through hyperparameter leakage.
+Uncertainty is estimated by seeded bootstrap resampling over eligible queries. System comparisons use the same resamples for paired intervals. Extraction parameters are set qualitatively from the alpha shapes; matching parameters are tuned on a separate parameter-tuning set. Neither uses the benchmark, so its numbers carry no tuning leakage.
 
 ## Reproducibility
 
-Each report is pinned by the git commit that produced it, marked dirty when the working tree has uncommitted changes, and identifies the sighting-pair directory it ran against. There are no separate suite, plan, or system fingerprints.
+Reproduction inputs are code, models, images, and the assigned identity data.
 
-The reproduction inputs are code, models, and images. Caches only accelerate and never change a result, so a fresh reproduction starts from an empty cache and computes everything from scratch. Because the images are private, exact-number reproduction is internal; an outside reader gets the code, the method, and the reported metrics. Hosted-model outputs (SAM3) are recorded rather than re-called, standing in for a model that cannot be shipped.
+The assigned photo and sighting IDs are preserved artifacts rather than values derived from image content. They may be shared with reviewers under the same controlled data access as the private images.
 
-The main evaluation is one command, `uv run eval`, runnable from the README against the committed default suite. A `--force` flag recomputes tear profiles so a publication run cannot report stale numbers. Output writing is separate from evaluation so the evaluator itself remains deterministic and side-effect free.
+Each report records the exact git commit and identifies the benchmark set.
 
-See [adr/0007-pin-evaluation-by-git-commit.md](adr/0007-pin-evaluation-by-git-commit.md).
+`uv run eval` runs the default benchmark set. `uv run eval --force` recomputes tear profiles while retaining reusable lower-level model records. Output writing remains outside deterministic evaluation calculation.
+
+See [ADR 0005](adr/0005-separate-retrieval-evaluation-from-implementation.md), [ADR 0007](adr/0007-pin-evaluation-by-git-commit.md), and [ADR 0008](adr/0008-use-permanent-opaque-photo-identity.md).
 
 ## Future Protocols
 
-Add another protocol only for a concrete research question. Possible later work includes:
-
-- fixed identity- and time-aware catalog/query partitions;
-- uncertainty estimates across multiple real sightings;
-- open-set evaluation;
-- larger-catalog or approximate-retrieval evaluation;
-- statistical comparison of complete systems.
+Add another protocol only for a concrete research question; candidate directions live in [future.md](future.md).

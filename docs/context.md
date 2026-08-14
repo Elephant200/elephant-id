@@ -7,19 +7,31 @@ This glossary is the canonical source for domain and technical language. Impleme
 ## Sightings and Catalog
 
 **Sighting**:
-One observed event involving one elephant and its associated photos. The elephant may be unknown until a later identity decision.
+An immutable snapshot of one observed event, grouping its distinct photo assets under a permanent opaque sighting ID. Its date is required observation metadata used for time-gap research; the elephant may be unknown until a later identity decision.
 _Avoid_: Identity, elephant, match
 
 **Photo**:
-One image belonging to a sighting. In historical data it may already carry a known identity label.
+One immutable original photo asset belonging to a sighting, represented throughout the system only by its permanent opaque photo ID and parent sighting ID. It carries no known-elephant identity, storage location, date, filename, or encoded bytes.
 _Avoid_: Image when referring to the domain object
 
-**Dataset photo**:
-A labeled historical or evaluation photo whose elephant identity is already known.
-_Avoid_: Product photo, imported photo
+**Photo ID**:
+The permanent opaque identifier of one immutable original photo asset. Replacing or re-encoding the original bytes creates a new photo ID.
+_Avoid_: Filename, path, content hash
+
+**Sighting ID**:
+The permanent opaque identifier of one observed event, independent of elephant identity, date, and its photo IDs.
+_Avoid_: Elephant-and-date identifier
+
+**Photo store**:
+The storage capability that resolves a Photo to its original encoded bytes without exposing known-elephant identity. A research dataset or application library may own a photo store.
+_Avoid_: Dataset, identity resolver
+
+**Dataset**:
+The private research dataset object that owns metadata, known-elephant resolution, and a PhotoStore.
+_Avoid_: Historical data access, data layer
 
 **Sighting ear pair**:
-One high-quality left-ear reference photo and one high-quality right-ear reference photo from the same observed sighting. After the full term is established, use ear pair.
+The selected evidence for one sighting: its opaque sighting ID, one high-quality left-ear Photo, and one high-quality right-ear Photo. Both Photos belong to that sighting; one source Photo may supply both sides.
 _Avoid_: Curated sighting, synthetic sighting, cross-sighting pair
 
 **Known elephant**:
@@ -81,6 +93,17 @@ The ordered known-elephant candidates produced by combining left- and right-ear 
 _Avoid_: Identity decision, prediction
 
 ## Evaluation
+
+**Retrieval benchmark set**:
+The fixed private collection of real sighting ear pairs, one per sighting, that the identity-retrieval benchmark runs leave-one-sighting-out over. Shorten to benchmark set in running writing. Held under the gitignored research dataset at `dataset/elephants-alive/benchmark/`.
+_Avoid_: Evaluation suite, test set
+
+**Parameter-tuning set**:
+The image set on which AlphaPhant's non-qualitative matching parameters, such as the profile stretch exponent and penalty weights, are tuned. Disjoint from the retrieval benchmark set. Extraction parameters are not tuned here; they are set qualitatively from the alpha shapes.
+_Avoid_: Validation set, training set, dev set
+
+**AI-model datasets**:
+The ear-segmentation and landmark models use their own train, validation, and test splits, drawn from singly-sighted elephants so they stay disjoint from all matching data. Those three terms name model data only; the AlphaPhant algorithm has no training phase and tunes its parameters on the parameter-tuning set.
 
 **Identity-retrieval evaluation**:
 End-to-end measurement of how a complete retrieval system ranks the correct known elephant for real sighting ear pairs.

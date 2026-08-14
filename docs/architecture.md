@@ -1,81 +1,102 @@
 # Architecture
 
-AlphaPhant is a research implementation of a fully automated elephant re-identification algorithm. Its current scope begins with a sighting ear pair and ends with a ranked known-elephant catalog. The future application workflow surrounds this algorithm; see [workflow.md](workflow.md).
+AlphaPhant is a research implementation of a fully automated elephant re-identification algorithm. Its current scope begins with a sighting ear pair and ends with a ranked known-elephant catalog. The future application shares its neutral photo and sighting model; see [reference/application.md](reference/application.md).
 
 ## Design Priorities
 
 - Keep the research pipeline small, explicit, and testable.
-- Preserve tear-profile extraction and tear-profile matching behavior during restructuring.
+- Use permanent opaque photo and sighting identity throughout the system.
+- Separate neutral domain objects, image storage, and identity-aware research metadata.
+- Preserve tear-profile extraction and matching behavior during restructuring.
 - Put model variation behind semantic inference interfaces.
-- Keep identity-retrieval evaluation independent of pipeline implementation.
-- Cache expensive computation and final reusable tear profiles, not inexpensive orchestration.
-- Treat package names and data representations as provisional.
+- Keep identity-retrieval evaluation independent of ranker implementation.
+- Cache expensive computation and final reusable tear profiles, not orchestration.
 
 ## Responsibilities
 
-The responsibilities are firmer than their eventual filenames.
+**Domain** owns the neutral immutable values shared across the system:
 
-**Analysis** owns sighting analysis and the geometric path from model output to one tear profile per ear. It contains ear-contour preparation, alpha-shape construction, and tear-profile extraction.
+- `Photo` carries a UUIDv4 photo ID and its parent sighting ID;
+- `Sighting` carries a UUIDv4 sighting ID, a required sighting date, and distinct Photos;
+- `SightingEarPair` carries a sighting ID and one Photo per declared side. Both Photos belong to that sighting, and one Photo may serve both sides.
 
-**Inference** owns implementations of ear localization, ear segmentation, and ear landmark detection. Analysis depends on those capabilities rather than on SAM3, YOLO, U-Net, BiRefNet, or another architecture.
+**Dataset** is the private research dataset object. It constructs and resolves domain objects, owns known-elephant metadata, and owns a filesystem-backed PhotoStore. Rankers never receive the Dataset.
 
-**Matching** owns tear-profile matching and known-elephant ranking. It compares same-side ears, symmetrizes the directional similarity score, selects the strongest catalog evidence independently per side, and averages the two side scores.
+**PhotoStore** owns retrieval of original encoded bytes through `read(photo: Photo) -> bytes`. It uses `photo.photo_id` for lookup and does not expose a known-elephant resolver method.
 
-**Evaluation** owns benchmark examples, opaque evaluation keys, leakage-free splits, failure accounting, metrics, and reproducibility. It observes ranked candidates rather than masks, anchors, contours, tear profiles, or model settings.
+**Image** owns `decode_image(encoded: bytes) -> BgrImage` and BGR image and basic/universal geometry utilities.
 
-**Cache storage** is one generic mechanism for records from immutable producers. Each model invocation and final per-ear tear-profile extraction supplies its producer name, key inputs, metadata, serialization, and validation.
+**Analysis** owns sighting analysis, ear-contour preparation, alpha-shape construction, and tear-profile extraction.
 
-**Historical data access** resolves labeled photos and sightings from the research dataset. Identity-bearing historical filenames are provenance, not requirements imposed on AlphaPhant.
+**Inference** owns implementations of ear localization and segmentation and ear landmark detection. Analysis depends on these semantic capabilities rather than particular model architectures.
 
-## Data Flow
+**Matching** owns tear-profile matching and known-elephant ranking.
+
+**Evaluation** owns private ground truth, benchmark examples, candidate keys, splits, failure accounting, metrics, and reproducibility. Its ranker boundary is defined in [evaluation.md](evaluation.md#evaluation-seam).
+
+**CacheManager** stores records from immutable named producers and final per-ear tear-profile extraction.
+
+## Data and Identity
+
+`photo_id` permanently identifies one immutable original photo asset. Replacing or re-encoding its original bytes creates a new photo ID. Photo IDs are only generated upon import in the application context; they are never generated in the research context.
+
+`sighting_id` permanently identifies one observed event independently of elephant identity, date, or photo identity. A Sighting contains unique Photos whose `sighting_id` matches its own.
+
+Both IDs are UUIDv4 values represented as UUIDs in Python and standard UUID strings in metadata. They encode no names, dates, paths, or parent-child structure.
+
+The research dataset uses one metadata file with this shape:
 
 ```
-sighting ear pair
-  -> ear localization and ear segmentation
+photo_id,sighting_id,date,name,image_path
+```
+
+Dataset owns the complete metadata. Its PhotoStore receives only the `photo_id -> image_path` mapping. Paths remain private storage metadata; code resolves known-elephant identity from Dataset metadata rather than parsing paths or filenames.
+
+The assigned photo and sighting IDs are permanent data artifacts and are preserved with the dataset.
+
+## Runtime Data Flow
+
+```
+SightingEarPair + PhotoStore
+  -> encoded bytes for each Photo
+  -> decode_image to BgrImage
+  -> ear localization and segmentation
   -> ear landmark detection
   -> ear contour
-  -> alpha-shape-derived tear profile for each side
-  -> same-side tear-profile matching against catalog evidence
-  -> strongest left and right similarity score per known elephant
-  -> mean two-side similarity score
-  -> ranked candidate list
+  -> tear profile for each side
+  -> same-side matching against catalog evidence
+  -> strongest left and right evidence per candidate
+  -> complete ranked candidate list
 ```
-
-Research supplies the ear pair directly. A future application performs ear selection first and enters the same flow.
 
 ## Inference Seams
 
 Analysis requires two semantic capabilities:
 
-- produce ear masks and locations from a full photo;
+- produce ear masks and locations from a full BGR image;
 - locate the upper and lower anatomical landmarks that define the relevant ear contour.
 
-SAM3 currently supplies ear localization and segmentation. The current YOLO keypoint model supplies ear landmarks. A future detector-plus-segmentation composition remains hidden behind the same segmentation interface. Downstream geometry remains unchanged when an inference implementation changes.
+SAM3 currently supplies ear localization and segmentation. The current YOLO keypoint model supplies ear landmarks. Future implementations remain behind the same semantic interfaces.
 
-Technical writing uses ear landmark detection. Code continues to use `anchor` as the noun, including names such as `upper_anchor` and `lower_anchor`.
+Technical writing uses the term ear landmark detection. Code uses `anchor` for detected endpoints.
 
 ## Cache Architecture
 
-One cache store serves every producer. Its global mode comes from `ELEPHANT_ID_CACHE_MODE`:
+One CacheManager serves every producer. `ELEPHANT_ID_CACHE_MODE` selects `read_write`, `read_only`, or `disabled`.
 
-- `read_write` uses valid records and computes and saves misses;
-- `read_only` uses valid records and fails clearly on a miss;
-- `disabled` computes without reading or writing cache records.
+Each immutable producer name identifies the model, weights, prompt, preprocessing, thresholds, and every other output-changing setting. An output-changing producer change gets a new name; ordinary refactoring does not.
 
-Durable producer categories are:
+Keys contain only runtime input identity and actual dependent inputs. They remain readable:
 
-- `sam3-features`;
-- `sam3-body`, retained for possible later research;
-- `yolo26n-keypoints-v1`;
-- future immutable model names;
-- `tear-profile-v1`.
+```
+sam3-features/<photo UUID>
+yolo26n-keypoints-v1/<photo UUID>__crop_<x1>_<y1>_<x2>_<y2>
+```
 
-Any output-changing model, configuration, prompt, preprocessing rule, or algorithm change gets a new producer name. Ordinary refactoring does not. Keys follow actual inputs: source content hashes for photo-level models, upstream record keys and crop coordinates for dependent models, and segmentation plus landmark record keys and declared side for a final tear profile.
+Dependent records use upstream record keys and semantic inputs such as side or crop coordinates. CacheManager namespaces and safely stores caller-supplied keys; it does not hash keys, read photos, resolve Dataset metadata, or understand producer payloads. Writes are atomic and loaded records are validated.
 
-Source paths, photo identifiers, timestamps, and configuration summaries are metadata. `dataset/elephants-alive/image_hashes.csv` maps `image_path` to `content_sha256`. The coded dataset is treated as immutable until an explicit rebuild or verification.
+Source paths and legacy identifiers are metadata, not cache identity. Existing cache records are migrated from legacy identifiers to photo UUIDs by joining the preserved original CSV and assigned CSV through unchanged image paths.
 
 ## Unsupported Prototypes
 
-The existing `apps/` prototypes are historical and receive no compatibility guarantees. The API prototype will be preserved on the `desktop-prototype` branch and removed from the active branch. Active modules should not retain legacy interfaces merely to keep prototypes runnable.
-
-The reasons behind these boundaries live in [adr/](adr/).
+The existing `apps/` prototypes are historical and receive no compatibility guarantees. The API prototype is preserved on the `desktop-prototype` branch and removed from the active branch. Active modules do not retain legacy interfaces solely to keep prototypes runnable.
