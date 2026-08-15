@@ -88,7 +88,7 @@ class CacheManager:
             ValueError: If the key is unsafe or the record is invalid JSON or
                 not a JSON object.
             UnicodeDecodeError: If the record is not valid UTF-8.
-            RuntimeError: If cache reads are disabled.
+            PermissionError: If cache reads are disabled.
             FileNotFoundError: If the record does not exist.
         """
         path = self.path_for(key)
