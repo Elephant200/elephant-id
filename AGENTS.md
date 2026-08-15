@@ -88,3 +88,17 @@ Keep interfaces narrow and justified by current variation. Rankers receive neutr
 - Keep changes scoped to the request and report noteworthy out-of-scope issues.
 - Commit messages use imperative style without conventional prefixes.
 - Browser or Playwright verification always runs in a subagent and only when necessary.
+
+## Agent skills
+
+### Issue tracker
+
+Issues live as markdown files under `.scratch/<feature>/`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default role strings recorded as a `Status:` line. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: glossary at `docs/context.md`, ADRs at `docs/adr/`. See `docs/agents/domain.md`.
