@@ -22,7 +22,7 @@ Run Python from the repository root with `uv`. Do not activate `.venv` or call `
 ```bash
 uv run pytest
 uv run ruff check .
-uv sync --all-groups local
+uv sync --all-groups
 ```
 
 After Python changes, run `uv run ruff check .` and relevant tests. `legacy` is excluded from Ruff; avoid incidental cleanup there.
