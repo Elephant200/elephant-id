@@ -5,13 +5,10 @@ import os
 import tempfile
 from collections.abc import Callable
 from pathlib import Path
-from typing import Literal
 
 from loguru import logger
 
 from elephant_id.constants import DEFAULT_CACHE_ROOT
-
-CacheMode = Literal["read_write", "read_only", "disabled"]
 
 
 def _validate_path_segment(value: str, label: str) -> None:
@@ -21,99 +18,72 @@ def _validate_path_segment(value: str, label: str) -> None:
 
 
 class CacheManager:
-    """Cache records from one immutable named producer."""
+    """Persist JSON records from immutable named producers."""
 
     def __init__(
         self,
-        producer_name: str,
         cache_root: Path = Path(DEFAULT_CACHE_ROOT),
-        mode: CacheMode | None = None,
     ) -> None:
-        """Initialize the JSON cache manager for a producer.
+        """Initialize cache persistence rooted at one directory.
 
         Args:
-            producer_name: Immutable name of the record producer.
             cache_root: Root cache directory. Defaults to project cache.
-            mode: Cache read and write behavior. Defaults to the
-                ``ELEPHANT_ID_CACHE_MODE`` environment variable or ``read_write``.
+        """
+        self.cache_root = cache_root.resolve()
+
+    def path_for(self, producer_id: str, key: str) -> Path:
+        """Return the contained JSON path for a producer and input key.
 
         Raises:
-            ValueError: If the producer name is unsafe, escapes the cache root,
-                or the configured mode is unsupported.
+            ValueError: If either identity is unsafe or escapes the cache root.
         """
-        _validate_path_segment(producer_name, "cache producer name")
-        self.producer_name = producer_name
-        configured_mode = (
-            mode
-            if mode is not None
-            else os.getenv("ELEPHANT_ID_CACHE_MODE", "read_write")
-        )
-        if configured_mode not in ("read_write", "read_only", "disabled"):
-            raise ValueError(f"Unsupported cache mode: {configured_mode!r}")
-        self.mode = configured_mode
-        cache_root_resolved = cache_root.resolve()
-        self.cache_dir: Path = cache_root_resolved / producer_name
-        if not self.cache_dir.resolve().is_relative_to(cache_root_resolved):
-            raise ValueError(f"Cache producer name escapes cache root: {producer_name!r}")
-        if self.mode == "read_write":
-            self.cache_dir.mkdir(parents=True, exist_ok=True)
-
-    def path_for(self, key: str) -> Path:
-        """Return the contained JSON path for a caller-supplied key.
-
-        Raises:
-            ValueError: If the key is not one safe path segment.
-        """
+        _validate_path_segment(producer_id, "cache producer ID")
         _validate_path_segment(key, "cache key")
-        path = self.cache_dir / f"{key}.json"
-        if not path.resolve().is_relative_to(self.cache_dir.resolve()):
+        producer_dir = self.cache_root / producer_id
+        if not producer_dir.resolve().is_relative_to(self.cache_root):
+            raise ValueError(f"Cache producer ID escapes cache root: {producer_id!r}")
+        path = producer_dir / f"{key}.json"
+        if not path.resolve().is_relative_to(producer_dir.resolve()):
             raise ValueError(f"Cache key escapes producer directory: {key!r}")
         return path
 
-    def exists(self, key: str) -> bool:
-        """Return whether a key is cached, or false when caching is disabled.
+    def exists(self, producer_id: str, key: str) -> bool:
+        """Return whether a producer record is cached.
 
         Raises:
-            ValueError: If the key is not one safe path segment.
+            ValueError: If either identity is unsafe.
         """
-        path = self.path_for(key)
-        if self.mode == "disabled":
-            return False
-        return path.exists()
+        return self.path_for(producer_id, key).exists()
 
-    def load(self, key: str) -> dict[str, object]:
-        """Load the record for a key.
+    def load(self, producer_id: str, key: str) -> dict[str, object]:
+        """Load one producer record.
 
         Raises:
-            ValueError: If the key is unsafe or the record is invalid JSON or
-                not a JSON object.
+            ValueError: If an identity is unsafe or the record is not a JSON object.
             UnicodeDecodeError: If the record is not valid UTF-8.
-            PermissionError: If cache reads are disabled.
             FileNotFoundError: If the record does not exist.
         """
-        path = self.path_for(key)
-        if self.mode == "disabled":
-            raise PermissionError(f"Cache reads are disabled: {self.producer_name}/{key}")
+        path = self.path_for(producer_id, key)
         with path.open(encoding="utf-8") as file:
             record = json.load(file)
         if not isinstance(record, dict):
-            raise ValueError(f"Cache record must be a JSON object: {self.producer_name}/{key}")
+            raise ValueError(f"Cache record must be a JSON object: {producer_id}/{key}")
         return record
 
-    def save(self, key: str, value: dict[str, object]) -> None:
-        """Atomically save a record, or do nothing when caching is disabled.
+    def save(
+        self,
+        producer_id: str,
+        key: str,
+        value: dict[str, object],
+    ) -> None:
+        """Atomically save one producer record.
 
         Raises:
-            ValueError: If the key is unsafe or the value contains a circular
-                reference.
+            ValueError: If an identity is unsafe or the value is circular.
             TypeError: If the value contains non-JSON-serializable data.
-            PermissionError: If the cache is read-only.
         """
-        path = self.path_for(key)
-        if self.mode == "disabled":
-            return
-        if self.mode == "read_only":
-            raise PermissionError(f"Cache is read-only: {self.producer_name}/{key}")
+        path = self.path_for(producer_id, key)
+        path.parent.mkdir(parents=True, exist_ok=True)
         fd, tmp_name = tempfile.mkstemp(
             dir=path.parent, prefix=f".{path.name}.", suffix=".tmp"
         )
@@ -129,38 +99,33 @@ class CacheManager:
 
     def get_or_compute(
         self,
+        producer_id: str,
         key: str,
         compute_fn: Callable[[], dict[str, object]],
     ) -> dict[str, object]:
-        """Load a record or compute it according to the configured mode.
+        """Load a producer record or compute and persist it on a miss.
 
         Args:
+            producer_id: Stable identity of the deterministic processor.
             key: Caller-supplied opaque record key.
-            compute_fn: Function that computes the record on a writable miss.
+            compute_fn: Function that computes the record on a miss.
 
         Returns:
             The loaded or computed record.
 
         Raises:
-            FileNotFoundError: If a read-only record is missing.
-            ValueError: If the key is unsafe or a read-only record is corrupt.
+            ValueError: If either identity is unsafe.
         """
-        self.path_for(key)
-        if self.mode == "disabled":
-            return compute_fn()
-        if self.exists(key):
+        self.path_for(producer_id, key)
+        if self.exists(producer_id, key):
             try:
-                cached = self.load(key)
-            except (UnicodeDecodeError, ValueError) as error:
-                if self.mode == "read_only":
-                    raise ValueError(f"Corrupt read-only cache record: {self.producer_name}/{key}") from error
-                logger.warning(f"Ignoring corrupt cache record: {self.producer_name}/{key}")
+                cached = self.load(producer_id, key)
+            except (UnicodeDecodeError, ValueError):
+                logger.warning(f"Ignoring corrupt cache record: {producer_id}/{key}")
             else:
-                logger.debug(f"Cache hit: {self.producer_name}/{key}")
+                logger.debug(f"Cache hit: {producer_id}/{key}")
                 return cached
-        if self.mode == "read_only":
-            raise FileNotFoundError(f"Read-only cache miss: {self.producer_name}/{key}")
         results = compute_fn()
-        logger.debug(f"Cache miss: {self.producer_name}/{key}")
-        self.save(key, results)
+        logger.debug(f"Cache miss: {producer_id}/{key}")
+        self.save(producer_id, key, results)
         return results

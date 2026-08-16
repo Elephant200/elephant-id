@@ -61,3 +61,5 @@ Both sides are required: a known elephant is scored only when it has valid left 
 Expensive model invocations and final per-ear tear profiles are cached. Ear selection, sighting orchestration, contour preparation, catalog grouping, and ranking are not independently cached.
 
 A final tear-profile record is per ear. Its key depends on the segmentation record, landmark record, declared side, and integer bounding box of the selected ear detection. Bounding-box identity remains stable when candidate ordering changes. Cache identity and producer versioning are defined in [architecture.md](architecture.md).
+
+Caching is selected when processors are composed. Standard runs decorate all three expensive stages; parameter-tuning runs use the raw tear-profile extractor while retaining cached segmentation and landmark detection. The analyzer and ranker expose no cache-policy options.

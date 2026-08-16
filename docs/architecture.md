@@ -34,7 +34,7 @@ AlphaPhant is a research implementation of a fully automated elephant re-identif
 
 **Evaluation** owns private ground truth, benchmark examples, candidate keys, splits, failure accounting, metrics, and reproducibility. Its ranker boundary is defined in [evaluation.md](evaluation.md#evaluation-seam).
 
-**CacheManager** stores records from immutable named producers and final per-ear tear-profile extraction.
+**CacheManager** persists records under stable processor identities and caller-supplied input keys. Thin stage decorators add caching without changing processor behavior or identity.
 
 ## Data and Identity
 
@@ -82,9 +82,9 @@ Technical writing uses the term ear landmark detection. Code uses `anchor` for d
 
 ## Cache Architecture
 
-One CacheManager serves every producer. `ELEPHANT_ID_CACHE_MODE` selects `read_write`, `read_only`, or `disabled`.
+One generic CacheManager persists records for every producer. It owns safe paths, JSON loading, atomic replacement, and obvious-corruption handling; it does not select whether a processing stage is cached.
 
-Each immutable producer name identifies the model, weights, prompt, preprocessing, thresholds, and every other output-changing setting. An output-changing producer change gets a new name; ordinary refactoring does not.
+Each deterministic processor exposes a stable `producer_id` identifying the model, weights, prompt, preprocessing, thresholds, and every other output-changing setting. An output-changing processor change gets a new identity; ordinary refactoring does not. Cached decorators delegate the same identity as their wrapped processors and add only persistence behavior.
 
 Keys contain only runtime input identity and actual dependent inputs. They remain readable:
 
@@ -93,7 +93,9 @@ sam3-features/<photo UUID>
 yolo26n-keypoints-v1/<photo UUID>__crop_<x1>_<y1>_<x2>_<y2>
 ```
 
-Dependent records use upstream record keys and semantic inputs such as side or crop coordinates. CacheManager namespaces and safely stores caller-supplied keys; it does not hash keys, read photos, resolve Dataset metadata, or understand producer payloads. Writes are atomic and loaded records are validated.
+Dependent records use upstream processor identities and semantic inputs such as side or crop coordinates. CacheManager namespaces and safely stores caller-supplied keys; it does not hash keys, read photos, resolve Dataset metadata, or understand producer payloads. Writes are atomic and loaded records are validated.
+
+Standard construction decorates ear segmentation, ear landmark detection, and tear-profile extraction with cached adapters. Parameter-tuning construction leaves the tear-profile extractor undecorated, bypassing profile reads and writes while retaining cached segmentation and landmark detection. Sighting analysis and ranking are unaware of cache policy.
 
 Source paths and legacy identifiers are metadata, not cache identity. Existing cache records are migrated from legacy identifiers to photo UUIDs by joining the preserved original CSV and assigned CSV through unchanged image paths.
 
