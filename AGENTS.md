@@ -38,7 +38,7 @@ After Python changes, run `uv run ruff check .` and relevant tests. `legacy` is 
 
 - **domain** owns neutral immutable `Photo`, `Sighting`, and `SightingEarPair` values with permanent opaque UUID identity.
 - **dataset** owns private metadata and known-elephant resolution; its **PhotoStore** resolves a `Photo` to original encoded bytes without exposing identity.
-- **analysis** owns sighting analysis, ear-contour geometry, alpha shapes, and tear-profile extraction.
+- **analysis** owns sighting analysis, ear preparation, and AlphaTear profile extraction.
 - **inference** owns swappable implementations of ear localization, ear segmentation, and ear landmark detection.
 - **matching** owns tear-profile similarity and catalog ranking.
 - **eval** owns implementation-independent identity-retrieval evaluation.
@@ -70,10 +70,11 @@ Keep interfaces narrow and justified by current variation. Rankers receive neutr
 - One generic cache store serves immutable named producers and final per-ear tear profiles.
 - Cache expensive computation, not orchestration.
 - Use the permanent photo UUID directly for photo-level source identity. Add only actual dependent inputs such as crop coordinates; keep keys readable rather than hashing them again.
-- A producer name carries model, weight, prompt, preprocessing, threshold, configuration, and algorithm identity. Any output-changing change gets a new immutable name; those settings do not enter cache keys.
+- A `producer_slug` carries model, weight, prompt, preprocessing, threshold, configuration, and algorithm identity. Any output-changing change gets a new immutable slug; those settings do not enter cache keys.
 - Keep writes atomic and validate producer payloads on load.
-- `ELEPHANT_ID_CACHE_MODE` selects `read_write`, `read_only`, or `disabled` globally.
-- Preserve SAM3 body and multi-feature outputs, current anchor outputs, and heuristic records during cache migration. Age and gender records may be removed.
+- Select caching only through composition: inject a cached decorator or the raw processor. Analyzers and rankers expose no cache-policy flags.
+- Cache the complete SAM3 multi-feature computation before adapting it to the ear-only segmentation protocol. Cache landmark records in full-image coordinates.
+- Preserve SAM3 body and complete multi-feature outputs and leave heuristic records untouched. Landmark records may be replaced when their coordinate contract changes. Age and gender records may be removed.
 
 ## Testing
 

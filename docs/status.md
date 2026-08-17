@@ -1,6 +1,6 @@
 # Current Status
 
-AlphaPhant is mid-restructure: consolidating scattered prototypes into one locked research pipeline - sighting ear pair, alpha-shape tear-profile extraction, tear-profile matching, and known-elephant candidate ranking - before any application work begins.
+AlphaPhant is mid-restructure: consolidating scattered prototypes into one locked research pipeline - sighting ear pair, AlphaTear profile extraction, tear-profile matching, and known-elephant candidate ranking - before any application work begins.
 
 ## Where This Is Going
 
@@ -8,7 +8,7 @@ Research pipeline (now) -> identity-retrieval benchmark -> a future review-and-d
 
 ## What Works Today
 
-The numerical core already exists: SAM3 segmentation, YOLO ear-landmark detection, alpha-shape tear-profile extraction, and directional tear-profile matching with catalog ranking. 
+The numerical core already exists: SAM3 segmentation, YOLO ear-landmark detection, AlphaTear profile extraction, and directional tear-profile matching with catalog ranking.
 
 ## What Is Being Removed
 

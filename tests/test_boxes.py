@@ -1,6 +1,30 @@
 import pytest
 
-from elephant_id.image.boxes import center_to_xyxy, clip_xyxy
+from elephant_id.image.boxes import BoundingBox, center_to_xyxy, clip_xyxy
+
+
+def test_bounding_box_expands_float_geometry_for_raster_use() -> None:
+    """A raster box floors lower edges and ceils upper edges."""
+    box = BoundingBox.from_float(
+        (1.8, -2.0, 5.2, 6.1),
+        image_width=8,
+        image_height=6,
+    )
+
+    assert box == BoundingBox(1, 0, 6, 6)
+    assert box.as_tuple() == (1, 0, 6, 6)
+
+
+@pytest.mark.parametrize(
+    "xyxy",
+    [(-1, 0, 4, 4), (0, -1, 4, 4), (2, 2, 2, 4), (2, 2, 4, 2)],
+)
+def test_bounding_box_rejects_invalid_raster_geometry(
+    xyxy: tuple[int, int, int, int],
+) -> None:
+    """Direct construction preserves the non-empty raster-box contract."""
+    with pytest.raises(ValueError):
+        BoundingBox(*xyxy)
 
 
 def test_center_to_xyxy_converts_center_box_to_corners():

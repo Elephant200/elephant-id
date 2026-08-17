@@ -31,31 +31,33 @@ class CacheManager:
         """
         self.cache_root = cache_root.resolve()
 
-    def path_for(self, producer_id: str, key: str) -> Path:
+    def path_for(self, producer_slug: str, key: str) -> Path:
         """Return the contained JSON path for a producer and input key.
 
         Raises:
             ValueError: If either identity is unsafe or escapes the cache root.
         """
-        _validate_path_segment(producer_id, "cache producer ID")
+        _validate_path_segment(producer_slug, "cache producer slug")
         _validate_path_segment(key, "cache key")
-        producer_dir = self.cache_root / producer_id
+        producer_dir = self.cache_root / producer_slug
         if not producer_dir.resolve().is_relative_to(self.cache_root):
-            raise ValueError(f"Cache producer ID escapes cache root: {producer_id!r}")
+            raise ValueError(
+                f"Cache producer slug escapes cache root: {producer_slug!r}"
+            )
         path = producer_dir / f"{key}.json"
         if not path.resolve().is_relative_to(producer_dir.resolve()):
             raise ValueError(f"Cache key escapes producer directory: {key!r}")
         return path
 
-    def exists(self, producer_id: str, key: str) -> bool:
+    def exists(self, producer_slug: str, key: str) -> bool:
         """Return whether a producer record is cached.
 
         Raises:
             ValueError: If either identity is unsafe.
         """
-        return self.path_for(producer_id, key).exists()
+        return self.path_for(producer_slug, key).exists()
 
-    def load(self, producer_id: str, key: str) -> dict[str, object]:
+    def load(self, producer_slug: str, key: str) -> dict[str, object]:
         """Load one producer record.
 
         Raises:
@@ -63,16 +65,18 @@ class CacheManager:
             UnicodeDecodeError: If the record is not valid UTF-8.
             FileNotFoundError: If the record does not exist.
         """
-        path = self.path_for(producer_id, key)
+        path = self.path_for(producer_slug, key)
         with path.open(encoding="utf-8") as file:
             record = json.load(file)
         if not isinstance(record, dict):
-            raise ValueError(f"Cache record must be a JSON object: {producer_id}/{key}")
+            raise ValueError(
+                f"Cache record must be a JSON object: {producer_slug}/{key}"
+            )
         return record
 
     def save(
         self,
-        producer_id: str,
+        producer_slug: str,
         key: str,
         value: dict[str, object],
     ) -> None:
@@ -82,7 +86,7 @@ class CacheManager:
             ValueError: If an identity is unsafe or the value is circular.
             TypeError: If the value contains non-JSON-serializable data.
         """
-        path = self.path_for(producer_id, key)
+        path = self.path_for(producer_slug, key)
         path.parent.mkdir(parents=True, exist_ok=True)
         fd, tmp_name = tempfile.mkstemp(
             dir=path.parent, prefix=f".{path.name}.", suffix=".tmp"
@@ -99,14 +103,14 @@ class CacheManager:
 
     def get_or_compute(
         self,
-        producer_id: str,
+        producer_slug: str,
         key: str,
         compute_fn: Callable[[], dict[str, object]],
     ) -> dict[str, object]:
         """Load a producer record or compute and persist it on a miss.
 
         Args:
-            producer_id: Stable identity of the deterministic processor.
+            producer_slug: Stable identity of the deterministic processor.
             key: Caller-supplied opaque record key.
             compute_fn: Function that computes the record on a miss.
 
@@ -116,16 +120,18 @@ class CacheManager:
         Raises:
             ValueError: If either identity is unsafe.
         """
-        self.path_for(producer_id, key)
-        if self.exists(producer_id, key):
+        self.path_for(producer_slug, key)
+        if self.exists(producer_slug, key):
             try:
-                cached = self.load(producer_id, key)
+                cached = self.load(producer_slug, key)
             except (UnicodeDecodeError, ValueError):
-                logger.warning(f"Ignoring corrupt cache record: {producer_id}/{key}")
+                logger.warning(
+                    f"Ignoring corrupt cache record: {producer_slug}/{key}"
+                )
             else:
-                logger.debug(f"Cache hit: {producer_id}/{key}")
+                logger.debug(f"Cache hit: {producer_slug}/{key}")
                 return cached
         results = compute_fn()
-        logger.debug(f"Cache miss: {producer_id}/{key}")
-        self.save(producer_id, key, results)
+        logger.debug(f"Cache miss: {producer_slug}/{key}")
+        self.save(producer_slug, key, results)
         return results

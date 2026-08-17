@@ -26,7 +26,7 @@ AlphaPhant is a research implementation of a fully automated elephant re-identif
 
 **Image** owns `decode_image(encoded: bytes) -> BgrImage` and BGR image and basic/universal geometry utilities.
 
-**Analysis** owns sighting analysis, ear-contour preparation, alpha-shape construction, and tear-profile extraction.
+**Analysis** owns sighting analysis, immutable prepared-ear geometry, and AlphaTear profile extraction. A prepared ear retains both the original floating-point landmarks used by AlphaTear and the contour-snapped anchors used to delimit its contour.
 
 **Inference** owns implementations of ear localization and segmentation and ear landmark detection. Analysis depends on these semantic capabilities rather than particular model architectures.
 
@@ -34,7 +34,48 @@ AlphaPhant is a research implementation of a fully automated elephant re-identif
 
 **Evaluation** owns private ground truth, benchmark examples, candidate keys, splits, failure accounting, metrics, and reproducibility. Its ranker boundary is defined in [evaluation.md](evaluation.md#evaluation-seam).
 
-**CacheManager** persists records under stable processor identities and caller-supplied input keys. Thin stage decorators add caching without changing processor behavior or identity.
+**CacheManager** persists JSON records under stable processor slugs and caller-supplied input keys. Thin stage decorators own keys and typed serialization while preserving processor behavior and identity.
+
+## Processing Module Shape
+
+Processing code is organized by capability rather than generic implementation
+buckets:
+
+```text
+analysis/
+  analyzer.py
+  ear_preparation.py
+  tear_profile.py
+  profile_extraction/
+    protocol.py
+    alpha_tear.py
+    cached.py
+
+inference/
+  detection.py
+  segmentation/
+    protocol.py
+    sam3/
+      features.py
+      cached.py
+      ear_segmenter.py
+  landmarks/
+    protocol.py
+    yolo.py
+    cached.py
+```
+
+`PreparedEar` is the single semantic intermediate between inference and
+profile extraction. It is immutable and contains the source Photo and raster
+box, original detector landmarks, snapped contour anchors, a finite full-image
+contour running between those anchors, inferred side, and positive cleaned
+area. `TearProfile` contains only immutable normalized one-dimensional depths.
+AlphaTear configurations expose intentional research parameters; numerical
+implementation constants remain private.
+
+A settled AlphaTear configuration and its producer slug travel together as one
+colocated `AlphaTearVersion`. Experimental tuning passes a raw
+`AlphaTearConfig` and therefore has no persistent producer slug.
 
 ## Data and Identity
 
@@ -62,8 +103,8 @@ SightingEarPair + PhotoStore
   -> decode_image to BgrImage
   -> ear localization and segmentation
   -> ear landmark detection
-  -> ear contour
-  -> tear profile for each side
+  -> immutable prepared ear
+  -> AlphaTear profile for each side
   -> same-side matching against catalog evidence
   -> strongest left and right evidence per candidate
   -> complete ranked candidate list
@@ -71,20 +112,23 @@ SightingEarPair + PhotoStore
 
 ## Inference Seams
 
-Analysis requires two semantic capabilities:
+Sighting analysis depends on three semantic processing capabilities:
 
-- produce ear masks and locations from a full BGR image;
-- locate the upper and lower anatomical landmarks that define the relevant ear contour.
+- an `EarSegmenter` produces only ear masks and locations from a full BGR image;
+- an `EarLandmarkDetector` returns the strongest upper/lower landmark detection, or `None` when a crop contains no ordinary detection;
+- a `TearProfileExtractor` transforms one immutable prepared ear into a reusable tear profile.
 
-SAM3 currently supplies ear localization and segmentation. The current YOLO keypoint model supplies ear landmarks. Future implementations remain behind the same semantic interfaces.
+SAM3 currently supplies ear localization and segmentation. Its expensive reusable computation returns every requested feature class, so that full multi-feature computation is cached before a thin semantic adapter filters it to ears exactly once. The current YOLO keypoint model supplies ear landmarks. Future implementations remain behind the same semantic interfaces.
 
-Technical writing uses the term ear landmark detection. Code uses `anchor` for detected endpoints.
+Technical writing uses ear landmark detection for model output. Prepared-ear code distinguishes the original detector `landmarks`, which define AlphaTear's polar frame, from contour-snapped `anchors`, which delimit the prepared contour.
+
+Model detections retain floating-point full-image geometry. Raster crops use an immutable integer `BoundingBox` with half-open coordinates, produced by flooring lower edges, ceiling upper edges, and clipping to the image. Public inference results, landmark cache records, and prepared-ear geometry all use full-image coordinates; crop-relative YOLO output is translated before it crosses the landmark processor interface or is persisted.
 
 ## Cache Architecture
 
-One generic CacheManager persists records for every producer. It owns safe paths, JSON loading, atomic replacement, and obvious-corruption handling; it does not select whether a processing stage is cached.
+One generic CacheManager persists records for every producer. It owns safe paths, JSON loading, atomic replacement, and obvious-corruption handling; it does not select whether a processing stage is cached or understand processor payloads.
 
-Each deterministic processor exposes a stable `producer_id` identifying the model, weights, prompt, preprocessing, thresholds, and every other output-changing setting. An output-changing processor change gets a new identity; ordinary refactoring does not. Cached decorators delegate the same identity as their wrapped processors and add only persistence behavior.
+Each settled deterministic processor exposes a stable human-readable `producer_slug` identifying the model, weights, prompt, preprocessing, thresholds, and every other output-changing setting. An output-changing processor change gets a new slug; ordinary refactoring does not. An experimental AlphaTear extractor may remain unversioned because parameter-tuning composition never persists its output. Cached decorators delegate the same slug as their wrapped processors and add only persistence behavior.
 
 Keys contain only runtime input identity and actual dependent inputs. They remain readable:
 
@@ -93,9 +137,16 @@ sam3-features/<photo UUID>
 yolo26n-keypoints-v1/<photo UUID>__crop_<x1>_<y1>_<x2>_<y2>
 ```
 
-Dependent records use upstream processor identities and semantic inputs such as side or crop coordinates. CacheManager namespaces and safely stores caller-supplied keys; it does not hash keys, read photos, resolve Dataset metadata, or understand producer payloads. Writes are atomic and loaded records are validated.
+The SAM3 record contains the complete multi-feature result on both hits and misses; only its downstream ear adapter filters classes. Landmark records contain full-image-relative output. Final AlphaTear keys contain the source photo UUID, integer raster box, prepared ear's inferred side, segmentation producer slug, and landmark producer slug. They do not hash the derived contour or carry separate ear-preparation provenance. A material preparation or extraction change bumps the settled AlphaTear slug.
 
-Standard construction decorates ear segmentation, ear landmark detection, and tear-profile extraction with cached adapters. Parameter-tuning construction leaves the tear-profile extractor undecorated, bypassing profile reads and writes while retaining cached segmentation and landmark detection. Sighting analysis and ranking are unaware of cache policy.
+CacheManager namespaces and safely stores caller-supplied keys; it does not hash keys, read photos, resolve Dataset metadata, or understand producer payloads. Cached decorators construct keys, serialize typed outputs to JSON, parse JSON back to typed outputs, and validate their own records.
+
+Standard construction caches SAM3's full feature computation, landmark detection, and settled AlphaTear extraction. Parameter-tuning construction injects a raw experimental AlphaTear extractor, bypassing profile reads and writes while retaining cached SAM3 features and landmark detection. CacheManager has no permission or tuning modes. Sighting analysis and ranking are unaware of cache policy.
+
+When one source Photo supplies both declared sides, it is prepared on the first
+side encountered and then reused. A retrieval, decoding, inference, or
+preparation failure before side resolution is attributed to that first declared
+side; analysis processes left before right.
 
 Source paths and legacy identifiers are metadata, not cache identity. Existing cache records are migrated from legacy identifiers to photo UUIDs by joining the preserved original CSV and assigned CSV through unchanged image paths.
 

@@ -23,9 +23,11 @@ Each reference Photo follows the same sequence:
 2. **Ear localization and ear segmentation** find the declared ear and produce its mask and ear contour.
 3. **Ear landmark detection** finds the two anatomical endpoints that define the relevant contour.
 4. **Ear-contour preparation** snaps the landmarks to the segmentation contour, selects the relevant anchor-to-anchor path, and determines the side-aware geometry.
-5. **Tear-profile extraction** constructs an alpha shape from the ear contour and produces the one-dimensional tear profile.
+5. **Tear-profile extraction** runs AlphaTear, which constructs an alpha shape internally and produces the one-dimensional tear profile.
 
 The declared side is authoritative. If the pipeline cannot produce a valid ear of that side, analysis fails explicitly. Research adds no fallback selection after the ear pair has been chosen.
+
+Candidate reduction uses two intentionally different geometric measures. The legacy preliminary heuristic compares segmentation-mask pixel area before landmark detection; after preparation, declared-side disambiguation compares the filled cleaned-contour area and preserves input order for exact ties.
 
 SAM3 currently performs ear localization and segmentation. A YOLO keypoint model currently performs ear landmark detection. Replacements use the semantic inference interfaces in [architecture.md](architecture.md).
 
@@ -60,6 +62,6 @@ Both sides are required: a known elephant is scored only when it has valid left 
 
 Expensive model invocations and final per-ear tear profiles are cached. Ear selection, sighting orchestration, contour preparation, catalog grouping, and ranking are not independently cached.
 
-A final tear-profile record is per ear. Its key depends on the segmentation record, landmark record, declared side, and integer bounding box of the selected ear detection. Bounding-box identity remains stable when candidate ordering changes. Cache identity and producer versioning are defined in [architecture.md](architecture.md).
+A final tear-profile record is per prepared ear. Its key contains the source photo UUID, integer raster bounding box, inferred side, segmentation producer slug, and landmark producer slug. Bounding-box identity remains stable when candidate ordering changes. Cache identity and producer versioning are defined in [architecture.md](architecture.md).
 
-Caching is selected when processors are composed. Standard runs decorate all three expensive stages; parameter-tuning runs use the raw tear-profile extractor while retaining cached segmentation and landmark detection. The analyzer and ranker expose no cache-policy options.
+Caching is selected when processors are composed. Standard runs cache the complete SAM3 multi-feature computation before its ear-only adapter, landmark detection, and AlphaTear extraction. Parameter-tuning runs use a raw unversioned AlphaTear extractor while retaining cached SAM3 features and landmark detection. The analyzer and ranker expose no cache-policy options.

@@ -125,18 +125,18 @@ def test_missing_record_is_absent_and_cannot_be_loaded(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize(
-    "producer_id",
+    "producer_slug",
     ["", ".", "..", "sam3/features", "sam3\\features"],
 )
-def test_producer_id_must_be_one_safe_path_segment(
+def test_producer_slug_must_be_one_safe_path_segment(
     tmp_path: Path,
-    producer_id: str,
+    producer_slug: str,
 ) -> None:
     """Producer identities cannot be empty, nested, or traversal segments."""
     cache = CacheManager(cache_root=tmp_path)
 
-    with pytest.raises(ValueError, match="cache producer ID"):
-        cache.path_for(producer_id, PHOTO_KEY)
+    with pytest.raises(ValueError, match="cache producer slug"):
+        cache.path_for(producer_slug, PHOTO_KEY)
 
 
 @pytest.mark.parametrize(
@@ -160,5 +160,5 @@ def test_producer_symlink_cannot_escape_cache_root(tmp_path: Path) -> None:
     (cache_root / "sam3-features").symlink_to(outside, target_is_directory=True)
     cache = CacheManager(cache_root=cache_root)
 
-    with pytest.raises(ValueError, match="producer ID escapes cache root"):
+    with pytest.raises(ValueError, match="producer slug escapes cache root"):
         cache.path_for("sam3-features", PHOTO_KEY)

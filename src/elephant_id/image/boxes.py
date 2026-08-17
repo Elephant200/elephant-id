@@ -9,7 +9,46 @@ Boxes are half-open: ``x2``/``y2`` are exclusive.
 """
 
 
+from dataclasses import dataclass
 from math import ceil, floor, isfinite
+
+
+@dataclass(frozen=True, slots=True)
+class BoundingBox:
+    """An integer half-open bounding box for raster operations."""
+
+    x1: int
+    y1: int
+    x2: int
+    y2: int
+
+    def __post_init__(self) -> None:
+        """Require a non-empty raster box with non-negative lower edges."""
+        if self.x1 < 0 or self.y1 < 0:
+            raise ValueError("Raster bounding-box lower edges must be non-negative")
+        if self.x2 <= self.x1 or self.y2 <= self.y1:
+            raise ValueError("Raster bounding boxes must have positive area")
+
+    @classmethod
+    def from_float(
+        cls,
+        xyxy: tuple[float, float, float, float],
+        *,
+        image_width: int,
+        image_height: int,
+    ) -> "BoundingBox":
+        """Expand float geometry outward and clip it to an image."""
+        return cls(
+            *clip_xyxy(
+                *xyxy,
+                image_width=image_width,
+                image_height=image_height,
+            )
+        )
+
+    def as_tuple(self) -> tuple[int, int, int, int]:
+        """Return the box as ``(x1, y1, x2, y2)``."""
+        return self.x1, self.y1, self.x2, self.y2
 
 
 def center_to_xyxy(

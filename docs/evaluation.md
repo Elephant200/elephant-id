@@ -59,9 +59,9 @@ The assigned photo and sighting IDs are preserved artifacts rather than values d
 
 Each report records the exact git commit and identifies the benchmark set.
 
-`uv run eval` runs the default benchmark set with the standard cached processor composition. Parameter-tuning tools compose an uncached tear-profile extractor with cached segmentation and landmark detection. Output writing remains outside deterministic evaluation calculation.
+`uv run eval` runs the default benchmark set with the standard cached processor composition. Parameter-tuning tools compose an uncached AlphaTear extractor with cached SAM3 feature segmentation and landmark detection. Output writing remains outside deterministic evaluation calculation.
 
-See [ADR 0005](adr/0005-separate-retrieval-evaluation-from-implementation.md), [ADR 0007](adr/0007-pin-evaluation-by-git-commit.md), [ADR 0008](adr/0008-use-permanent-opaque-photo-identity.md), and [ADR 0009](adr/0009-select-cache-persistence-through-composition.md).
+See [ADR 0005](adr/0005-separate-retrieval-evaluation-from-implementation.md), [ADR 0007](adr/0007-pin-evaluation-by-git-commit.md), [ADR 0008](adr/0008-use-permanent-opaque-photo-identity.md), and [ADR 0010](adr/0010-cache-reusable-processing-through-composition.md).
 
 ## Future Protocols
 

@@ -72,12 +72,20 @@ _Avoid_: Ear margin when referring to the computational representation
 The geometric reference constructed from an ear contour during tear-profile extraction.
 _Avoid_: Alpha hull
 
+**AlphaTear**:
+The current tear-profile extraction algorithm. It uses an alpha shape as an
+internal geometric reference to locate and measure tears along a prepared ear
+contour. AlphaTear names the extractor; AlphaPhant names the complete
+candidate-ranking pipeline.
+_Avoid_: AlphaPhant when referring only to extraction
+
 **Tear profile**:
 A one-dimensional, alpha-shape-derived representation of an ear contour used for matching.
 _Avoid_: Tear signature, SEEK code, embedding when referring to the current algorithm
 
 **Tear-profile extraction**:
-The transformation of an ear contour into an alpha-shape-derived tear profile.
+The transformation of a prepared ear contour into a tear profile. AlphaTear is
+the current extraction algorithm.
 _Avoid_: Tear coding, tear-signature extraction
 
 **Tear-profile matching**:

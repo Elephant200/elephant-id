@@ -11,14 +11,13 @@ import cv2
 import numpy as np
 from matplotlib.axes import Axes
 
-from elephant_id.ai.detection import Detection
-from elephant_id.coding.ears.anchored_ear import AnchoredEar
-from elephant_id.coding.ears.tear_profile import TearProfile, polar_directions
-from elephant_id.constants import TEAR_TRIM_DEGREES
+from elephant_id.analysis import TearProfile
+from elephant_id.analysis.profile_extraction.alpha_tear import DEFAULT_VERSION
 from elephant_id.image import BgrImage
-from elephant_id.image.boxes import clip_xyxy
 from elephant_id.image.masks import decode_rle_mask
-from elephant_id.image.transforms import apply_crop
+from elephant_id.inference import Detection
+
+_PROFILE_TRIM_DEGREES = DEFAULT_VERSION.config.trim_degrees
 
 
 def _blend_bgr(
@@ -174,143 +173,6 @@ def _tear_profile_angles(profile_length: int) -> np.ndarray:
     return np.linspace(0.0, 180.0, profile_length)
 
 
-def _plot_tear_polar_guides(
-    axis: Axes,
-    ear: AnchoredEar,
-    tear_profile: TearProfile,
-    spoke_length: float,
-    offset: np.ndarray,
-) -> None:
-    """Draw the tear-profile polar arc, spokes, and trim boundaries."""
-    upper = np.asarray(ear.original_anchor_points[0], dtype=float)
-    lower = np.asarray(ear.original_anchor_points[1], dtype=float)
-    midpoint, arc_directions = polar_directions(
-        upper,
-        lower,
-        ear.side,
-        np.linspace(0.0, 180.0, 181),
-    )
-    radius = tear_profile.scale
-    axis.plot(
-        *(midpoint + radius * arc_directions - offset).T,
-        color="gold",
-        lw=0.9,
-        alpha=0.8,
-    )
-
-    _, spoke_directions = polar_directions(
-        upper,
-        lower,
-        ear.side,
-        np.arange(0.0, 181.0, 30.0),
-    )
-    for direction in spoke_directions:
-        tip = midpoint + spoke_length * direction
-        axis.plot(
-            *np.column_stack([midpoint - offset, tip - offset]),
-            color="gold",
-            lw=0.7,
-            alpha=0.65,
-        )
-
-    _, trim_directions = polar_directions(
-        upper,
-        lower,
-        ear.side,
-        np.asarray((TEAR_TRIM_DEGREES, 180.0 - TEAR_TRIM_DEGREES)),
-    )
-    for direction in trim_directions:
-        tip = midpoint + radius * direction
-        axis.plot(
-            *np.column_stack([midpoint - offset, tip - offset]),
-            color="tab:orange",
-            ls="--",
-            lw=1.0,
-        )
-
-
-def plot_tear_profile_geometry(
-    axis: Axes,
-    image: BgrImage,
-    ear: AnchoredEar,
-    tear_profile: TearProfile,
-) -> None:
-    """Plot an anchored ear crop with the tear-profile coordinate system."""
-    crop = apply_crop(image, ear.xyxy)
-    x1, y1, _, _ = clip_xyxy(*ear.xyxy, image.shape[1], image.shape[0])
-    offset = np.asarray((x1, y1), dtype=float)
-
-    axis.imshow(cv2.cvtColor(crop, cv2.COLOR_BGR2RGB))
-    axis.plot(
-        *(ear.resampled_contour(1024) - offset).T,
-        color="white",
-        linewidth=1.0,
-        alpha=0.9,
-        label="contour",
-    )
-    axis.plot(
-        *(tear_profile.reference - offset).T,
-        color="tab:cyan",
-        linewidth=1.3,
-        label="reference",
-    )
-    _plot_tear_polar_guides(
-        axis,
-        ear,
-        tear_profile,
-        float(np.hypot(*crop.shape[:2])),
-        offset,
-    )
-
-    predicted = np.asarray(ear.original_anchor_points, dtype=float)
-    snapped = np.asarray(ear.anchor_points, dtype=float)
-    axis.scatter(
-        *(predicted - offset).T,
-        marker="x",
-        color="red",
-        s=40,
-        linewidths=2,
-        label="predicted anchor",
-        zorder=5,
-    )
-    axis.scatter(
-        *(snapped - offset).T,
-        color="yellow",
-        edgecolors="black",
-        s=30,
-        linewidths=0.5,
-        label="snapped anchor",
-        zorder=5,
-    )
-
-    angles = _tear_profile_angles(len(tear_profile.profile))
-    coded = (angles > TEAR_TRIM_DEGREES) & (angles < 180.0 - TEAR_TRIM_DEGREES)
-    deepest_index = int(np.argmax(np.where(coded, tear_profile.profile, -np.inf)))
-    if (
-        tear_profile.profile[deepest_index] > 0
-        and np.isfinite(tear_profile.origins[deepest_index]).all()
-    ):
-        hit = (
-            tear_profile.origins[deepest_index]
-            + tear_profile.profile[deepest_index]
-            * tear_profile.scale
-            * tear_profile.normals[deepest_index]
-        )
-        axis.plot(
-            *np.column_stack([tear_profile.origins[deepest_index] - offset, hit - offset]),
-            color="red",
-            lw=2.0,
-            label="deepest ray",
-        )
-
-    height, width = crop.shape[:2]
-    axis.set(xlim=(-0.5, width - 0.5), ylim=(height - 0.5, -0.5))
-    axis.set_xticks([])
-    axis.set_yticks([])
-    for spine in axis.spines.values():
-        spine.set_visible(False)
-
-
 def plot_tear_profile(
     axis: Axes,
     tear_profile: TearProfile | np.ndarray,
@@ -318,19 +180,30 @@ def plot_tear_profile(
     color: str = "tab:red",
     y_max: float = 0.4,
     title: str = "Tear profile",
+    trim_degrees: float = _PROFILE_TRIM_DEGREES,
 ) -> None:
     """Plot one tear-depth profile with trimmed angle bands."""
     profile = (
-        np.asarray(tear_profile.profile, dtype=np.float64)
+        np.asarray(tear_profile.depths, dtype=np.float64)
         if isinstance(tear_profile, TearProfile)
         else np.asarray(tear_profile, dtype=np.float64)
     )
     angles = _tear_profile_angles(len(profile))
     axis.plot(angles, profile, color=color, linewidth=1.4)
-    axis.axvspan(0, TEAR_TRIM_DEGREES, color="0.85")
-    axis.axvspan(180.0 - TEAR_TRIM_DEGREES, 180.0, color="0.85")
-    axis.axvline(TEAR_TRIM_DEGREES, color="tab:orange", linestyle="--", lw=1.0)
-    axis.axvline(180.0 - TEAR_TRIM_DEGREES, color="tab:orange", linestyle="--", lw=1.0)
+    axis.axvspan(0, trim_degrees, color="0.85")
+    axis.axvspan(180.0 - trim_degrees, 180.0, color="0.85")
+    axis.axvline(
+        trim_degrees,
+        color="tab:orange",
+        linestyle="--",
+        lw=1.0,
+    )
+    axis.axvline(
+        180.0 - trim_degrees,
+        color="tab:orange",
+        linestyle="--",
+        lw=1.0,
+    )
     axis.set(xlim=(0, 183), ylim=(-0.03, y_max))
     axis.set_xticks(np.arange(0, 181, 30))
     axis.set_xlabel("angle (degrees)", fontsize=8, labelpad=2)

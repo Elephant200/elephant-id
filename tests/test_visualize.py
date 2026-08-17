@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from elephant_id.ai.detection import Detection
+from elephant_id.inference import Detection
 from elephant_id.visualize import (
     align_tear_profile_for_plot,
     apply_alpha_mask,

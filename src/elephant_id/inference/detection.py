@@ -1,4 +1,4 @@
-"""Typed model-output detection shared across the AI services."""
+"""Typed model-output detections shared by inference processors."""
 
 import dataclasses
 from dataclasses import dataclass
@@ -13,12 +13,10 @@ from elephant_id.image.masks import RleMask, decode_rle_mask
 
 @dataclass(frozen=True, slots=True)
 class Detection:
-    """
-    One model detection: a box, optional mask/keypoints, and a label.
+    """One immutable model detection.
 
-    ``xyxy`` is image-space and half-open (x2/y2 exclusive), matching
-    ``image.boxes``. Immutable; ``translate`` and ``clip`` return new
-    instances. Not hashable (holds a dict).
+    Semantic inference processors return full-image coordinates. Private model
+    adapters may use this value transiently before translating crop output.
     """
 
     xyxy: tuple[float, float, float, float]
@@ -28,35 +26,34 @@ class Detection:
     rle_mask: RleMask | None = None
     keypoints: tuple[tuple[float, float], ...] | None = None
 
-    # --- geometry ---
     @property
     def x1(self) -> float:
-        """Left edge of the detection box."""
+        """Return the left edge."""
         return self.xyxy[0]
 
     @property
     def y1(self) -> float:
-        """Top edge of the detection box."""
+        """Return the top edge."""
         return self.xyxy[1]
 
     @property
     def x2(self) -> float:
-        """Right edge of the detection box."""
+        """Return the right edge."""
         return self.xyxy[2]
 
     @property
     def y2(self) -> float:
-        """Bottom edge of the detection box."""
+        """Return the bottom edge."""
         return self.xyxy[3]
 
     def area(self) -> float:
-        """Mask area (exact pixel count) if masked, else box area."""
+        """Return mask area when present, otherwise box area."""
         if self.rle_mask is not None:
             return float(coco_mask.area([self.rle_mask])[0])
         return (self.x2 - self.x1) * (self.y2 - self.y1)
 
     def get_mask(self) -> np.ndarray:
-        """Decoded boolean mask. Recomputed on each call."""
+        """Return the decoded boolean mask."""
         if self.rle_mask is None:
             raise ValueError("Detection has no mask")
         return decode_rle_mask(self.rle_mask)
@@ -64,32 +61,36 @@ class Detection:
     def intersection_area(self, other: "Detection") -> float:
         """Return overlap area with another detection."""
         if self.rle_mask is not None and other.rle_mask is not None:
-            return float(coco_mask.area([coco_mask.merge([self.rle_mask, other.rle_mask], intersect=True)])[0])
-
+            intersection = coco_mask.merge(
+                [self.rle_mask, other.rle_mask], intersect=True
+            )
+            return float(coco_mask.area([intersection])[0])
         if self.rle_mask is None and other.rle_mask is None:
-            width = max(0, min(self.x2, other.x2) - max(self.x1, other.x1))
-            height = max(0, min(self.y2, other.y2) - max(self.y1, other.y1))
+            width = max(0.0, min(self.x2, other.x2) - max(self.x1, other.x1))
+            height = max(0.0, min(self.y2, other.y2) - max(self.y1, other.y1))
             return width * height
-
-        mask_detection, box_detection = (self, other) if self.rle_mask is not None else (other, self)
+        mask_detection, box_detection = (
+            (self, other) if self.rle_mask is not None else (other, self)
+        )
         mask = mask_detection.get_mask()
-        x1, y1, x2, y2 = clip_xyxy(*box_detection.xyxy, mask.shape[1], mask.shape[0])
+        x1, y1, x2, y2 = clip_xyxy(
+            *box_detection.xyxy, mask.shape[1], mask.shape[0]
+        )
         return float(np.sum(mask[y1:y2, x1:x2]))
 
     def union_area(self, other: "Detection") -> float:
-        """Return combined coverage of this detection and another."""
+        """Return combined coverage with another detection."""
         return self.area() + other.area() - self.intersection_area(other)
 
     def iou(self, other: "Detection") -> float:
-        """Return intersection-over-union with another detection."""
+        """Return intersection over union with another detection."""
         return self.intersection_area(other) / self.union_area(other)
 
-    # --- transforms (return new instances) ---
     def translate(self, dx: float, dy: float) -> "Detection":
-        """Return a copy shifted by (dx, dy), moving box and keypoints.
+        """Return a copy shifted by ``dx`` and ``dy``.
 
         Raises:
-            ValueError: If the detection has an RLE mask.
+            ValueError: If the detection contains a full-image mask.
         """
         if self.rle_mask is not None:
             raise ValueError("Cannot translate a detection with an RLE mask")
@@ -99,22 +100,26 @@ class Detection:
             keypoints=(
                 None
                 if self.keypoints is None
-                else tuple((kx + dx, ky + dy) for kx, ky in self.keypoints)
+                else tuple((x + dx, y + dy) for x, y in self.keypoints)
             ),
         )
 
     def clip(self, image_width: int, image_height: int) -> "Detection":
-        """Return a copy with the box clipped to image bounds.
-
-        Keypoints are left untouched.
-        """
+        """Return a copy with its half-open box clipped to image bounds."""
         return dataclasses.replace(
-            self, xyxy=tuple(float(coord) for coord in clip_xyxy(*self.xyxy, image_width, image_height))
+            self,
+            xyxy=tuple(
+                float(value)
+                for value in clip_xyxy(
+                    *self.xyxy,
+                    image_width,
+                    image_height,
+                )
+            ),
         )
 
-    # --- cache serialization ---
     def to_dict(self) -> dict[str, Any]:
-        """Serialize to a JSON-friendly dict for the cache."""
+        """Serialize the detection to a JSON-compatible record."""
         return {
             "x1": self.x1,
             "y1": self.y1,
@@ -133,16 +138,24 @@ class Detection:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "Detection":
-        """Reconstruct from a dict produced by :meth:`to_dict`."""
+        """Reconstruct a detection from its serialized record."""
         return cls(
-            xyxy=(data["x1"], data["y1"], data["x2"], data["y2"]),
-            class_name=data["class_name"],
-            class_id=data["class_id"],
-            confidence=data["confidence"],
+            xyxy=(
+                float(data["x1"]),
+                float(data["y1"]),
+                float(data["x2"]),
+                float(data["y2"]),
+            ),
+            class_name=str(data["class_name"]),
+            class_id=int(data["class_id"]),
+            confidence=float(data["confidence"]),
             rle_mask=data.get("rle_mask"),
             keypoints=(
                 None
-                if not data.get("keypoints")
-                else tuple(tuple(kp) for kp in data["keypoints"])
+                if data.get("keypoints") is None
+                else tuple(
+                    (float(point[0]), float(point[1]))
+                    for point in data["keypoints"]
+                )
             ),
         )
