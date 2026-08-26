@@ -30,9 +30,9 @@ def _coerce_optional_int(val: object) -> int | None:
 def _birth_year_midpoint(decade: int, sighting_year: int) -> int:
     """Full birth year assuming birth at the recorded decade's midpoint.
 
-    ``decade`` is the last two digits of the birth decade as recorded in the
-    SEEK code (e.g. ``80`` → the 1980s). The century is the most recent one
-    whose decade start does not exceed ``sighting_year`` — so ``0`` reads as
+    `decade` is the last two digits of the birth decade as recorded in the
+    SEEK code (e.g. `80` → the 1980s). The century is the most recent one
+    whose decade start does not exceed `sighting_year` — so `0` reads as
     the 2000s rather than the 1900s for the dataset's 2002+ sightings.
     """
     starts = [base + decade for base in (1900, 2000) if base + decade <= sighting_year]
@@ -41,10 +41,10 @@ def _birth_year_midpoint(decade: int, sighting_year: int) -> int:
 
 
 def age_from_decade(decade: int | None, sighting_year: int | None) -> int | None:
-    """Approximate age at sighting, or ``None`` when either input is unknown.
+    """Approximate age at sighting, or `None` when either input is unknown.
 
     The birth year is taken as the midpoint of the recorded birth decade, so
-    the result is coarse. Clamped at ``0`` since a midpoint estimate can land
+    the result is coarse. Clamped at `0` since a midpoint estimate can land
     just after a sighting (e.g. a calf seen early in its own birth decade).
     """
     if decade is None or sighting_year is None:
@@ -150,7 +150,7 @@ def matches(
     elephant_seek: dict[str, str],
     cfg: FilterConfig,
 ) -> bool:
-    """Return whether ``key`` survives all active filters in ``cfg``."""
+    """Return whether `key` survives all active filters in `cfg`."""
     if cfg.years_active():
         y = _year_from_date(key.date)
         if y is None:

@@ -1,7 +1,7 @@
 """Typed undo-stack actions.
 
 Each action records the data needed to undo one user-initiated
-mutation. Action objects are immutable; the dispatcher in ``state.py``
+mutation. Action objects are immutable; the dispatcher in `state.py`
 pattern-matches on the concrete subtype.
 """
 
@@ -27,7 +27,7 @@ class PriorityToggle:
 
     @property
     def affected_basenames(self) -> tuple[str, ...]:
-        # ``from`` and ``to`` differ only by the priority prefix, so any one
+        # `from` and `to` differ only by the priority prefix, so any one
         # of them stripped gives the affected plain basename.
         from .samples import plain_basename
         return (plain_basename(self.from_basename),)

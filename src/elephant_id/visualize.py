@@ -1,6 +1,6 @@
 """Visualization utilities for model predictions and tear-profile diagnostics.
 
-OpenCV image helpers take and return a :data:`BgrImage`. ``color`` arguments and
+OpenCV image helpers take and return a `BgrImage`. `color` arguments and
 the palette are authored in RGB and flipped to BGR only when written into the
 image buffer.
 """
@@ -106,7 +106,7 @@ def visualize_predictions(
 
     Args:
         image: Source BGR image.
-        detections: Detections to render (see :class:`Detection`).
+        detections: Detections to render (see `Detection`).
         mask_alpha: Blend factor for the mask overlay in [0, 1].
 
     Returns:

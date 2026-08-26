@@ -225,7 +225,7 @@ class AnalyzerWorkbench:
         return json.dumps(self.get(run_id).normalized, indent=2, allow_nan=False).encode()
 
     def profile_npy(self, run_id: str, side: str) -> bytes:
-        """Return one selected ear's raw tear profile in NumPy ``.npy`` format."""
+        """Return one selected ear's raw tear profile in NumPy `.npy` format."""
         if side not in {"left", "right"}:
             raise ValueError("Ear side must be left or right")
         run = self.get(run_id)

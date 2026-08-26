@@ -1,7 +1,7 @@
 """Image types and operations for elephant-id.
 
 The encoded-byte decode boundary is exported beside the canonical
-:data:`BgrImage` type. Import other operations from their submodules.
+`BgrImage` type. Import other operations from their submodules.
 """
 
 from elephant_id.image.bgr import BgrImage, decode_image

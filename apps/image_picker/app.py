@@ -24,8 +24,8 @@ from .state import PickerState
 def create_app() -> Flask:
     """Build the configured matching image picker Flask app.
 
-    The manifest and exported crops live under ``HIGH_QUALITY_ROOT`` unless the
-    ``IMAGE_PICKER_OUTPUT_ROOT`` environment variable overrides it, which lets
+    The manifest and exported crops live under `HIGH_QUALITY_ROOT` unless the
+    `IMAGE_PICKER_OUTPUT_ROOT` environment variable overrides it, which lets
     the app run against a scratch directory without touching real picks.
     """
     configure_logging()

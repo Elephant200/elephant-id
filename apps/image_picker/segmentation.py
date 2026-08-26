@@ -2,7 +2,7 @@
 
 A sighting is flagged for reviewer awareness when any of its photos already
 appears in the segmentation annotation batch folder. The flag is derived from
-that folder's ``{photo_identifier}_{side}.jpg`` naming convention and is never
+that folder's `{photo_identifier}_{side}.jpg` naming convention and is never
 persisted in the manifest, so it can never drift out of sync with what is
 actually in the batch (spec user stories 8 and 17).
 """
@@ -18,7 +18,7 @@ from elephant_id.domain import Sighting
 
 from .config import SEGMENTATION_BATCH_ROOT, SIDES
 
-# Batch crops are named ``{photo_identifier}_{side}.jpg``; the photo identifier
+# Batch crops are named `{photo_identifier}_{side}.jpg`; the photo identifier
 # is recovered by stripping the trailing side suffix.
 _BATCH_STEM_RE = re.compile(rf"^(?P<photo>.+)_(?:{'|'.join(SIDES)})$")
 

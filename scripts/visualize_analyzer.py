@@ -1,7 +1,7 @@
 """Show photo analysis as fixed Matplotlib dashboards.
 
-Run with ``uv run python scripts/visualize_analyzer.py PHOTO_IDENTIFIER [PHOTO_IDENTIFIER ...]``.
-Figures are displayed and saved under ``outputs/analyzer/``.
+Run with `uv run python scripts/visualize_analyzer.py PHOTO_IDENTIFIER [PHOTO_IDENTIFIER ...]`.
+Figures are displayed and saved under `outputs/analyzer/`.
 """
 
 import argparse

@@ -4,8 +4,8 @@ Coordinate convention (repo-wide): geometry is stored and computed in
 **float** (boxes, keypoints, contours, anything rotated/interpolated).
 Convert to **int** only at the raster boundary, such as indexing a
 pixel array or calling an OpenCV draw function. Do it through
-:func:`clip_xyxy` for boxes or mask helpers rather than ad-hoc casts.
-Boxes are half-open: ``x2``/``y2`` are exclusive.
+`clip_xyxy` for boxes or mask helpers rather than ad-hoc casts.
+Boxes are half-open: `x2`/`y2` are exclusive.
 """
 
 
@@ -47,7 +47,7 @@ class BoundingBox:
         )
 
     def as_tuple(self) -> tuple[int, int, int, int]:
-        """Return the box as ``(x1, y1, x2, y2)``."""
+        """Return the box as `(x1, y1, x2, y2)`."""
         return self.x1, self.y1, self.x2, self.y2
 
 
@@ -76,7 +76,7 @@ def clip_xyxy(
 ) -> tuple[int, int, int, int]:
     """Clip an xyxy box to image bounds.
 
-    Coordinates use the half-open convention: ``x2``/``y2`` are
+    Coordinates use the half-open convention: `x2`/`y2` are
     exclusive. A valid box has positive area and overlaps the image.
 
     Args:

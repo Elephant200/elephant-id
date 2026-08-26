@@ -1,9 +1,9 @@
 """Manifest read/write and crop export for the matching image picker.
 
 The manifest is the single source of truth for picks. A pick is an upsert
-keyed by ``(side, identity, sighting_date)``: recording one writes its row and
-exports two images -- a full-frame copy under ``images_full`` and a tight ear
-crop under ``images_crop`` -- and replacing it deletes the stale exports first.
+keyed by `(side, identity, sighting_date)`: recording one writes its row and
+exports two images -- a full-frame copy under `images_full` and a tight ear
+crop under `images_crop` -- and replacing it deletes the stale exports first.
 """
 
 from __future__ import annotations
@@ -56,7 +56,7 @@ class ManifestStore:
         dataset: Dataset,
         root: Path = HIGH_QUALITY_ROOT,
     ) -> None:
-        """Derive the manifest and export paths under ``root``; touch nothing yet."""
+        """Derive the manifest and export paths under `root`; touch nothing yet."""
         self.dataset = dataset
         self.root = root
         self.manifest_path = root / "manifest.csv"
@@ -65,7 +65,7 @@ class ManifestStore:
         self._lock = threading.Lock()
 
     def picks_for_identity(self, identity: str) -> dict[tuple[str, str], str]:
-        """Return ``{(side, sighting_date): photo_identifier}`` for one elephant."""
+        """Return `{(side, sighting_date): photo_identifier}` for one elephant."""
         return self.picks_by_identity().get(identity, {})
 
     def picks_by_identity(self) -> dict[str, dict[tuple[str, str], str]]:

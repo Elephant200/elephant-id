@@ -1,9 +1,9 @@
 """Ear-candidate generation for the matching image picker.
 
-Candidates come from the production :class:`PhotoAnalyzer` so the picker's
+Candidates come from the production `PhotoAnalyzer` so the picker's
 body detection, feature-on-body filtering, and usable-ear selection are the
 exact same code path as the rest of the project. Each accepted anchored ear
-becomes one ranked candidate scored by its ``quality`` prior.
+becomes one ranked candidate scored by its `quality` prior.
 """
 
 from __future__ import annotations
@@ -67,7 +67,7 @@ class EarCandidate:
 class SightingCandidates:
     """A sighting's ear candidates, pooled across its photos and split by side.
 
-    ``left`` and ``right`` are each ranked by quality score descending.
+    `left` and `right` are each ranked by quality score descending.
     """
 
     sighting_id: str
@@ -76,7 +76,7 @@ class SightingCandidates:
     right: tuple[EarCandidate, ...]
 
     def qualifies(self, threshold: float) -> bool:
-        """Whether both sides have a candidate scoring above ``threshold``."""
+        """Whether both sides have a candidate scoring above `threshold`."""
         return (
             bool(self.left)
             and self.left[0].quality > threshold
@@ -97,7 +97,7 @@ class CandidateAnalyzer:
         dataset: Dataset,
         cache_root: Path = Path(DEFAULT_CACHE_ROOT),
     ) -> None:
-        """Wrap a cache-backed :class:`PhotoAnalyzer`."""
+        """Wrap a cache-backed `PhotoAnalyzer`."""
         self._analyzer = PhotoAnalyzer(dataset=dataset, cache_root=cache_root)
 
     def analyze_sighting(self, sighting: Sighting) -> SightingCandidates:

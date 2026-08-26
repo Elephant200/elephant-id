@@ -24,8 +24,8 @@ def symmetrized_cohort_z(pairwise_scores: np.ndarray) -> np.ndarray:
             pairs (for example different ear sides) must be NaN and stay NaN.
 
     Returns:
-        ``z[i, j] = (s[i, j] - mean_i) / std_i + (s[i, j] - mean_j) / std_j``
-        where ``s`` is the symmetrized matrix and the statistics are computed
+        `z[i, j] = (s[i, j] - mean_i) / std_i + (s[i, j] - mean_j) / std_j`
+        where `s` is the symmetrized matrix and the statistics are computed
         over each row's and column's finite entries. The sum, rather than the
         average, fixes a score scale that downstream calibration absorbs.
 

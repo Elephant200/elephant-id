@@ -3,10 +3,10 @@
 A SEEK code is a compact string describing an elephant. The leading
 character may be a legacy digit, which we strip. After that:
 
-* index 0:        sex (``B`` bull / ``C`` cow)
-* indices 1..2:   ``<aa>`` age (birth-year last two digits), or ``__``
-* indices 3..6:   ``T<left><right>`` for tusks (``0``/``1``)
-* trailing tail:  ``X<xl><xr>S<sl><sm><sr>`` for extreme/special
+* index 0:        sex (`B` bull / `C` cow)
+* indices 1..2:   `<aa>` age (birth-year last two digits), or `__`
+* indices 3..6:   `T<left><right>` for tusks (`0`/`1`)
+* trailing tail:  `X<xl><xr>S<sl><sm><sr>` for extreme/special
                   features; other characters there are wildcards.
 """
 
@@ -15,7 +15,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-# Optional trailing ``_`` … suffix is common for unknown tail; keep it on the
+# Optional trailing `_` … suffix is common for unknown tail; keep it on the
 # string and match it here.
 TUSK_XS_RE = re.compile(r"X(.)(.)S(...)(_*)$")
 
@@ -56,8 +56,8 @@ def slot_01(ch: str) -> int | None:
 def explicit_non_normal(code_raw: str) -> bool:
     """True iff SEEK explicitly flags non-normal.
 
-    A code is non-normal when either T slot is ``0``, or any X/S slot is
-    ``1``. Other characters there are treated as unknown.
+    A code is non-normal when either T slot is `0`, or any X/S slot is
+    `1`. Other characters there are treated as unknown.
     """
     s = strip_leading_digit((code_raw or "").strip())
     if not s:

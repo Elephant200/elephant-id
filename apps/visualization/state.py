@@ -1,6 +1,6 @@
 """In-memory reviewer state.
 
-A single :class:`ReviewerState` instance backs the running app. Public
+A single `ReviewerState` instance backs the running app. Public
 methods are thread-safe and serialize their JSON-shaped views.
 """
 
@@ -65,7 +65,7 @@ def list_saved_sighting_entries(folder_rel: str) -> list[dict]:
 class ReviewerState:
     """Thread-safe state container for the reviewer.
 
-    The :attr:`queue` is the sightings list the user is browsing.
+    The `queue` is the sightings list the user is browsing.
     "Elephant only" mode narrows the queue temporarily; toggling off
     restores the pre-narrow queue.
     """
@@ -92,7 +92,7 @@ class ReviewerState:
     # ------------------------------------------------------------------ load
 
     def load(self, dataset: Dataset) -> None:
-        """Pull sightings from ``dataset`` and reset the queue."""
+        """Pull sightings from `dataset` and reset the queue."""
         sighting_images: dict[SightingKey, list[str]] = {}
         for sighting in dataset.iter_sightings():
             key = SightingKey(
@@ -347,7 +347,7 @@ class ReviewerState:
         samples.sync_starred_for_basenames([samples.plain_basename(from_bn)])
 
     def toggle_priority_samples_file(self, samples_rel: str) -> None:
-        """Toggle priority for a file under ``samples/sightings/``."""
+        """Toggle priority for a file under `samples/sightings/`."""
         try:
             path = safe_saved_sighting_file(samples_rel)
         except ValueError:

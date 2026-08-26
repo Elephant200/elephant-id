@@ -17,10 +17,10 @@ CSV_PATH = DATASET_ROOT / "images.csv"
 SAMPLES_ROOT = REPO_ROOT / "dataset" / "samples"
 SAMPLES_SIGHTINGS_ROOT = SAMPLES_ROOT / "sightings"
 # Flat priority copies for external tooling (basename only); kept in sync
-# incrementally by ``samples.sync_starred_for_basenames``.
+# incrementally by `samples.sync_starred_for_basenames`.
 STARRED_SAMPLES_ROOT = SAMPLES_ROOT / "starred"
 
-# Priority-starred files in ``samples/sightings/<folder>/`` use this prefix
+# Priority-starred files in `samples/sightings/<folder>/` use this prefix
 # (two asterisks + space).
 PRIORITY_STAR_PREFIX = "** "
 

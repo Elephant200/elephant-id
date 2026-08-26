@@ -1,6 +1,6 @@
 """On-the-fly thumbnail generation.
 
-Thumbnails are produced in memory and returned as ``BytesIO`` buffers.
+Thumbnails are produced in memory and returned as `BytesIO` buffers.
 There is no on-disk cache: disk reads on modern SSDs are fast enough,
 and the Dataset's image cache handles the hot path for full-resolution
 reads done elsewhere.
@@ -43,7 +43,7 @@ def _render_thumb(src: Path, size: int) -> io.BytesIO:
 
 
 def coded_thumb(rel: str, size: int) -> io.BytesIO:
-    """Return an in-memory JPEG thumbnail for a ``coded/`` image."""
+    """Return an in-memory JPEG thumbnail for a `coded/` image."""
     rel = safe_coded_rel_image(rel)
     size = _clamp_size(size)
     src = CODED_ROOT / rel

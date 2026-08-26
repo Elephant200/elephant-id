@@ -1,8 +1,8 @@
 """The canonical in-memory image type and decode boundary for AlphaPhant.
 
-A ``BgrImage`` is an OpenCV-native image array: HWC layout, 3 channels
+A `BgrImage` is an OpenCV-native image array: HWC layout, 3 channels
 in BGR order, and uint8 dtype. The alias is unchecked; arrays enter the
-system in this form via ``cv2`` decode.
+system in this form via `cv2` decode.
 """
 
 import cv2

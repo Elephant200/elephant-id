@@ -15,7 +15,7 @@ import numpy as np
 class TearMatcherConfig:
     """Parameters controlling resampling, shift penalties, and stretch search.
 
-    ``depth_exponent`` compresses tear depths (``profile ** depth_exponent``)
+    `depth_exponent` compresses tear depths (`profile ** depth_exponent`)
     before overlap scoring. Values below 1 tolerate depth mismatch from ear
     foreshortening while preserving angular structure.
 

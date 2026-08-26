@@ -1,4 +1,4 @@
-"""Pixel-space transforms producing :data:`BgrImage` outputs."""
+"""Pixel-space transforms producing `BgrImage` outputs."""
 
 import numpy as np
 

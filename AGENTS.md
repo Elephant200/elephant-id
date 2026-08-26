@@ -49,7 +49,7 @@ Keep interfaces narrow and justified by current variation. Rankers receive neutr
 ## Python Style
 
 - Type every function and method signature.
-- Give every package, module, class, function, and method a concise accurate docstring.
+- Give every package, module, class, function, and method a concise accurate Google-style docstring. Code in docstrings uses single backticks.
 - Add `Args`, `Returns`, `Yields`, or `Raises` sections only when they clarify a non-obvious interface. Document validation errors that are part of the interface.
 - Prefer clear names and structure over comments. Comment only non-trivial reasoning.
 - Use `loguru` for logging. Library code never configures logging; entry points call `elephant_id.log.configure_logging` once.

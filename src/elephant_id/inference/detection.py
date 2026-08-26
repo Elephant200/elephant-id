@@ -87,7 +87,7 @@ class Detection:
         return self.intersection_area(other) / self.union_area(other)
 
     def translate(self, dx: float, dy: float) -> "Detection":
-        """Return a copy shifted by ``dx`` and ``dy``.
+        """Return a copy shifted by `dx` and `dy`.
 
         Raises:
             ValueError: If the detection contains a full-image mask.

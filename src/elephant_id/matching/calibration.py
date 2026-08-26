@@ -2,7 +2,7 @@
 
 A raw overlap score is not comparable across ears: the same score is far
 stronger evidence between two feature-rich ears than between two smooth ones.
-The calibrator fits a logistic model on ``(score, tear mass)`` pair features.
+The calibrator fits a logistic model on `(score, tear mass)` pair features.
 The default evaluation passes cohort-normalized matcher scores; ablation runs
 may pass raw symmetrized matcher scores to test whether normalization helps.
 """
@@ -59,7 +59,7 @@ class TearScoreCalibrator:
 
     @property
     def is_fitted(self) -> bool:
-        """Whether ``fit`` has been called successfully."""
+        """Whether `fit` has been called successfully."""
         return self._model is not None
 
     @property
@@ -86,7 +86,7 @@ class TearScoreCalibrator:
             scores: Match scores per pair. The default evaluation passes
                 cohort-normalized matcher scores here; ablations may pass raw
                 symmetrized matcher scores.
-            query_masses: Query tear mass per pair (see ``tear_mass``).
+            query_masses: Query tear mass per pair (see `tear_mass`).
             candidate_masses: Candidate tear mass per pair.
             same_identity: Boolean label per pair.
 

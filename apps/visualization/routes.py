@@ -1,7 +1,7 @@
 """HTTP routes for the sighting reviewer.
 
-All endpoints return JSON except thumbnails and ``/``. The frontend in
-``static/app.js`` is the sole client; field names are part of that API
+All endpoints return JSON except thumbnails and `/`. The frontend in
+`static/app.js` is the sole client; field names are part of that API
 contract.
 """
 
@@ -188,9 +188,9 @@ def create_blueprint(
     # -------- full-resolution image + analyzer ------------------------
 
     def _resolve_image_request() -> tuple[Path, str]:
-        """Resolve the requested image to ``(abs_path, identifier)``.
+        """Resolve the requested image to `(abs_path, identifier)`.
 
-        ``identifier`` is the Photo identifier. For samples files, the
+        `identifier` is the Photo identifier. For samples files, the
         priority prefix is stripped from the filename stem.
         """
         rel = (request.args.get("p") or "").strip()

@@ -92,7 +92,7 @@ class PickerState:
     ) -> bool:
         """Whether an elephant has enough eligible sightings (stops early).
 
-        A sighting counts toward ``MIN_QUALIFYING_SIGHTINGS`` when it qualifies
+        A sighting counts toward `MIN_QUALIFYING_SIGHTINGS` when it qualifies
         under the current heuristic or is "grandfathered" -- already represented
         by a manifest pick from a prior session -- so past review work survives a
         heuristic change. Grandfathered sightings are checked first to avoid
@@ -260,7 +260,7 @@ class PickerState:
         """Persist a pick and return the sighting payload plus review progress.
 
         Raises:
-            ValueError: If the pick would select more than ``MAX_SELECTED_SIGHTINGS``
+            ValueError: If the pick would select more than `MAX_SELECTED_SIGHTINGS`
                 sightings for the elephant.
         """
         candidate = self._find_candidate(identity, sighting_date, side, candidate_id)
@@ -290,7 +290,7 @@ class PickerState:
         """Remove a side's pick and return the sighting payload plus progress.
 
         Raises:
-            ValueError: If ``side`` is not a recognized ear side.
+            ValueError: If `side` is not a recognized ear side.
         """
         if side not in SIDES:
             raise ValueError(f"Invalid side: {side}")

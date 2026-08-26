@@ -275,8 +275,8 @@ def validate_profile_cache(
 def read_manifest() -> list[dict[str, str]]:
     """Read the high-quality manifest rows.
 
-    Required columns are ``photo_identifier``, ``identity``, ``side``, and
-    ``sighting_date``. Other columns describe the selected crop and source
+    Required columns are `photo_identifier`, `identity`, `side`, and
+    `sighting_date`. Other columns describe the selected crop and source
     paths but are not used by matching.
 
     Raises:
@@ -621,7 +621,7 @@ def identity_calibrators(
 ) -> dict[str, TearScoreCalibrator]:
     """Map each identity to a calibrator fitted without that identity.
 
-    Identities are shuffled into ``CALIBRATION_FOLDS`` folds; each fold's
+    Identities are shuffled into `CALIBRATION_FOLDS` folds; each fold's
     calibrator is trained on the other folds only. This prevents a query
     elephant from being scored by a calibrator that learned from that
     elephant's positive pairs.
@@ -658,7 +658,7 @@ def fit_fold_calibrator(
     """Fit one calibrator on same-side pairs whose identities are outside the fold.
 
     Every genuine pair is kept; impostor pairs are subsampled per query to
-    roughly ``NEGATIVES_PER_POSITIVE`` per genuine pair. ``pair_scores`` are
+    roughly `NEGATIVES_PER_POSITIVE` per genuine pair. `pair_scores` are
     the selected score matrix for this run, and labels are same-identity vs
     different-identity within the same ear side.
     """
@@ -761,7 +761,7 @@ def elephant_rank(
     """Rank the query elephant among gallery elephants scored on the given sides.
 
     Each elephant first keeps its best score per requested side, then averages
-    the side scores. Candidates must have all requested sides, so ``combined``
+    the side scores. Candidates must have all requested sides, so `combined`
     cannot degrade into one-ear ranking. Returns None when the query elephant
     lacks a requested side. Ties with the query identity are assigned the same
     rank because only strictly higher scores count ahead.

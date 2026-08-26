@@ -12,8 +12,8 @@ def configure_logging(level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITI
 
     Args:
         level: The log level to use. If not provided, the level
-            will be read from the ``LOG_LEVEL`` environment
-            variable, defaulting to ``INFO``.
+            will be read from the `LOG_LEVEL` environment
+            variable, defaulting to `INFO`.
     """
     logger.remove()
     if level is None:
