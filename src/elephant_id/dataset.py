@@ -1,7 +1,7 @@
 """Research metadata and image-only storage for the assigned dataset."""
 
 import csv
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterator
 from datetime import date
 from pathlib import Path
 from typing import Protocol
@@ -23,9 +23,8 @@ class PhotoStore(Protocol):
 class _FilesystemPhotoStore:
     """Resolve original photo bytes from assigned filesystem metadata."""
 
-    def __init__(self, paths_by_photo_id: Mapping[UUID, Path]) -> None:
-        """Copy the private mapping used for photo storage lookup."""
-        self._paths_by_photo_id = dict(paths_by_photo_id)
+    def __init__(self, paths_by_photo_id: dict[UUID, Path]) -> None:
+        self._paths_by_photo_id = paths_by_photo_id
 
     def read(self, photo: Photo) -> bytes:
         """Return original bytes for a mapped Photo.
@@ -48,7 +47,7 @@ class Dataset:
     """Identity-aware research metadata with an image-only PhotoStore."""
 
     def __init__(self, dataset_root: Path, metadata_path: Path) -> None:
-        """Load assigned metadata and construct neutral domain indexes.
+        """Load assigned metadata and build the indices.
 
         Args:
             dataset_root: Root directory containing paths from the metadata.
@@ -73,8 +72,8 @@ class Dataset:
         dates_by_sighting_id: dict[UUID, date] = {}
         names_by_sighting_id: dict[UUID, str] = {}
 
-        with metadata_path.open(encoding="utf-8", newline="") as handle:
-            reader = csv.DictReader(handle)
+        with metadata_path.open(encoding="utf-8", newline="") as f:
+            reader = csv.DictReader(f)
             if tuple(reader.fieldnames or ()) != _METADATA_COLUMNS:
                 raise ValueError(f"Metadata columns must be {_METADATA_COLUMNS}, got {reader.fieldnames}")
 
@@ -154,8 +153,8 @@ class Dataset:
 
     def iter_photos(self) -> Iterator[Photo]:
         """Iterate over every Photo."""
-        return iter(self._photos_by_id.values())
+        yield from self._photos_by_id.values()
 
     def iter_sightings(self) -> Iterator[Sighting]:
         """Iterate over every Sighting."""
-        return iter(self._sightings_by_id.values())
+        yield from self._sightings_by_id.values()
