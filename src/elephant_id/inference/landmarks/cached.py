@@ -1,6 +1,7 @@
 """Persistence decorator for ear-landmark detection."""
 
 from math import isfinite
+from typing import Any
 
 from elephant_id.cache import CacheManager
 from elephant_id.domain import Photo
@@ -32,7 +33,7 @@ class CachedEarLandmarkDetector:
         """Return cached or newly detected full-image landmarks."""
         key = f"{photo.photo_id}__crop_{'_'.join(map(str, ear_box.as_tuple()))}"
 
-        def compute() -> dict[str, object]:
+        def compute() -> dict[str, Any]:
             """Serialize one optional full-image landmark detection."""
             detection = self._inner.detect(photo, image, ear_box)
             return {"detection": None if detection is None else detection.to_dict()}

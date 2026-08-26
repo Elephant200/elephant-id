@@ -1,5 +1,7 @@
 """Persistence decorator for SAM3 multi-feature segmentation."""
 
+from typing import Any
+
 from elephant_id.cache import CacheManager
 from elephant_id.domain import Photo
 from elephant_id.image import BgrImage
@@ -7,7 +9,7 @@ from elephant_id.inference.detection import Detection
 from elephant_id.inference.segmentation.sam3.features import _FeatureSegmenter
 
 
-def _parse_detections(record: dict[str, object]) -> tuple[Detection, ...]:
+def _parse_detections(record: dict[str, Any]) -> tuple[Detection, ...]:
     """Parse the complete detection list from a SAM3 cache record."""
     values = record.get("detections")
     if not isinstance(values, list):
@@ -37,7 +39,7 @@ class CachedSam3FeatureSegmenter:
         image: BgrImage,
     ) -> tuple[Detection, ...]:
         """Return cached or newly computed complete feature detections."""
-        def compute() -> dict[str, object]:
+        def compute() -> dict[str, Any]:
             """Serialize one complete SAM3 feature result."""
             detections = self._inner.segment_features(photo, image)
             return {"detections": [value.to_dict() for value in detections]}
