@@ -40,8 +40,8 @@ After Python changes, run `uv run ruff check .` and relevant tests. `legacy` is 
 - **dataset** owns private metadata and known-elephant resolution; its **PhotoStore** resolves a `Photo` to original encoded bytes without exposing identity.
 - **analysis** owns sighting analysis, ear preparation, and AlphaTear profile extraction.
 - **inference** owns swappable implementations of ear localization, ear segmentation, and ear landmark detection.
-- **matching** owns tear-profile similarity and catalog ranking.
-- **eval** owns implementation-independent identity-retrieval evaluation.
+- **ranking** owns tear-profile similarity and catalog ranking.
+- **evaluation** owns implementation-independent identity-retrieval evaluation.
 - **image** owns encoded-byte decoding, BGR images, and basic + universal geometry utilities.
 
 Keep interfaces narrow and justified by current variation. Rankers receive neutral domain objects and an image-only PhotoStore, never the identity-aware Dataset. Research supplies a sighting ear pair directly; future application ear selection remains upstream of the shared AlphaPhant pipeline.
@@ -81,7 +81,7 @@ Keep interfaces narrow and justified by current variation. Rankers receive neutr
 - Test code under `src/elephant_id`; do not add unit tests for scripts or apps.
 - Use small synthetic arrays and encoded images, fake PhotoStores and inference implementations, and recording cache/model clients.
 - Unit tests never initialize real models, require network access, or depend on private photos.
-- Characterize current numerical behavior before moving tear-profile or matching code.
+- Characterize current numerical behavior before moving tear-profile or ranking code.
 - Add focused tests when changing validation, geometry, cache keys, serialization, dataset ordering, catalog aggregation, or evaluation splits.
 
 ## Git

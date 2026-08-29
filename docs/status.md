@@ -16,4 +16,4 @@ Older directions are being cleared from the active path: SEEK coding and fixed-f
 
 ## Target Shape
 
-Seven packages: `domain`, `dataset`, `analysis`, `inference`, `matching`, `eval`, `image`. Each package's responsibility is defined in [architecture.md](architecture.md#responsibilities), algorithm behavior in [pipeline.md](pipeline.md), and the benchmark in [evaluation.md](evaluation.md). Step-by-step implementation lives in the separate spec.
+Seven packages: `domain`, `dataset`, `analysis`, `inference`, `ranking`, `evaluation`, `image`. Each package's responsibility is defined in [architecture.md](architecture.md#responsibilities), algorithm behavior in [pipeline.md](pipeline.md), and the benchmark in [evaluation.md](evaluation.md). Step-by-step implementation lives in the separate spec.

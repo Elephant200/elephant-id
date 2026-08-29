@@ -30,7 +30,7 @@ AlphaPhant is a research implementation of a fully automated elephant re-identif
 
 **Inference** owns implementations of ear localization and segmentation and ear landmark detection. Analysis depends on these semantic capabilities rather than particular model architectures.
 
-**Matching** owns tear-profile matching and known-elephant ranking.
+**Ranking** owns tear-profile matching and known-elephant ranking.
 
 **Evaluation** owns private ground truth, benchmark examples, candidate keys, splits, failure accounting, metrics, and reproducibility. Its ranker boundary is defined in [evaluation.md](evaluation.md#evaluation-seam).
 
