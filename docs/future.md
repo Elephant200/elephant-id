@@ -11,7 +11,7 @@ The first priority is extraction repeatability. Candidate replacements for curre
 - alternative ear-landmark networks;
 - improved pose, visibility, or contour-quality estimation.
 
-Each implementation should satisfy the semantic inference interfaces in [architecture.md](architecture.md). Model training and model-specific evaluation belong in dedicated training areas rather than the identity-retrieval evaluator.
+Each implementation should satisfy the semantic inference interfaces in [architecture.md](architecture.md). **After the current migration, replace shared `Detection` returns on those interfaces with typed ear-segmentation and ear-landmark results.** Model training and model-specific evaluation belong in dedicated training areas rather than the identity-retrieval evaluator.
 
 ## Additional Identity Signals
 
