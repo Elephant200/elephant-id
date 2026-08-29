@@ -1,4 +1,4 @@
-"""Sighting-level orchestration from an ear pair to reusable profiles."""
+"""Orchestration from a sighting ear pair to tear profiles."""
 
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -51,15 +51,12 @@ class SightingAnalysisError(RuntimeError):
         self.photo_id = photo.photo_id
         self.side = side
         self.stage = stage
-        super().__init__(
-            f"{stage.value} failed for declared {side} ear "
-            f"in photo {photo.photo_id}: {message}"
-        )
+        super().__init__(f"{stage.value.capitalize()} failed for {side} ear in photo {photo.photo_id}: {message}")
 
 
 @dataclass(frozen=True, slots=True)
 class EarAnalysis:
-    """One reusable tear profile with its selected source evidence."""
+    """One ear tear profile with source photo and box required for reproduction."""
 
     source_photo: Photo
     side: EarSide
@@ -76,7 +73,7 @@ class SightingAnalysis:
 
 
 class SightingAnalyzer:
-    """Analyze a declared sighting ear pair through three semantic processors."""
+    """Analyze a sighting ear pair to extract tear profiles."""
 
     def __init__(
         self,
@@ -93,22 +90,14 @@ class SightingAnalyzer:
         self._profile_extractor = profile_extractor
 
     def analyze(self, pair: SightingEarPair) -> SightingAnalysis:
-        """Return atomic left- and right-ear analysis for one declared pair."""
-        prepared_by_photo: dict[Photo, tuple[PreparedEar, ...]] = {}
-
-        def prepared(photo: Photo, side: EarSide) -> tuple[PreparedEar, ...]:
-            """Prepare one distinct source photo at most once."""
-            if photo not in prepared_by_photo:
-                prepared_by_photo[photo] = self._prepare_photo_ears(photo, side)
-            return prepared_by_photo[photo]
-
+        """Return left- and right-ear analysis for one sighting ear pair."""
         left_ear = self._resolve_declared_side(
-            prepared(pair.left_photo, "left"),
+            self._prepare_photo_ears(pair.left_photo, "left"),
             pair.left_photo,
             "left",
         )
         right_ear = self._resolve_declared_side(
-            prepared(pair.right_photo, "right"),
+            self._prepare_photo_ears(pair.right_photo, "right"),
             pair.right_photo,
             "right",
         )
@@ -203,7 +192,7 @@ class SightingAnalyzer:
     def _area_filtered_ears(
         detections: tuple[Detection, ...],
     ) -> tuple[Detection, ...]:
-        """Reproduce the legacy preliminary ear-area heuristic."""
+        """An ear-area heuristic to limit the number of candidate ears."""
         if len(detections) > 2:
             detections = tuple(
                 sorted(detections, key=Detection.area, reverse=True)[:2]
