@@ -26,7 +26,7 @@ class YoloLandmarkConfig:
 DEFAULT_CONFIG = YoloLandmarkConfig(
     weights=Path("model_weights/anchor_extraction_yolo26_v2/weights.pt"),
     confidence_threshold=0.25,
-    device="mps",
+    device="mps", # Change on non-macOS devices
     output_decimals=1,
 )
 PRODUCER_SLUG = "yolo26n-keypoints-v1"
