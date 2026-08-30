@@ -1,27 +1,15 @@
-"""Tear-profile matching utilities."""
+"""Public catalog-matching interface for elephant re-identification."""
 
-from elephant_id.matching.calibration import (
-    TearScoreCalibrator,
-    TearScoreCalibratorConfig,
-    tear_mass,
-)
-from elephant_id.matching.normalization import symmetrized_cohort_z
-from elephant_id.matching.tear_matcher import (
-    TearMatch,
-    TearMatchBatch,
-    TearMatcher,
-    TearMatcherConfig,
-    TearMatchGallery,
+from elephant_id.matching.alphaphant import AlphaPhant
+from elephant_id.matching.protocol import (
+    CandidateKey,
+    CandidateScores,
+    CatalogMatcher,
 )
 
 __all__ = [
-    "TearMatch",
-    "TearMatchBatch",
-    "TearMatchGallery",
-    "TearMatcher",
-    "TearMatcherConfig",
-    "TearScoreCalibrator",
-    "TearScoreCalibratorConfig",
-    "symmetrized_cohort_z",
-    "tear_mass",
+    "AlphaPhant",
+    "CandidateKey",
+    "CandidateScores",
+    "CatalogMatcher",
 ]

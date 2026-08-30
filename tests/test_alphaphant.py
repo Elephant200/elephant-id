@@ -1,0 +1,300 @@
+"""Tests for the public AlphaPhant catalog-matching seam."""
+
+import math
+from collections.abc import Mapping
+from dataclasses import dataclass
+from typing import cast
+from uuid import UUID
+
+import numpy as np
+import pytest
+
+import elephant_id.matching as public_matching
+from elephant_id.analysis import (
+    EarAnalysis,
+    EarSide,
+    SightingAnalysis,
+    SightingAnalyzer,
+    TearProfile,
+)
+from elephant_id.domain import Photo, SightingEarPair
+from elephant_id.image.boxes import BoundingBox
+from elephant_id.matching import (
+    AlphaPhant,
+    CandidateKey,
+    CandidateScores,
+    CatalogMatcher,
+)
+from elephant_id.matching.tear_matcher import TearMatcher
+
+
+def _uuid(value: int) -> UUID:
+    """Return a deterministic UUIDv4-shaped value."""
+    return UUID(f"00000000-0000-4000-8000-{value:012x}")
+
+
+def _pair(value: int) -> SightingEarPair:
+    """Return one neutral sighting ear pair."""
+    sighting_id = _uuid(value)
+    return SightingEarPair(
+        sighting_id=sighting_id,
+        left_photo=Photo(photo_id=_uuid(value + 1), sighting_id=sighting_id),
+        right_photo=Photo(photo_id=_uuid(value + 2), sighting_id=sighting_id),
+    )
+
+
+def _ear(value: int, side: EarSide, depths: list[float]) -> EarAnalysis:
+    """Return one analyzed ear with deterministic neutral provenance."""
+    return EarAnalysis(
+        source_photo=Photo(
+            photo_id=_uuid(value),
+            sighting_id=_uuid(value + 1000),
+        ),
+        side=side,
+        source_box=BoundingBox(0, 0, 4, 4),
+        tear_profile=TearProfile(np.asarray(depths)),
+    )
+
+
+def _analysis(value: int, left: list[float], right: list[float]) -> SightingAnalysis:
+    """Return one analyzed two-sided sighting."""
+    return SightingAnalysis(
+        left=_ear(value, "left", left),
+        right=_ear(value + 1, "right", right),
+    )
+
+
+class RecordingAnalyzer:
+    """Return controlled analyses while recording neutral pair inputs."""
+
+    def __init__(
+        self,
+        analyses: Mapping[SightingEarPair, SightingAnalysis],
+    ) -> None:
+        """Initialize the analyzer with one result per neutral pair."""
+        self._analyses = analyses
+        self.calls: list[SightingEarPair] = []
+
+    def analyze(self, pair: SightingEarPair) -> SightingAnalysis:
+        """Record and return the analysis for `pair`."""
+        self.calls.append(pair)
+        return self._analyses[pair]
+
+
+def _alphaphant(
+    analyses: Mapping[SightingEarPair, SightingAnalysis],
+) -> tuple[AlphaPhant, RecordingAnalyzer]:
+    """Return AlphaPhant with a controlled recording analyzer."""
+    analyzer = RecordingAnalyzer(analyses)
+    return (
+        AlphaPhant(
+            analyzer=cast(SightingAnalyzer, analyzer),
+            tear_matcher=TearMatcher(),
+        ),
+        analyzer,
+    )
+
+
+@dataclass(frozen=True)
+class ScriptedCatalogMatcher:
+    """Return scripted candidate scores through the public matcher seam."""
+
+    scores: CandidateScores
+
+    def match(
+        self,
+        query: SightingEarPair,
+        catalog: Mapping[CandidateKey, tuple[SightingEarPair, ...]],
+    ) -> CandidateScores:
+        """Return the scripted scores."""
+        return self.scores
+
+
+def test_scripted_matcher_satisfies_public_catalog_matcher_seam() -> None:
+    """Evaluation-style consumers need no AlphaPhant implementation details."""
+    query = _pair(10)
+    candidate_key = CandidateKey(_uuid(100))
+    catalog = {candidate_key: (_pair(20),)}
+    matcher: CatalogMatcher = ScriptedCatalogMatcher({candidate_key: 0.75})
+
+    assert matcher.match(query, catalog) == {candidate_key: 0.75}
+
+
+def test_alphaphant_analyzes_neutral_catalog_and_returns_candidate_scores() -> None:
+    """AlphaPhant hides analysis and projects authoritative catalog scores."""
+    query = _pair(10)
+    strong_evidence = _pair(20)
+    alternate_evidence = _pair(30)
+    weak_evidence = _pair(40)
+    query_analysis = _analysis(100, [0.0, 0.1, 0.0], [0.0, 0.2, 0.0])
+    strong_analysis = _analysis(200, [0.0, 0.1, 0.0], [0.0, 0.2, 0.0])
+    weak_analysis = _analysis(300, [0.0, 0.0, 0.0], [0.0, 0.0, 0.0])
+    alphaphant, analyzer = _alphaphant(
+        {
+            query: query_analysis,
+            strong_evidence: strong_analysis,
+            alternate_evidence: weak_analysis,
+            weak_evidence: weak_analysis,
+        }
+    )
+    strong_key = CandidateKey(_uuid(500))
+    weak_key = CandidateKey(_uuid(501))
+    catalog = {
+        weak_key: (weak_evidence,),
+        strong_key: (alternate_evidence, strong_evidence),
+    }
+    scores = alphaphant.match(query, catalog)
+
+    assert isinstance(scores, dict)
+    assert scores.keys() == catalog.keys()
+    assert scores[strong_key] == pytest.approx(1.0)
+    assert scores[weak_key] == pytest.approx(0.0)
+    assert scores[strong_key] > scores[weak_key]
+    assert all(math.isfinite(score) for score in scores.values())
+    assert analyzer.calls == [
+        query,
+        weak_evidence,
+        alternate_evidence,
+        strong_evidence,
+    ]
+
+
+def test_alphaphant_returns_empty_scores_for_empty_catalog() -> None:
+    """An empty catalog produces a complete empty score mapping."""
+    query = _pair(10)
+    alphaphant, analyzer = _alphaphant(
+        {query: _analysis(100, [0.0, 0.1, 0.0], [0.0, 0.2, 0.0])}
+    )
+
+    assert alphaphant.match(query, {}) == {}
+    assert analyzer.calls == [query]
+
+
+def test_alphaphant_propagates_analysis_failure_without_partial_scores() -> None:
+    """A failed catalog analysis aborts before candidate matching."""
+    query = _pair(10)
+    available_evidence = _pair(20)
+    missing_evidence = _pair(30)
+    alphaphant, _ = _alphaphant(
+        {
+            query: _analysis(100, [0.0, 0.1, 0.0], [0.0, 0.2, 0.0]),
+            available_evidence: _analysis(
+                200,
+                [0.0, 0.1, 0.0],
+                [0.0, 0.2, 0.0],
+            ),
+        }
+    )
+
+    with pytest.raises(KeyError) as error:
+        alphaphant.match(
+            query,
+            {
+                CandidateKey(_uuid(500)): (
+                    available_evidence,
+                    missing_evidence,
+                )
+            },
+        )
+
+    assert error.value.args == (missing_evidence,)
+
+
+def test_alphaphant_scores_do_not_depend_on_call_history() -> None:
+    """Intervening matches cannot change a repeated call's scores."""
+    query = _pair(10)
+    strong_evidence = _pair(20)
+    weak_evidence = _pair(30)
+    alphaphant, _ = _alphaphant(
+        {
+            query: _analysis(100, [0.0, 0.1, 0.0], [0.0, 0.2, 0.0]),
+            strong_evidence: _analysis(
+                200,
+                [0.0, 0.1, 0.0],
+                [0.0, 0.2, 0.0],
+            ),
+            weak_evidence: _analysis(
+                300,
+                [0.0, 0.0, 0.0],
+                [0.0, 0.0, 0.0],
+            ),
+        }
+    )
+    candidate_key = CandidateKey(_uuid(500))
+    catalog = {candidate_key: (strong_evidence,)}
+
+    first = alphaphant.match(query, catalog)
+    alphaphant.match(query, {candidate_key: (weak_evidence,)})
+    repeated = alphaphant.match(query, catalog)
+
+    assert repeated == first
+    assert repeated is not first
+
+
+def test_alphaphant_rejects_empty_candidate_evidence() -> None:
+    """A listed candidate must contain at least one sighting ear pair."""
+    query = _pair(10)
+    alphaphant, _ = _alphaphant(
+        {query: _analysis(100, [0.0, 0.1, 0.0], [0.0, 0.2, 0.0])}
+    )
+    candidate_key = CandidateKey(_uuid(500))
+
+    with pytest.raises(
+        RuntimeError,
+        match=f"{candidate_key} has no catalog evidence",
+    ):
+        alphaphant.match(query, {candidate_key: ()})
+
+
+def test_alphaphant_selects_side_winners_independently() -> None:
+    """The strongest left and right evidence may come from different pairs."""
+    query = _pair(10)
+    right_match = _pair(20)
+    left_match = _pair(30)
+    candidate_key = CandidateKey(_uuid(500))
+    alphaphant, _ = _alphaphant(
+        {
+            query: _analysis(100, [0.0, 0.1, 0.0], [0.0, 0.0, 0.2]),
+            right_match: _analysis(200, [0.0, 0.0, 0.0], [0.0, 0.0, 0.2]),
+            left_match: _analysis(300, [0.0, 0.1, 0.0], [0.0, 0.0, 0.0]),
+        }
+    )
+
+    scores = alphaphant.match(query, {candidate_key: (right_match, left_match)})
+
+    assert scores[candidate_key] == pytest.approx(1.0)
+
+
+def test_alphaphant_compares_only_corresponding_sides() -> None:
+    """Strong opposite-side profiles cannot support a candidate score."""
+    query = _pair(10)
+    cross_side_decoys = _pair(20)
+    candidate_key = CandidateKey(_uuid(500))
+    left_depths = np.zeros(720)
+    left_depths[100] = 0.1
+    right_depths = np.zeros(720)
+    right_depths[600] = 0.2
+    alphaphant, _ = _alphaphant(
+        {
+            query: _analysis(100, left_depths.tolist(), right_depths.tolist()),
+            cross_side_decoys: _analysis(
+                200,
+                right_depths.tolist(),
+                left_depths.tolist(),
+            ),
+        }
+    )
+
+    scores = alphaphant.match(query, {candidate_key: (cross_side_decoys,)})
+
+    assert scores[candidate_key] == pytest.approx(0.0)
+
+
+def test_matching_package_exports_only_public_catalog_interface() -> None:
+    """Matching internals remain importable only from their implementation modules."""
+    assert public_matching.__all__ == [
+        "AlphaPhant",
+        "CandidateKey",
+        "CandidateScores",
+        "CatalogMatcher",
+    ]
