@@ -2,7 +2,7 @@
 
 ## Project
 
-AlphaPhant is a fully automated candidate-ranking algorithm for elephant re-identification. Given one high-quality image of each ear from the same sighting, it localizes and segments the ears, detects anatomical landmarks, extracts alpha-shape-derived tear profiles, computes similarity scores, and ranks the known-elephant catalog.
+AlphaPhant is a fully automated catalog-matching algorithm for elephant re-identification. Given one high-quality image of each ear from the same sighting, it localizes and segments the ears, detects anatomical landmarks, extracts alpha-shape-derived tear profiles, and returns one similarity score per known elephant. Candidate ranking is the descending view of those scores.
 
 ## Start Here
 
@@ -40,11 +40,11 @@ After Python changes, run `uv run ruff check .` and relevant tests. `legacy` is 
 - **dataset** owns private metadata and known-elephant resolution; its **PhotoStore** resolves a `Photo` to original encoded bytes without exposing identity.
 - **analysis** owns sighting analysis, ear preparation, and AlphaTear profile extraction.
 - **inference** owns swappable implementations of ear localization, ear segmentation, and ear landmark detection.
-- **ranking** owns tear-profile similarity and catalog ranking.
+- **matching** owns tear-profile similarity and catalog matching. Its public `CatalogMatcher` interface returns candidate scores; ranking is a derived view.
 - **evaluation** owns implementation-independent identity-retrieval evaluation.
 - **image** owns encoded-byte decoding, BGR images, and basic + universal geometry utilities.
 
-Keep interfaces narrow and justified by current variation. Rankers receive neutral domain objects and an image-only PhotoStore, never the identity-aware Dataset. Research supplies a sighting ear pair directly; future application ear selection remains upstream of the shared AlphaPhant pipeline.
+Keep interfaces narrow and justified by current variation. Catalog matchers receive neutral domain objects and an image-only PhotoStore, never the identity-aware Dataset. Research supplies a sighting ear pair directly; future application ear selection remains upstream of the shared AlphaPhant pipeline.
 
 ## Python Style
 
@@ -72,7 +72,7 @@ Keep interfaces narrow and justified by current variation. Rankers receive neutr
 - Use the permanent photo UUID directly for photo-level source identity. Add only actual dependent inputs such as crop coordinates; keep keys readable rather than hashing them again.
 - A `producer_slug` carries model, weight, prompt, preprocessing, threshold, configuration, and algorithm identity. Any output-changing change gets a new immutable slug; those settings do not enter cache keys.
 - Keep writes atomic and validate producer payloads on load.
-- Select caching only through composition: inject a cached decorator or the raw processor. Analyzers and rankers expose no cache-policy flags.
+- Select caching only through composition: inject a cached decorator or the raw processor. Analyzers and catalog matchers expose no cache-policy flags.
 - Cache the complete SAM3 multi-feature computation before adapting it to the ear-only segmentation protocol. Cache landmark records in full-image coordinates.
 - Preserve SAM3 body and complete multi-feature outputs and leave heuristic records untouched. Landmark records may be replaced when their coordinate contract changes. Age and gender records may be removed.
 
@@ -81,7 +81,7 @@ Keep interfaces narrow and justified by current variation. Rankers receive neutr
 - Test code under `src/elephant_id`; do not add unit tests for scripts or apps.
 - Use small synthetic arrays and encoded images, fake PhotoStores and inference implementations, and recording cache/model clients.
 - Unit tests never initialize real models, require network access, or depend on private photos.
-- Characterize current numerical behavior before moving tear-profile or ranking code.
+- Characterize current numerical behavior before moving tear-profile or matching code.
 - Add focused tests when changing validation, geometry, cache keys, serialization, dataset ordering, catalog aggregation, or evaluation splits.
 
 ## Git

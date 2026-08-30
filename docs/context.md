@@ -1,6 +1,6 @@
 # AlphaPhant Context
 
-AlphaPhant is a fully automated candidate-ranking algorithm for elephant re-identification. Given a high-quality image of each ear, it produces similarity scores and ranks the known-elephant catalog without further human input.
+AlphaPhant is a fully automated catalog-matching algorithm for elephant re-identification. Given a high-quality image of each ear, it returns one similarity score per known elephant without further human input. A candidate ranking is the descending view of those scores.
 
 This glossary is the canonical source for domain and technical language. Implementation plans and specifications live in the other top-level docs.
 
@@ -43,8 +43,16 @@ The reference evidence grouped by known elephant and ear side for matching.
 _Avoid_: Gallery when naming the domain concept
 
 **Matching candidate**:
-A known elephant returned as a possible identity in the candidate ranking.
+A known elephant for which a catalog matcher returns a candidate score.
 _Avoid_: Identity decision, automatic identification
+
+**Catalog matcher**:
+A complete retrieval algorithm that compares one sighting ear pair with a candidate catalog and returns one comparable similarity score for every matching candidate. AlphaPhant, CurvRank, and MiewID are catalog matchers.
+_Avoid_: Candidate scorer, ranker when referring to the catalog-matching role
+
+**Candidate scores**:
+The complete association of matching candidates with their similarity scores for one query. Larger scores indicate stronger matches, and every catalog candidate appears exactly once.
+_Avoid_: Ranking, probabilities, confidence labels
 
 ## AlphaPhant Algorithm
 
@@ -73,8 +81,12 @@ The geometric reference constructed from an ear contour during tear-profile extr
 _Avoid_: Alpha hull
 
 **AlphaTear**:
-The current tear-profile extraction algorithm. It uses an alpha shape as an internal geometric reference to locate and measure tears along a prepared ear contour. AlphaTear names the extractor; AlphaPhant names the complete candidate-ranking pipeline.
+The current tear-profile extraction algorithm. It uses an alpha shape as an internal geometric reference to locate and measure tears along a prepared ear contour. AlphaTear names the extractor; AlphaPhant names the complete catalog-matching algorithm.
 _Avoid_: AlphaPhant when referring only to extraction
+
+**AlphaPhant**:
+The project's complete catalog-matching algorithm, which analyzes a sighting ear pair, compares its tear profiles with catalog evidence, and returns candidate scores.
+_Avoid_: AlphaTear, AlphaPhant matcher
 
 **Tear profile**:
 A one-dimensional, alpha-shape-derived representation of an ear contour used for matching.
@@ -93,7 +105,7 @@ A numeric measure of how strongly two ears, or a sighting and known elephant, ma
 _Avoid_: Probability, confidence
 
 **Candidate ranking**:
-The ordered known-elephant candidates produced by combining left- and right-ear similarity scores.
+The descending view of candidate scores. Ranking adds no scientific result beyond the scores and is not a separate catalog-matching module.
 _Avoid_: Identity decision, prediction
 
 ## Evaluation

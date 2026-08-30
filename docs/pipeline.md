@@ -6,14 +6,14 @@ This document defines the research algorithm being locked down. Domain, storage,
 
 The input is a SightingEarPair: one Photo declared for the left ear and one Photo declared for the right ear from the same sighting. The same Photo may serve both sides.
 
-The output is a complete ranked list of known elephants. Each candidate carries:
+The output is one match result per known elephant. Each candidate carries:
 
 - its combined similarity score;
 - its strongest supporting left-ear catalog evidence;
 - its strongest supporting right-ear catalog evidence;
 - the two side-level similarity scores and alignments.
 
-AlphaPhant ranks candidates. It does not make an identity decision or add evidence to the catalog.
+AlphaPhant returns candidate scores. A candidate ranking is their descending view; AlphaPhant does not make an identity decision or add evidence to the catalog.
 
 ## Automated Preprocessing
 
@@ -42,9 +42,9 @@ symmetric_similarity(a, b) =
     (similarity(a -> b) + similarity(b -> a)) / 2
 ```
 
-This raw similarity score is used for ranking. Cohort normalization and learned calibration are outside the selected pipeline.
+This raw similarity score contributes directly to candidate scores. Cohort normalization and learned calibration are outside the selected pipeline.
 
-## Catalog Ranking
+## Catalog Matching
 
 Catalog sightings are not matching units. Once tear-profile evidence enters the known-elephant catalog, it is grouped by known elephant and ear side.
 
@@ -60,8 +60,8 @@ Both sides are required: a known elephant is scored only when it has valid left 
 
 ## Caching
 
-Expensive model invocations and final per-ear tear profiles are cached. Ear selection, sighting orchestration, contour preparation, catalog grouping, and ranking are not independently cached.
+Expensive model invocations and final per-ear tear profiles are cached. Ear selection, sighting orchestration, contour preparation, catalog grouping, candidate scoring, and derived rankings are not independently cached.
 
 A final tear-profile record is per prepared ear. Its key contains the source photo UUID, integer raster bounding box, inferred side, segmentation producer slug, and landmark producer slug. Bounding-box identity remains stable when candidate ordering changes. Cache identity and producer versioning are defined in [architecture.md](architecture.md).
 
-Caching is selected when processors are composed. Standard runs cache the complete SAM3 multi-feature computation before its ear-only adapter, landmark detection, and AlphaTear extraction. Parameter-tuning runs use a raw unversioned AlphaTear extractor while retaining cached SAM3 features and landmark detection. The analyzer and ranker expose no cache-policy options.
+Caching is selected when processors are composed. Standard runs cache the complete SAM3 multi-feature computation before its ear-only adapter, landmark detection, and AlphaTear extraction. Parameter-tuning runs use a raw unversioned AlphaTear extractor while retaining cached SAM3 features and landmark detection. The analyzer and catalog matcher expose no cache-policy options.

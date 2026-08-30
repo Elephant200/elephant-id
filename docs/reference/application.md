@@ -20,7 +20,7 @@ future application + its PhotoStore
   -> AlphaPhant
 ```
 
-Given the ear pair, AlphaPhant is fully automated: sighting analysis, tear-profile matching, and candidate ranking. Application-specific import, duplicate handling, heuristics, reviewer correction, and photo-sufficiency decisions remain upstream.
+Given the ear pair, AlphaPhant is fully automated: sighting analysis, tear-profile matching, and candidate scoring. The application derives a descending candidate ranking from those scores. Application-specific import, duplicate handling, heuristics, reviewer correction, and photo-sufficiency decisions remain upstream.
 
 ## Core User Journey
 
@@ -33,7 +33,7 @@ Given the ear pair, AlphaPhant is fully automated: sighting analysis, tear-profi
 7. Compare ranked matching candidates and inspect the independently selected left- and right-ear catalog evidence behind each similarity score.
 8. Record an identity decision.
 
-Candidate ranking and identity decision are distinct. AlphaPhant ranks known elephants; it does not decide whether the sighting belongs to an existing individual, should create a new known elephant, or remains unresolved.
+Candidate ranking and identity decision are distinct. AlphaPhant scores known elephants; the application may present those scores as a descending ranking, but it does not decide whether the sighting belongs to an existing individual, should create a new known elephant, or remains unresolved.
 
 ## Analysis Package
 
@@ -51,11 +51,11 @@ The analysis package should support:
 - previewing the resulting tear profile beside the crop and overlay;
 - recording whether evidence was manually corrected.
 
-Preview tear profiles during review help the reviewer judge ear selection. After approval, AlphaPhant produces the final tear profiles used for candidate ranking.
+Preview tear profiles during review help the reviewer judge ear selection. After approval, AlphaPhant produces the final tear profiles used for candidate scoring.
 
 ## Evidence Review Gate
 
-Candidate ranking must not run until ear selection is complete.
+Catalog matching must not run until ear selection is complete.
 
 For the initial application scope, the reviewer must approve both sides:
 
@@ -68,17 +68,17 @@ After the reviewer changes a selected ear, crop, or segmentation, the applicatio
 
 ## Candidate Comparison
 
-After AlphaPhant returns candidate ranking, the comparison view should show matching candidates with the query left and right ears beside each candidate's strongest supporting left-ear and right-ear catalog evidence. Aligned tear profiles should be visible so the reviewer can judge whether the similarity is meaningful.
+After AlphaPhant returns candidate scores, the comparison view should present their descending ranking with the query left and right ears beside each candidate's strongest supporting left-ear and right-ear catalog evidence. Aligned tear profiles should be visible so the reviewer can judge whether the similarity is meaningful.
 
 The winning left and right catalog evidence for a candidate may come from different historical sightings; the view should preserve that per-side Photo and sighting provenance.
 
 The reviewer asks: do these aligned signals support this identity?
 
-Tear-profile matching is the current ranking signal. Additional identity signals are research directions in [../future.md](../future.md).
+Tear-profile matching is the current candidate-scoring signal. Additional identity signals are research directions in [../future.md](../future.md).
 
 ## Identity Decision
 
-The reviewer owns the identity decision. The system ranks and explains candidates; it does not silently identify the elephant.
+The reviewer owns the identity decision. The system scores candidates and presents their derived ranking; it does not silently identify the elephant.
 
 The decision states are:
 
@@ -97,7 +97,7 @@ The first application version is intentionally narrow:
 - original source locations are not mutated;
 - review must be obvious and responsive;
 - preprocessing for ear selection may run in the background and may be slower than review;
-- both ears are required before candidate ranking;
+- both ears are required before catalog matching;
 - the reviewer makes every identity decision.
 
 The design should not prevent later batch import, raw camera-dump grouping, duplicate detection, one-sided matching, learned embedding models, remote collaboration, or field-time sufficiency feedback.

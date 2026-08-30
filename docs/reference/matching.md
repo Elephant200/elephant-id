@@ -4,7 +4,7 @@
 
 This document describes the former tear-profile matching pipeline: how an approved ear crop becomes a tear profile, how two profiles become a score, how scores become comparable across elephants and combinable across ears, and what the evaluation metrics mean.
 
-The pipeline covers one signal: ear-margin tears. It ranks known-elephant candidates; it does not make identity decisions. Final identification is always a human decision over reviewed evidence and a ranked shortlist.
+The pipeline covers one signal: ear-margin tears. It scores known-elephant candidates; ranking is the descending view of those scores, not an identity decision. Final identification is always a human decision over reviewed evidence and a ranked shortlist.
 
 ## Signal Chain
 
@@ -15,7 +15,7 @@ approved ear evidence
   -> cohort normalization
   -> score calibration
   -> side-level evidence
-  -> ranked known elephants
+  -> one score per known elephant
 ```
 
 The main data object through matching is a row-indexed profile table. Each row has:
@@ -88,7 +88,7 @@ For elephant-level evaluation, identities are split into calibration folds. Each
 - positives: same identity and same side,
 - negatives: different identity and same side, subsampled at up to five negatives per positive.
 
-## Combining Sides and Ranking
+## Combining Sides and Deriving a Ranking
 
 The current product direction requires reviewed left and right ear evidence before matching.
 
@@ -98,7 +98,7 @@ Aggregation follows this shape:
 - A left query profile only compares to left catalog profiles.
 - A right query profile only compares to right catalog profiles.
 - Each candidate known elephant gets its strongest clean evidence per side.
-- The side evidence is combined into a final candidate rank.
+- The side evidence is combined into a final candidate score; ranks are derived across the complete score set.
 
 Left and right profiles are never matched to each other.
 

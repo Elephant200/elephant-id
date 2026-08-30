@@ -1,6 +1,6 @@
 # Architecture
 
-AlphaPhant is a research implementation of a fully automated elephant re-identification algorithm. Its current scope begins with a sighting ear pair and ends with a ranked known-elephant catalog. The future application shares its neutral photo and sighting model; see [reference/application.md](reference/application.md).
+AlphaPhant is a research implementation of a fully automated elephant re-identification algorithm. Its current scope begins with a sighting ear pair and ends with one similarity score per known elephant. A candidate ranking is a derived view of those scores. The future application shares its neutral photo and sighting model; see [reference/application.md](reference/application.md).
 
 ## Design Priorities
 
@@ -9,7 +9,7 @@ AlphaPhant is a research implementation of a fully automated elephant re-identif
 - Separate neutral domain objects, image storage, and identity-aware research metadata.
 - Preserve tear-profile extraction and matching behavior during restructuring.
 - Put model variation behind semantic inference interfaces.
-- Keep identity-retrieval evaluation independent of ranker implementation.
+- Keep identity-retrieval evaluation independent of catalog-matcher implementation.
 - Cache expensive computation and final reusable tear profiles, not orchestration.
 
 ## Responsibilities
@@ -20,7 +20,7 @@ AlphaPhant is a research implementation of a fully automated elephant re-identif
 - `Sighting` carries a UUIDv4 sighting ID, a required sighting date, and distinct Photos;
 - `SightingEarPair` carries a sighting ID and one Photo per declared side. Both Photos belong to that sighting, and one Photo may serve both sides.
 
-**Dataset** is the private research dataset object. It constructs and resolves domain objects, owns known-elephant metadata, and owns a filesystem-backed PhotoStore. Rankers never receive the Dataset.
+**Dataset** is the private research dataset object. It constructs and resolves domain objects, owns known-elephant metadata, and owns a filesystem-backed PhotoStore. Catalog matchers never receive the Dataset.
 
 **PhotoStore** owns retrieval of original encoded bytes through `read(photo: Photo) -> bytes`. It uses `photo.photo_id` for lookup and does not expose a known-elephant resolver method.
 
@@ -30,9 +30,9 @@ AlphaPhant is a research implementation of a fully automated elephant re-identif
 
 **Inference** owns implementations of ear localization and segmentation and ear landmark detection. Analysis depends on these semantic capabilities rather than particular model architectures.
 
-**Ranking** owns tear-profile matching and known-elephant ranking.
+**Matching** owns tear-profile matching and catalog matching. Its public `CatalogMatcher` interface accepts a sighting ear pair and candidate catalog and returns candidate scores. AlphaPhant is the concrete catalog matcher; candidate ranking is derived from its scores.
 
-**Evaluation** owns private ground truth, benchmark examples, candidate keys, splits, failure accounting, metrics, and reproducibility. Its ranker boundary is defined in [evaluation.md](evaluation.md#evaluation-seam).
+**Evaluation** owns private ground truth, benchmark examples, candidate keys, splits, failure accounting, derived ranks, metrics, and reproducibility. Its catalog-matcher seam is defined in [evaluation.md](evaluation.md#evaluation-seam).
 
 **CacheManager** persists JSON records under stable processor slugs and caller-supplied input keys. Thin stage decorators own keys and typed serialization while preserving processor behavior and identity.
 
@@ -107,7 +107,7 @@ SightingEarPair + PhotoStore
   -> AlphaTear profile for each side
   -> same-side matching against catalog evidence
   -> strongest left and right evidence per candidate
-  -> complete ranked candidate list
+  -> one similarity score per candidate
 ```
 
 ## Inference Seams
@@ -141,7 +141,7 @@ The SAM3 record contains the complete multi-feature result on both hits and miss
 
 CacheManager namespaces and safely stores caller-supplied keys; it does not hash keys, read photos, resolve Dataset metadata, or understand producer payloads. Cached decorators construct keys, serialize typed outputs to JSON, parse JSON back to typed outputs, and validate their own records.
 
-Standard construction caches SAM3's full feature computation, landmark detection, and settled AlphaTear extraction. Parameter-tuning construction injects a raw experimental AlphaTear extractor, bypassing profile reads and writes while retaining cached SAM3 features and landmark detection. CacheManager has no permission or tuning modes. Sighting analysis and ranking are unaware of cache policy.
+Standard construction caches SAM3's full feature computation, landmark detection, and settled AlphaTear extraction. Parameter-tuning construction injects a raw experimental AlphaTear extractor, bypassing profile reads and writes while retaining cached SAM3 features and landmark detection. CacheManager has no permission or tuning modes. Sighting analysis and catalog matching are unaware of cache policy.
 
 When one source Photo supplies both declared sides, it is prepared on the first
 side encountered and then reused. A retrieval, decoding, inference, or
