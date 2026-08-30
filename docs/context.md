@@ -42,6 +42,14 @@ _Avoid_: Sighting, folder
 The reference evidence grouped by known elephant and ear side for matching.
 _Avoid_: Gallery when naming the domain concept
 
+**Candidate catalog**:
+The query-specific view of reference evidence supplied to a catalog matcher, grouped under opaque candidate keys. Every listed candidate has one or more sighting ear pairs.
+_Avoid_: Dataset, gallery, ranked candidates
+
+**Candidate key**:
+An ephemeral opaque UUID assigned to one matching candidate for an evaluation run. It is stable within that run and carries no known-elephant identity.
+_Avoid_: Known-elephant name, photo ID, sighting ID
+
 **Matching candidate**:
 A known elephant for which a catalog matcher returns a candidate score.
 _Avoid_: Identity decision, automatic identification
@@ -51,7 +59,7 @@ A complete retrieval algorithm that compares one sighting ear pair with a candid
 _Avoid_: Candidate scorer, ranker when referring to the catalog-matching role
 
 **Candidate scores**:
-The complete association of matching candidates with their similarity scores for one query. Larger scores indicate stronger matches, and every catalog candidate appears exactly once.
+The complete association of matching candidates with finite similarity floats for one query. Larger scores indicate stronger matches, and every catalog candidate appears exactly once.
 _Avoid_: Ranking, probabilities, confidence labels
 
 ## AlphaPhant Algorithm

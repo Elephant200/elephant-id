@@ -4,9 +4,9 @@ This document defines the implementation-independent benchmark for complete elep
 
 ## Evaluation Seam
 
-The evaluator owns ground truth and the research Dataset. It hands a catalog matcher only neutral SightingEarPair objects, an image-only PhotoStore, and fresh opaque candidate keys for grouping - opaque IDs and image bytes, nothing more. The known-elephant label stays with the Dataset, which the matcher never receives; paths serve solely as PhotoStore locators, never read as strings.
+The evaluator owns ground truth and the research Dataset. It receives a catalog matcher already composed with its image-only PhotoStore and other implementation dependencies, then hands it only neutral SightingEarPair objects and an opaque candidate-key assignment generated once for the evaluation run. The known-elephant label stays with the Dataset, which the matcher never receives; paths serve solely as PhotoStore locators, never read as strings.
 
-The catalog matcher uses `PhotoStore.read(photo)` to obtain original encoded bytes and returns every candidate key exactly once with a finite similarity score. Larger scores mean stronger matches. The PhotoStore exposes no identity resolution.
+The catalog matcher uses its injected PhotoStore to obtain original encoded bytes and returns a read-only mapping whose keys exactly equal the catalog keys and whose values are finite similarity floats. Larger scores mean stronger matches; no universal score range or ordering is promised. The PhotoStore exposes no identity resolution. Each call is logically independent of earlier calls, although identity-neutral caches may accelerate repeated processing.
 
 ## Retrieval Benchmark
 
@@ -24,7 +24,7 @@ For each protocol-eligible example:
 2. Exclude that sighting and its Photos from the catalog.
 3. Retain every other eligible sighting, including other sightings of the query elephant.
 4. Group catalog examples by private known-elephant label.
-5. Replace labels with fresh opaque candidate keys before calling the catalog matcher.
+5. Replace labels with the run's fresh opaque candidate keys before calling the catalog matcher.
 6. Match the query against the complete candidate set.
 7. Recover the target key privately and derive its rank from the candidate scores.
 
@@ -38,7 +38,7 @@ The benchmark set is curated so every selected image yields a valid two-sided ex
 
 ## Ranking and Metrics
 
-Each result contains every issued candidate key exactly once, no foreign keys, and finite scores. The evaluator derives ranks from these candidate scores; ordering is a view, not part of the catalog-matcher contract.
+Each result contains every issued candidate key exactly once, no foreign keys, and finite scores. The evaluator rejects partial results. It derives ranks from these candidate scores; ordering is a view, not part of the catalog-matcher contract.
 
 Target rank is one plus the number of candidates with a strictly higher score. Equal scores share a competition rank.
 

@@ -30,9 +30,17 @@ AlphaPhant is a research implementation of a fully automated elephant re-identif
 
 **Inference** owns implementations of ear localization and segmentation and ear landmark detection. Analysis depends on these semantic capabilities rather than particular model architectures.
 
-**Matching** owns tear-profile matching and catalog matching. Its public `CatalogMatcher` interface accepts a sighting ear pair and candidate catalog and returns candidate scores. AlphaPhant is the concrete catalog matcher; candidate ranking is derived from its scores.
+**Matching** owns tear-profile matching and catalog matching. Its public `CatalogMatcher` interface, `CandidateKey`, and `CandidateScores` types live in `matching`; evaluation is a consumer of that seam. `CatalogMatcher.match` accepts a sighting ear pair and candidate catalog and returns one similarity float per candidate. A matcher is fully composed with storage, processing, caching, and configuration dependencies before a caller receives it. AlphaPhant is the concrete catalog matcher; candidate ranking is derived from its scores.
+
+A candidate catalog is exposed directly as a read-only mapping from opaque candidate key to a tuple of SightingEarPair evidence. Mapping and tuple order carry no meaning. Catalog matchers own all implementation-specific preparation and grouping below that seam; there is no custom catalog wrapper or catalog-access interface.
+
+`CandidateKey` is a UUID-backed distinct type. `CandidateScores` is a read-only mapping from candidate key to float whose key set exactly matches the input catalog. Every score is finite, larger means a stronger match, no universal numeric range is promised, and mapping order carries no meaning. Errors propagate instead of returning partial scores.
+
+Catalog matching is logically stateless: a result depends on the query, candidate catalog, composed configuration, and source photo bytes, never on earlier `match` calls. Identity-neutral caches may change performance but not behavior. Evaluation generates one fresh opaque key assignment per run and may reuse those keys across its query folds; the trusted matcher interface is not an adversarial sandbox.
 
 **Evaluation** owns private ground truth, benchmark examples, candidate keys, splits, failure accounting, derived ranks, metrics, and reproducibility. Its catalog-matcher seam is defined in [evaluation.md](evaluation.md#evaluation-seam).
+
+`CatalogMatcher.match` stays fixed across complete retrieval systems. AlphaPhant experiments replace internal profile-comparison or catalog-aggregation modules through construction rather than adding flags to `match`. A future AlphaPhant-specific result may expose winning evidence and alignments, but it must reuse the same underlying matching computation as the generic candidate scores.
 
 **CacheManager** persists JSON records under stable processor slugs and caller-supplied input keys. Thin stage decorators own keys and typed serialization while preserving processor behavior and identity.
 
