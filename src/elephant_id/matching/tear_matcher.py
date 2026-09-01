@@ -43,6 +43,14 @@ class TearMatcher:
                 ** self._config.shift_penalty_power
             )
         )
+        positions = np.arange(self._config.resampled_bins)[None, :]
+        sources = positions - self._shifts[:, None]
+        self._shift_valid = (sources >= 0) & (sources < self._config.resampled_bins)
+        self._shift_indices = np.clip(
+            sources,
+            0,
+            self._config.resampled_bins - 1,
+        )
 
     def match(self, query: np.ndarray, candidate: np.ndarray) -> TearMatch:
         """Return symmetric similarity score with the forward direction's stretch and shift."""
@@ -76,13 +84,21 @@ class TearMatcher:
         best_stretch = 1.0
         for stretch in self._config.stretches:
             stretched = self._stretch(query, stretch)
-            for shift, penalty in zip(self._shifts, self._shift_penalties, strict=True):
-                shifted = self._shift(stretched, int(shift))
-                score = self._overlap(shifted, candidate) * penalty
-                if score > best_score:
-                    best_score = score
-                    best_shift = int(shift)
-                    best_stretch = stretch
+            shifted = stretched[self._shift_indices]
+            shifted[~self._shift_valid] = 0.0
+            overlap = np.minimum(shifted, candidate).sum(axis=1)
+            union = np.maximum(shifted, candidate).sum(axis=1)
+            scores = np.divide(
+                overlap,
+                union,
+                out=np.zeros_like(overlap),
+                where=union > 0,
+            ) * self._shift_penalties
+            index = int(np.argmax(scores))
+            if scores[index] > best_score:
+                best_score = float(scores[index])
+                best_shift = int(self._shifts[index])
+                best_stretch = stretch
 
         return TearMatch(
             score=float(best_score),
@@ -115,28 +131,3 @@ class TearMatcher:
         stretched = self._sample(profile, source_bins)
         stretched[~valid_source] = 0.0
         return stretched
-
-    def _shift(
-        self,
-        profile: np.ndarray,
-        shift: int,
-    ) -> np.ndarray:
-        """Shift a resampled profile by whole bins."""
-        if shift == 0:
-            return profile
-        shifted = np.zeros_like(profile)
-        if shift > 0:
-            shifted[shift:] = profile[:-shift]
-        else:
-            shifted[:shift] = profile[-shift:]
-        return shifted
-
-    def _overlap(
-        self,
-        query_profile: np.ndarray,
-        candidate_profile: np.ndarray,
-    ) -> float:
-        """Return area overlap over area union for two profiles."""
-        overlap = np.minimum(query_profile, candidate_profile).sum()
-        union = np.maximum(query_profile, candidate_profile).sum()
-        return float(overlap / union) if union > 0 else 0.0
