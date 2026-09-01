@@ -21,6 +21,8 @@ from elephant_id.inference.segmentation.sam3 import (
     Sam3EarSegmenter,
     Sam3FeatureSegmenter,
 )
+from elephant_id.matching import AlphaPhant
+from elephant_id.matching.tear_matcher import TearMatcher
 
 
 def _cached_inference(
@@ -58,6 +60,23 @@ def build_standard_analyzer(
         ear_segmenter=segmenter,
         landmark_detector=landmarks,
         profile_extractor=profiles,
+    )
+
+
+def build_standard_alphaphant(
+    photo_store: PhotoStore,
+    cache_root: Path = Path(DEFAULT_CACHE_ROOT),
+    *,
+    roboflow_api_key: str | None = None,
+) -> AlphaPhant:
+    """Build standard cached AlphaPhant catalog matching."""
+    return AlphaPhant(
+        analyzer=build_standard_analyzer(
+            photo_store,
+            cache_root,
+            roboflow_api_key=roboflow_api_key,
+        ),
+        tear_matcher=TearMatcher(),
     )
 
 

@@ -205,7 +205,7 @@ def test_alphaphant_scores_do_not_depend_on_call_history() -> None:
     query = _pair(10)
     strong_evidence = _pair(20)
     weak_evidence = _pair(30)
-    alphaphant, _ = _alphaphant(
+    alphaphant, analyzer = _alphaphant(
         {
             query: _analysis(100, [0.0, 0.1, 0.0], [0.0, 0.2, 0.0]),
             strong_evidence: _analysis(
@@ -229,6 +229,7 @@ def test_alphaphant_scores_do_not_depend_on_call_history() -> None:
 
     assert repeated == first
     assert repeated is not first
+    assert analyzer.calls == [query, strong_evidence, weak_evidence]
 
 
 def test_alphaphant_rejects_empty_candidate_evidence() -> None:

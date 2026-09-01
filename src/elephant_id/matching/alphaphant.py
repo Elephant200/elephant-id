@@ -2,6 +2,7 @@
 
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
+from functools import cache
 
 from elephant_id.analysis import EarAnalysis, SightingAnalysis, SightingAnalyzer
 from elephant_id.domain import SightingEarPair
@@ -45,7 +46,7 @@ class AlphaPhant:
         tear_matcher: TearMatcher,
     ) -> None:
         """Initialize AlphaPhant with sighting analysis and tear matching."""
-        self._analyzer = analyzer
+        self._analyze = cache(analyzer.analyze) # Memoize sighting analysis for performance
         self._tear_matcher = tear_matcher
 
     def match(
@@ -54,10 +55,10 @@ class AlphaPhant:
         catalog: Mapping[CandidateKey, tuple[SightingEarPair, ...]],
     ) -> CandidateScores:
         """Return one similarity score per catalog candidate."""
-        query_analysis = self._analyzer.analyze(query)
+        query_analysis = self._analyze(query)
         scores: dict[CandidateKey, float] = {}
         for candidate_key, evidence in catalog.items():
-            candidate_analyses = tuple(self._analyzer.analyze(pair) for pair in evidence)
+            candidate_analyses = tuple(self._analyze(pair) for pair in evidence)
             candidate_match = self._match_candidate(
                 candidate_key,
                 query_analysis,
@@ -103,7 +104,7 @@ class AlphaPhant:
                 -match.catalog_evidence.source_photo.sighting_id.int,
                 -match.catalog_evidence.source_photo.photo_id.int,
             )
-        
+
         return max( # TODO: tune this aggregation function (could be avg or median)
             (self._compute_side_match(query, ear) for ear in catalog),
             key=side_match_key, # Order matches by highest score, then stable evidence keys
