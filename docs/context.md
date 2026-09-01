@@ -47,7 +47,7 @@ The query-specific view of reference evidence supplied to a catalog matcher, gro
 _Avoid_: Dataset, gallery, ranked candidates
 
 **Candidate key**:
-An ephemeral opaque UUID assigned to one matching candidate for an evaluation run. It is stable within that run and carries no known-elephant identity.
+An ephemeral opaque UUID assigned to one matching candidate for one call to `evaluate`. It is stable across that evaluation's query folds and carries no known-elephant identity.
 _Avoid_: Known-elephant name, photo ID, sighting ID
 
 **Matching candidate**:
@@ -119,8 +119,16 @@ _Avoid_: Identity decision, prediction
 ## Evaluation
 
 **Retrieval benchmark set**:
-The fixed private collection of real sighting ear pairs, one per sighting, that the identity-retrieval benchmark runs leave-one-sighting-out over. Shorten to benchmark set in running writing. Held under the gitignored research dataset at `dataset/elephants-alive/benchmark/`.
+The fixed private sample of real sighting ear pairs used to estimate expected retrieval performance beyond the benchmark itself. It contains one pair per sampled sighting and is held under the gitignored research dataset at `dataset/elephants-alive/benchmark/`; shorten to benchmark set in running writing.
 _Avoid_: Evaluation suite, test set
+
+**Target deployment population**:
+The broader population of elephants and sightings to which identity-retrieval evaluation is intended to generalize. An unseen elephant is unseen during system development but is represented by prior evidence in the catalog when queried.
+_Avoid_: Benchmark set, available dataset
+
+**Benchmark manifest**:
+The identity-aware declaration of the benchmark set, with one row per selected sighting ear pair naming its known elephant, sighting ID, left photo ID, and right photo ID. It selects evidence by permanent IDs and never derives identity, grouping, or ear side from paths or filenames.
+_Avoid_: Picker manifest, benchmark folders
 
 **Parameter-tuning set**:
 The image set on which AlphaPhant's non-qualitative matching parameters, such as the profile stretch exponent and penalty weights, are tuned. Disjoint from the retrieval benchmark set. Extraction parameters are not tuned here; they are set qualitatively from the alpha shapes.
@@ -130,12 +138,20 @@ _Avoid_: Validation set, training set, dev set
 The ear-segmentation and landmark models use their own train, validation, and test splits, drawn from singly-sighted elephants so they stay disjoint from all matching data. Those three terms name model data only; the AlphaPhant algorithm has no training phase and tunes its parameters on the parameter-tuning set.
 
 **Identity-retrieval evaluation**:
-End-to-end measurement of how a complete retrieval system ranks the correct known elephant for real sighting ear pairs.
+End-to-end estimation of how a complete retrieval system ranks the correct known elephant for previously unseen elephants and sightings from the target deployment population. Point estimates are unweighted over eligible queries; for uncertainty, elephants are the independent sampling unit and their sightings are nested observations.
 _Avoid_: Model benchmark, stage-level evaluation
 
-**Protocol exclusion**:
-An evaluation example omitted before any system runs because the dataset cannot support the required comparison, such as a query elephant with no other catalog sighting.
-_Avoid_: Extraction failure
+**Evaluation result**:
+The scientific outcome of evaluating one catalog matcher against one retrieval benchmark. Its canonical evidence is the score for every known elephant for each eligible query; ranks, metrics, intervals, and eligibility summaries are derived views rather than separately recorded facts.
+_Avoid_: Evaluation run, evaluation report
+
+**Eligible query**:
+A benchmark sighting used as a query because its elephant still has catalog evidence after that sighting is held out.
+_Avoid_: Protocol-eligible query
+
+**Ineligible query**:
+A benchmark sighting omitted from the query denominator because its elephant has no remaining catalog sighting. Its evidence remains in other queries' catalogs.
+_Avoid_: Protocol exclusion, Extraction failure
 
 ## Future Application
 

@@ -36,9 +36,9 @@ A candidate catalog is exposed directly as a read-only mapping from opaque candi
 
 `CandidateKey` is a UUID-backed distinct type. `CandidateScores` is a read-only mapping from candidate key to float whose key set exactly matches the input catalog. Every score is finite, larger means a stronger match, no universal numeric range is promised, and mapping order carries no meaning. Errors propagate instead of returning partial scores.
 
-Catalog matching is logically stateless: a result depends on the query, candidate catalog, composed configuration, and source photo bytes, never on earlier `match` calls. Identity-neutral caches may change performance but not behavior. Evaluation generates one fresh opaque key assignment per run and may reuse those keys across its query folds; the trusted matcher interface is not an adversarial sandbox.
+Catalog matching is logically stateless: a result depends on the query, candidate catalog, composed configuration, and source photo bytes, never on earlier `match` calls. Identity-neutral caches may change performance but not behavior. Each call to `evaluate` generates one fresh opaque key assignment and may reuse those keys across its query folds; the trusted matcher interface is not an adversarial sandbox.
 
-**Evaluation** owns private ground truth, benchmark examples, candidate keys, splits, failure accounting, derived ranks, metrics, and reproducibility. Its catalog-matcher seam is defined in [evaluation.md](evaluation.md#evaluation-seam).
+**Evaluation** owns the parsed benchmark manifest, Dataset cross-reference validation, private ground truth, candidate keys, splits, structured failure accounting, derived ranks, and metrics. `evaluate` receives the benchmark, identity-aware Dataset, and an already-composed catalog matcher; only neutral sighting ear pairs and opaque candidate keys cross the matcher seam defined in [evaluation.md](evaluation.md#evaluation-seam).
 
 `CatalogMatcher.match` stays fixed across complete retrieval systems. AlphaPhant experiments replace internal profile-comparison or catalog-aggregation modules through construction rather than adding flags to `match`. A future AlphaPhant-specific result may expose winning evidence and alignments, but it must reuse the same underlying matching computation as the generic candidate scores.
 

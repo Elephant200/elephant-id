@@ -1,3 +1,3 @@
-# Pin evaluation reports by git commit
+# Pin persisted evaluation artifacts by git commit
 
-Identity-retrieval evaluation reports are pinned by the git commit that produced them and marked dirty when the working tree has uncommitted changes. The private, gitignored retrieval benchmark set contains real SightingEarPair selections. Reproduction inputs are code, models, images, and the assigned identity data. Caches only accelerate a run. Hosted-model outputs are recorded rather than re-called, and exact-number reproduction is internal because the images are private.
+Deterministic evaluation owns no report type and does not inspect git state. If an entry point persists an evaluation artifact, that artifact is pinned by the git commit that produced it and marked dirty when the working tree has uncommitted changes. The private, gitignored retrieval benchmark set contains real SightingEarPair selections. Reproduction inputs are code, models, images, and the assigned identity data. Caches only accelerate evaluation. Hosted-model outputs are recorded rather than re-called, and exact-number reproduction is internal because the images are private.
