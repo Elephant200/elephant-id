@@ -24,3 +24,8 @@ uv sync --all-groups local
 ```
 
 See [AGENTS.md](AGENTS.md) for agent and contributor guidelines.
+
+## Evaluation
+
+Run the standard retrieval evaluation with `uv run eval`. Pass a manifest path
+to evaluate a different benchmark manifest.

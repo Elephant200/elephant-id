@@ -19,6 +19,9 @@ dependencies = [
     "tqdm>=4.67.3",
 ]
 
+[project.scripts]
+eval = "elephant_id.evaluation.__main__:main"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
