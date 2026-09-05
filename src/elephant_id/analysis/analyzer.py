@@ -91,16 +91,23 @@ class SightingAnalyzer:
 
     def analyze(self, pair: SightingEarPair) -> SightingAnalysis:
         """Return left- and right-ear analysis for one sighting ear pair."""
+        left_candidates = self._prepare_photo_ears(pair.left_photo, "left")
         left_ear = self._resolve_declared_side(
-            self._prepare_photo_ears(pair.left_photo, "left"),
+            left_candidates,
             pair.left_photo,
             "left",
         )
+        
+        if pair.right_photo == pair.left_photo: # same photo has the same ears
+            right_candidates = left_candidates
+        else:
+            right_candidates = self._prepare_photo_ears(pair.right_photo, "right")
         right_ear = self._resolve_declared_side(
-            self._prepare_photo_ears(pair.right_photo, "right"),
+            right_candidates,
             pair.right_photo,
             "right",
         )
+
         return SightingAnalysis(
             left=self._extract(left_ear, "left"),
             right=self._extract(right_ear, "right"),

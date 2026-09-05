@@ -309,6 +309,8 @@ def test_sighting_analyzer_prepares_one_photo_once_for_both_sides() -> None:
 
     assert result.left.source_box == left_box
     assert result.right.source_box == right_box
+    assert segmenter.calls == [PHOTO]
+    assert detector.calls == [(PHOTO, left_box), (PHOTO, right_box)]
 
 
 def test_sighting_analyzer_preserves_input_order_for_equal_matching_ears() -> None:
