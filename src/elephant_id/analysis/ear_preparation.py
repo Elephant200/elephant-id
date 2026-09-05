@@ -25,7 +25,7 @@ def _closed_path(points: NDArray[np.float64], start: int, end: int) -> NDArray[n
 
 def _largest_contour(rle_mask: RleMask) -> NDArray[np.float64]:
     """Return the largest external contour in an RLE mask."""
-    mask = decode_rle_mask(rle_mask).astype(np.uint8) * 255
+    mask = decode_rle_mask(rle_mask).view(np.uint8)
     contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
     if not contours:
         raise ValueError("No contour found for ear mask")
