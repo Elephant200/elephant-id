@@ -33,7 +33,7 @@ def decode_rle_mask(rle_mask: RleMask) -> np.ndarray:
     decoded = coco_mask.decode(rle_mask)
     if decoded.ndim == 3:
         decoded = decoded[:, :, 0]
-    return np.ascontiguousarray(decoded.astype(bool))
+    return np.asarray(decoded, dtype=bool, order="C")
 
 
 def mask_bounds(mask: np.ndarray) -> tuple[int, int, int, int]:
