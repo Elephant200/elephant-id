@@ -134,7 +134,7 @@ class Sam3FeatureSegmenter:
         detections = tuple(
             _detection_from_prediction(prediction) for prediction in predictions
         )
-        logger.info(
+        logger.debug(
             f"Segmented SAM3 features for photo {photo.photo_id}: "
             f"{len(detections)} detections"
         )

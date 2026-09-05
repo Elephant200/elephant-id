@@ -27,7 +27,7 @@ class Sam3EarSegmenter:
             for detection in self._features.segment_features(photo, image)
             if detection.class_name == "ear"
         )
-        logger.info(
+        logger.debug(
             f"Segmented ears for photo {photo.photo_id}: {len(ears)} detections"
         )
         return ears

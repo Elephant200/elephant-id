@@ -113,9 +113,9 @@ class YoloEarLandmarkDetector:
         crop = image[ear_box.y1 : ear_box.y2, ear_box.x1 : ear_box.x2].copy()
         relative = self._model_predictor().predict(crop)
         if not relative:
-            logger.info(f"Detected no ear landmarks for photo {photo.photo_id}")
+            logger.debug(f"Detected no ear landmarks for photo {photo.photo_id}")
             return None
         selected = max(relative, key=lambda detection: detection.confidence)
         result = selected.translate(float(ear_box.x1), float(ear_box.y1))
-        logger.info(f"Detected ear landmarks for photo {photo.photo_id}")
+        logger.debug(f"Detected ear landmarks for photo {photo.photo_id}")
         return result
