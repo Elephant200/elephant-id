@@ -25,7 +25,7 @@ from elephant_id.matching import (
     CandidateScores,
     CatalogMatcher,
 )
-from elephant_id.matching.tear_matcher import TearMatcher
+from elephant_id.matching.tear_matcher import TearMatch, TearMatcher
 
 
 def _uuid(value: int) -> UUID:
@@ -299,3 +299,37 @@ def test_matching_package_exports_only_public_catalog_interface() -> None:
         "CandidateScores",
         "CatalogMatcher",
     ]
+
+
+def test_alphaphant_batches_all_candidates_by_side(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Catalog size changes batch length, never the number of matching calls."""
+    query, first, second = _pair(10), _pair(20), _pair(30)
+    query_analysis = _analysis(100, [0, 0.1, 0], [0, 0.2, 0])
+    first_analysis = _analysis(200, [0, 0.1, 0], [0, 0, 0])
+    second_analysis = _analysis(300, [0, 0, 0], [0, 0.2, 0])
+    alphaphant, _ = _alphaphant(
+        {query: query_analysis, first: first_analysis, second: second_analysis}
+    )
+    calls: list[tuple[np.ndarray, tuple[np.ndarray, ...]]] = []
+    original = TearMatcher.match_many
+
+    def record(
+        self: TearMatcher, profile: np.ndarray, candidates: tuple[np.ndarray, ...]
+    ) -> tuple[TearMatch, ...]:
+        """Record each bulk call while executing the real matcher."""
+        calls.append((profile, candidates))
+        return original(self, profile, candidates)
+
+    monkeypatch.setattr(TearMatcher, "match_many", record)
+    first_key, second_key = CandidateKey(_uuid(500)), CandidateKey(_uuid(501))
+    scores = alphaphant.match(query, {first_key: (first,), second_key: (second,)})
+    assert len(calls) == 2
+    assert calls[0][0] is query_analysis.left.tear_profile.depths
+    assert calls[1][0] is query_analysis.right.tear_profile.depths
+    assert all(len(candidates) == 2 for _, candidates in calls)
+    assert scores == pytest.approx({first_key: 0.5, second_key: 0.5})
+    assert (
+        alphaphant.match(query, {second_key: (second,), first_key: (first,)}) == scores
+    )

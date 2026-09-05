@@ -144,3 +144,14 @@ def test_mask_bounds_rejects_empty_mask():
 def test_mask_bounds_rejects_non_2d_mask(shape):
     with pytest.raises(ValueError, match="must be 2D"):
         mask_bounds(np.ones(shape, dtype=bool))
+
+
+def test_decode_rle_mask_converts_fortran_layout_to_contiguous_booleans(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Decoded COCO storage becomes contiguous canonical booleans for OpenCV."""
+    source = np.asfortranarray(np.array([[0, 1, 0], [1, 0, 1]], dtype=np.uint8))
+    monkeypatch.setattr('elephant_id.image.masks.coco_mask.decode', lambda _: source)
+    result = decode_rle_mask({'size': [2, 3], 'counts': b'unused'})
+    assert result.flags.c_contiguous
+    assert result.dtype == np.bool_
+    np.testing.assert_array_equal(result.view(np.uint8), source)
+    np.testing.assert_array_equal(source, [[0, 1, 0], [1, 0, 1]])

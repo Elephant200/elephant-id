@@ -35,14 +35,12 @@ SAM3 currently performs ear localization and segmentation. A YOLO keypoint model
 
 Tear-profile matching compares left ears only with left ears and right ears only with right ears.
 
-The underlying alignment is directional because one profile is shifted and stretched against the other. The canonical pair score removes that arbitrary direction:
+The alignment is forward-only: the query profile is shifted and stretched against each catalog profile. The score and retained alignment both come from that query-to-catalog search; reverse alignment is not computed or averaged.
 
-```
-symmetric_similarity(a, b) =
-    (similarity(a -> b) + similarity(b -> a)) / 2
-```
+Bulk matching is canonical. AlphaPhant submits every catalog left profile in one call and every catalog right profile in another. The matcher resamples profiles in batches, constructs every configured query stretch and shift once per side, and reuses those transforms across the catalog. Candidate chunks bound overlap working memory rather than allocating a tensor for the entire catalog. A single-profile match delegates to the same bulk implementation.
 
 This raw similarity score contributes directly to candidate scores. Cohort normalization and learned calibration are outside the selected pipeline.
+Performance measurements and reproduction commands are in [matching performance](matching-performance.md).
 
 ## Catalog Matching
 
