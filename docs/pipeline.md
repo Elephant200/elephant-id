@@ -1,65 +1,62 @@
 # AlphaPhant Pipeline
 
-This document defines the research algorithm being locked down. Domain, storage, and cache boundaries are defined in [architecture.md](architecture.md).
+AlphaPhant receives one `SightingEarPair` and a candidate catalog. It returns one finite similarity score per candidate. Ranking is the descending view of those scores; the pipeline makes no identity decision. MiewID is a separate zero-shot comparison.
 
-## Input and Output
+## Shared ear preparation
 
-The input is a SightingEarPair: one Photo declared for the left ear and one Photo declared for the right ear from the same sighting. The same Photo may serve both sides.
+`SightingPreparer` reads each neutral Photo through the image-only PhotoStore and decodes its original bytes as BGR. Cached complete SAM3 features supply ear detections. Cached YOLO landmarks supply anatomical endpoints in full-image coordinates. Existing geometry resolves the declared side, cleans its contour, and produces an immutable `PreparedEar`.
 
-The output is one match result per known elephant. Each candidate carries:
+A same-photo pair prepares that Photo once. Composition memoizes preparation and injects the same callable into all scale analyzers. CurvRank and MiewID receive an ear-preparation callable, rather than an AlphaTear analyzer. The comparison composition supplies `SightingAnalyzer.prepare`, which forwards to the same shared computation. Neither comparator receives Dataset or AlphaPhant scores.
 
-- its combined similarity score;
-- its strongest supporting left-ear catalog evidence;
-- its strongest supporting right-ear catalog evidence;
-- the two side-level similarity scores and alignments.
+`SightingAnalyzer` combines preparation with one profile extractor. It preserves structured failures and never silently drops an ear or substitutes another sighting.
 
-AlphaPhant returns candidate scores. A candidate ranking is their descending view; AlphaPhant does not make an identity decision or add evidence to the catalog.
+## AlphaTear extraction
 
-## Automated Preprocessing
+The default extraction version is `alpha-tear-v3`, with 1,024 contour points, 720 profile bins, 5-degree trimming, opening fraction 0.020, and smoothing sigma 2.0. The single-scale baseline uses alpha fraction 0.35.
 
-Each reference Photo follows the same sequence:
+AlphaPhant uses seven immutable versions with alpha fractions 0.11, 0.22, 0.50, 1.10, 2.50, 5.00, and 12.00. Their producer slugs are `alpha-tear-v3-a011`, `alpha-tear-v3-a022`, `alpha-tear-v3-a050`, `alpha-tear-v3-a110`, `alpha-tear-v3-a250`, `alpha-tear-v3-a500`, and `alpha-tear-v3-a1200`. Small rolling disks follow finer contour structure; large disks give broader geometric references. No scale subset is selected per pair.
 
-1. **Photo retrieval and decoding** read original encoded bytes from the PhotoStore and decode them to a BGR image.
-2. **Ear localization and ear segmentation** find the declared ear and produce its mask and ear contour.
-3. **Ear landmark detection** finds the two anatomical endpoints that define the relevant contour.
-4. **Ear-contour preparation** snaps the landmarks to the segmentation contour, selects the relevant anchor-to-anchor path, and determines the side-aware geometry.
-5. **Tear-profile extraction** runs AlphaTear, which constructs an alpha shape internally and produces the one-dimensional tear profile.
+Any future output-changing extraction change requires a new producer slug. Preparation and extraction identity are part of the version contract.
 
-The declared side is authoritative. If the pipeline cannot produce a valid ear of that side, analysis fails explicitly. Research adds no fallback selection after the ear pair has been chosen.
+## Profile channels
 
-Candidate reduction uses two intentionally different geometric measures. The legacy preliminary heuristic compares segmentation-mask pixel area before landmark detection; after preparation, declared-side disambiguation compares the filled cleaned-contour area and preserves input order for exact ties.
+Each ear has two channel scores:
 
-SAM3 currently performs ear localization and segmentation. A YOLO keypoint model currently performs ear landmark detection. Replacements use the semantic inference interfaces in [architecture.md](architecture.md).
+- Depth uses the nonnegative tear depths.
+- Signed depth change separates the positive and negative angular derivatives of the original profile. Rising and falling slopes cannot substitute for each other. This is not a negative-depth channel.
 
-## Tear-Profile Matching
+Each nonnegative row is raised to power 0.75, resampled to 240 bins, and multiplied by Gaussian angular weights with center 120 degrees and standard deviation 35 degrees in the resampled profile coordinate. The derivative is taken before compression and resampling.
 
-Tear-profile matching compares left ears only with left ears and right ears only with right ears.
+The depth channel has one row per alpha-shape scale. Signed depth change has rising and falling rows per scale. All rows in a channel share one alignment. Depth and signed depth change may choose different alignments.
 
-The alignment is forward-only: the query profile is shifted and stretched against each catalog profile. The score and retained alignment both come from that query-to-catalog search; reverse alignment is not computed or averaged.
+## Directional alignment
 
-Bulk matching is canonical. AlphaPhant submits every catalog left profile in one call and every catalog right profile in another. The matcher resamples profiles in batches, constructs every configured query stretch and shift once per side, and reuses those transforms across the catalog. Candidate chunks bound overlap working memory rather than allocating a tensor for the entire catalog. A single-profile match delegates to the same bulk implementation.
+`TearMatcher.match_stack_many` compares one query stack with catalog stacks. It searches centered stretches 0.80 through 1.20 in steps of 0.025 and integer shifts within 15% of the 240-bin profile. Values shifted outside the profile are zero.
 
-This raw similarity score contributes directly to candidate scores. Cohort normalization and learned calibration are outside the selected pipeline.
-Performance measurements and reproduction commands are in [matching performance](matching-performance.md).
+For each transformation, a row scores by Ruzicka overlap, `sum(min(q,c)) / sum(max(q,c))`. Row scores are averaged before selecting a transformation. The shared score is multiplied by `exp(-(abs(shift_fraction)/0.16)^4)`. The first best transformation wins; zero overlap has neutral alignment.
 
-## Catalog Matching
+The implementation uses the equivalent nonnegative-vector formula `(T-D)/(T+D)`, where `T` is the sum of both vectors and `D` their L1 distance. Empty rows score zero. Compiled distance calculations and bounded batches preserve scores to high precision.
 
-Catalog sightings are not matching units. Once tear-profile evidence enters the known-elephant catalog, it is grouped by known elephant and ear side.
+The selected comparison is directional: shifts and stretches apply to the query profile while the catalog profile stays fixed.
 
-For each known elephant:
+Depth contributes 0.55 and signed depth change contributes 0.45 to each ear similarity. No rank fusion, per-scale normalization, or ear-decisiveness weight is applied.
 
-1. Compare the query left profile with every left catalog profile and retain the highest similarity score.
-2. Compare the query right profile with every right catalog profile and retain the highest similarity score.
-3. Average the retained left and right scores.
+## Catalog scoring
 
-The winning left and right evidence may come from different catalog sightings. Their separate Photo and sighting provenance remains visible.
+For each side, the supplied catalog determines a background strength for each catalog ear: the mean of its ten strongest outgoing similarities to other catalog ears, or all available neighbors when fewer than ten exist. The ear itself is excluded. If no neighbor exists, background strength is zero. Other sightings of its candidate remain included.
 
-Both sides are required: a known elephant is scored only when it has valid left and right catalog evidence. One-sided matching is future work.
+A query-to-catalog-ear similarity `s` becomes `2*s - background`. The held-out query never enters the catalog neighborhood. Cached pair similarities do not change which evidence a call is allowed to use. There is no query-side CSLS constant.
 
-## Caching
+One candidate's corrected sighting scores are combined by a similarity-weighted mean. Weights are proportional to `exp((score - maximum)/temperature)`, where temperature is the standard deviation of all corrected catalog-ear scores for this query side. Zero spread uses the maximum. This is a weighted mean, not a probability or log-sum-exp score.
 
-Expensive model invocations and final per-ear tear profiles are cached. Ear selection, sighting orchestration, contour preparation, catalog grouping, candidate scoring, and derived rankings are not independently cached.
+The candidate's left and right scores are averaged equally. Candidate scores need not lie in `[0,1]` and are not confidence probabilities.
 
-A final tear-profile record is per prepared ear. Its key contains the source photo UUID, integer raster bounding box, inferred side, segmentation producer slug, and landmark producer slug. Bounding-box identity remains stable when candidate ordering changes. Cache identity and producer versioning are defined in [architecture.md](architecture.md).
+## Composition and evaluation
 
-Caching is selected when processors are composed. Standard runs cache the complete SAM3 multi-feature computation before its ear-only adapter, landmark detection, and AlphaTear extraction. Parameter-tuning runs use a raw unversioned AlphaTear extractor while retaining cached SAM3 features and landmark detection. The analyzer and catalog matcher expose no cache-policy options.
+`build_standard_alphaphant` builds the fixed composition. `compose_alphaphant` applies its fixed matching settings to supplied scale analyzers; `build_versioned_analyzers` shares preparation across those scales. `build_standard_analyzer` retains the original single-scale analysis baseline.
+
+There is no public `AlphaPhantConfig` product. The exact ablation uses isolated scientific compositions to remove the catalog correction or replace the similarity-weighted mean with the original maximum.
+
+The constructor names state each component's role: `scale_analyzers`, `channel_matchers`, and `channel_weights`. Custom weights are scaled before normalization so large finite values cannot overflow their sum. Ablation caches identify the script, active package sources, and NumPy/SciPy versions before reusing comparison matrices.
+
+See [results.md](results.md) for measured contributions and [evaluation.md](evaluation.md) for the protocol and reproduction commands.

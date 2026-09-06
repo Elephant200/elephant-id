@@ -1,7 +1,7 @@
 """Tests for the public AlphaPhant catalog-matching seam."""
 
 import math
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import cast
 from uuid import UUID
@@ -88,8 +88,8 @@ def _alphaphant(
     analyzer = RecordingAnalyzer(analyses)
     return (
         AlphaPhant(
-            analyzer=cast(SightingAnalyzer, analyzer),
-            tear_matcher=TearMatcher(),
+            scale_analyzers=(cast(SightingAnalyzer, analyzer),),
+            channel_matchers=(TearMatcher(),),
         ),
         analyzer,
     )
@@ -147,7 +147,7 @@ def test_alphaphant_analyzes_neutral_catalog_and_returns_candidate_scores() -> N
 
     assert isinstance(scores, dict)
     assert scores.keys() == catalog.keys()
-    assert scores[strong_key] == pytest.approx(1.0)
+    assert scores[strong_key] == pytest.approx(2 / (1 + math.exp(-3 / math.sqrt(2))))
     assert scores[weak_key] == pytest.approx(0.0)
     assert scores[strong_key] > scores[weak_key]
     assert all(math.isfinite(score) for score in scores.values())
@@ -247,8 +247,8 @@ def test_alphaphant_rejects_empty_candidate_evidence() -> None:
         alphaphant.match(query, {candidate_key: ()})
 
 
-def test_alphaphant_selects_side_winners_independently() -> None:
-    """The strongest left and right evidence may come from different pairs."""
+def test_alphaphant_aggregates_each_side_before_averaging() -> None:
+    """Complementary sightings support each side before the two sides are averaged."""
     query = _pair(10)
     right_match = _pair(20)
     left_match = _pair(30)
@@ -263,7 +263,7 @@ def test_alphaphant_selects_side_winners_independently() -> None:
 
     scores = alphaphant.match(query, {candidate_key: (right_match, left_match)})
 
-    assert scores[candidate_key] == pytest.approx(1.0)
+    assert scores[candidate_key] == pytest.approx(2 / (1 + math.exp(-2)))
 
 
 def test_alphaphant_compares_only_corresponding_sides() -> None:
@@ -304,7 +304,7 @@ def test_matching_package_exports_only_public_catalog_interface() -> None:
 def test_alphaphant_batches_all_candidates_by_side(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Catalog size changes batch length, never the number of matching calls."""
+    """Each directional row is batched once and reused after catalog reordering."""
     query, first, second = _pair(10), _pair(20), _pair(30)
     query_analysis = _analysis(100, [0, 0.1, 0], [0, 0.2, 0])
     first_analysis = _analysis(200, [0, 0.1, 0], [0, 0, 0])
@@ -312,24 +312,91 @@ def test_alphaphant_batches_all_candidates_by_side(
     alphaphant, _ = _alphaphant(
         {query: query_analysis, first: first_analysis, second: second_analysis}
     )
-    calls: list[tuple[np.ndarray, tuple[np.ndarray, ...]]] = []
-    original = TearMatcher.match_many
+    calls: list[tuple[Sequence[np.ndarray], Sequence[Sequence[np.ndarray]]]] = []
+    original = TearMatcher.match_stack_many
 
     def record(
-        self: TearMatcher, profile: np.ndarray, candidates: tuple[np.ndarray, ...]
+        self: TearMatcher,
+        profile: Sequence[np.ndarray],
+        candidates: Sequence[Sequence[np.ndarray]],
     ) -> tuple[TearMatch, ...]:
         """Record each bulk call while executing the real matcher."""
         calls.append((profile, candidates))
         return original(self, profile, candidates)
 
-    monkeypatch.setattr(TearMatcher, "match_many", record)
+    monkeypatch.setattr(TearMatcher, "match_stack_many", record)
     first_key, second_key = CandidateKey(_uuid(500)), CandidateKey(_uuid(501))
     scores = alphaphant.match(query, {first_key: (first,), second_key: (second,)})
-    assert len(calls) == 2
-    assert calls[0][0] is query_analysis.left.tear_profile.depths
-    assert calls[1][0] is query_analysis.right.tear_profile.depths
-    assert all(len(candidates) == 2 for _, candidates in calls)
-    assert scores == pytest.approx({first_key: 0.5, second_key: 0.5})
+    assert len(calls) == 6
+    assert calls[0][0][0] is query_analysis.left.tear_profile.depths
+    assert calls[3][0][0] is query_analysis.right.tear_profile.depths
+    assert all(len(candidates) == 3 for _, candidates in calls)
+    assert scores == pytest.approx({first_key: 1.0, second_key: 1.0})
     assert (
         alphaphant.match(query, {second_key: (second,), first_key: (first,)}) == scores
     )
+
+
+def test_catalog_neighborhood_excludes_held_out_evidence() -> None:
+    """Cached similarities cannot leak a removed sighting into a later neighborhood."""
+    pairs = tuple(_pair(100 + 10 * i) for i in range(4))
+    values = np.asarray(
+        [
+            [1.0, 0.9, 0.6, 0.8],
+            [0.9, 1.0, 0.9, 0.1],
+            [0.6, 0.9, 1.0, 0.2],
+            [0.8, 0.1, 0.2, 1.0],
+        ]
+    )
+
+    class ControlledTearMatcher(TearMatcher):
+        """Provide known ear similarities so catalog arithmetic is observable."""
+
+        def match_stack_many(
+            self,
+            query: Sequence[np.ndarray],
+            candidates: Sequence[Sequence[np.ndarray]],
+        ) -> tuple[TearMatch, ...]:
+            """Read an identity-neutral synthetic profile index."""
+            return tuple(
+                TearMatch(float(values[int(query[0][0]), int(stack[0][0])]), 1.0, 0)
+                for stack in candidates
+            )
+
+    analyzer = RecordingAnalyzer(
+        {pair: _analysis(500 + i, [i], [i]) for i, pair in enumerate(pairs)}
+    )
+    matcher = AlphaPhant(
+        scale_analyzers=(cast(SightingAnalyzer, analyzer),),
+        channel_matchers=(ControlledTearMatcher(),),
+    )
+    first, second = CandidateKey(_uuid(900)), CandidateKey(_uuid(901))
+    full = {first: (pairs[1], pairs[2]), second: (pairs[3],)}
+    scores = matcher.match(pairs[0], full)
+    assert scores[second] == pytest.approx(1.45)
+    assert scores[second] > scores[first]
+
+    reduced = matcher.match(pairs[0], {first: (pairs[1],), second: (pairs[3],)})
+    assert reduced == pytest.approx({first: 1.7, second: 1.5})
+    assert matcher.match(pairs[0], full) == scores
+
+
+@pytest.mark.parametrize("magnitude", [1e308, 5e-324])
+def test_channel_weight_magnitude_does_not_change_scores(magnitude: float) -> None:
+    """Finite extreme weights preserve relative influence without overflow."""
+    query, evidence = _pair(10), _pair(20)
+    analysis = _analysis(100, [0.0, 0.2, 0.0], [0.0, 0.1, 0.0])
+    analyzer = cast(
+        SightingAnalyzer, RecordingAnalyzer({query: analysis, evidence: analysis})
+    )
+    catalog = {CandidateKey(_uuid(100)): (evidence,)}
+    common = {
+        "scale_analyzers": (analyzer,),
+        "channel_matchers": (TearMatcher(), TearMatcher()),
+    }
+    reference = AlphaPhant(**common, channel_weights=(1.0, 1.0)).match(query, catalog)
+    result = AlphaPhant(**common, channel_weights=(magnitude, magnitude)).match(
+        query, catalog
+    )
+    assert next(iter(reference.values())) > 0.0
+    assert result == pytest.approx(reference, abs=1e-12)

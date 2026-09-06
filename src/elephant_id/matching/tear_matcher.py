@@ -1,16 +1,38 @@
-"""Forward-only bulk tear-profile matching for elephant ear re-identification."""
+"""Directional tear-profile alignment with shared alpha-shape scale support."""
 
-from collections.abc import Iterator, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import Literal
 
 import numpy as np
+from scipy.spatial.distance import cdist
 
 _OVERLAP_WORKSPACE_BYTES = 16 * 1024 * 1024
+ProfileChannel = Literal["depth", "depth_change", "signed_depth_change"]
+
+
+def angular_weights(
+    bins: int, center_degrees: float, width_degrees: float
+) -> tuple[float, ...]:
+    """Return Gaussian angular weights over the canonical half-circle.
+
+    Raises:
+        ValueError: If the bin count or Gaussian width is invalid.
+    """
+    if bins < 2 or width_degrees <= 0:
+        raise ValueError("Angular weights require at least two bins and positive width")
+    angles = np.linspace(0.0, 180.0, bins)
+    return tuple(np.exp(-0.5 * ((angles - center_degrees) / width_degrees) ** 2))
 
 
 @dataclass(frozen=True, slots=True)
 class TearMatcherConfig:
-    """Parameters controlling resampling, shift penalties, and stretch search."""
+    """Profile preparation and the bounded directional alignment search.
+
+    Defaults retain the single-scale main baseline. The publication
+    composition supplies its measured settings explicitly. Signed depth
+    change keeps rising and falling slopes separate under one alignment.
+    """
 
     resampled_bins: int = 240
     max_shift_fraction: float = 0.15
@@ -20,11 +42,33 @@ class TearMatcherConfig:
     stretches: tuple[float, ...] = tuple(
         round(0.8 + index * 0.025, 3) for index in range(17)
     )
+    bin_weights: tuple[float, ...] | None = None
+    channel: ProfileChannel = "depth"
+
+    def __post_init__(self) -> None:
+        """Validate channel and angular weights.
+
+        Raises:
+            ValueError: If the channel is unknown or weights are invalid.
+        """
+        if self.channel not in ("depth", "depth_change", "signed_depth_change"):
+            raise ValueError("Unknown profile channel")
+        if self.bin_weights is not None:
+            weights = np.asarray(self.bin_weights)
+            if (
+                weights.shape != (self.resampled_bins,)
+                or not np.isfinite(weights).all()
+                or np.any(weights < 0)
+                or not np.any(weights > 0)
+            ):
+                raise ValueError(
+                    "Angular weights must be finite, nonnegative, and match bins"
+                )
 
 
 @dataclass(frozen=True, slots=True)
 class TearMatch:
-    """Forward similarity and alignment; positive shifts move query depths right."""
+    """Directional score and alignment; a positive shift moves query depths right."""
 
     score: float
     stretch: float
@@ -32,10 +76,10 @@ class TearMatch:
 
 
 class TearMatcher:
-    """Match one query profile against catalog profiles using forward alignment."""
+    """Align one ear's profile stack against catalog stacks in bounded memory."""
 
     def __init__(self, config: TearMatcherConfig | None = None) -> None:
-        """Configure the forward alignment search."""
+        """Configure profile preparation and precompute the alignment grid."""
         self._config = config or TearMatcherConfig()
         self._precompute_search()
 
@@ -46,190 +90,154 @@ class TearMatcher:
         return self.match_many(query_profile, (catalog_profile,))[0]
 
     def match_many(
-        self,
-        query_profile: np.ndarray,
-        catalog_profiles: Sequence[np.ndarray],
+        self, query_profile: np.ndarray, catalog_profiles: Sequence[np.ndarray]
     ) -> tuple[TearMatch, ...]:
-        """Match one query profile to many catalog profiles.
-
-        Args:
-            query_profile: The profile to match, a 1D array of depths.
-            catalog_profiles: The profiles to match against, a sequence of 1D arrays of depths.
-
-        Returns:
-            A tuple of matches in catalog-profile order.
-        """
-        if len(catalog_profiles) == 0:
-            return ()
-
-        prepared_query = self._prepare_profiles((query_profile,))[0]
-        catalog_batches = self._prepare_catalog_batches(catalog_profiles)
-
-        query_variants = self._build_query_variants(prepared_query)
-
-        return self._score_catalog_batches(query_variants, catalog_batches)
-
-    def _build_query_variants(self, prepared_query: np.ndarray) -> np.ndarray:
-        """Stretch the query, then shift each stretch across the search offsets."""
-        stretched_profiles = self._stretch_query(prepared_query)
-        shifted_profiles = (
-            stretched_profiles[:, self._shift_source_bins] * self._shift_in_bounds
+        """Match a single-scale query against single-scale catalog profiles."""
+        return self.match_stack_many(
+            (query_profile,), tuple((profile,) for profile in catalog_profiles)
         )
 
-        return shifted_profiles.reshape(-1, self._config.resampled_bins)
+    def match_stack(
+        self, query: Sequence[np.ndarray], candidate: Sequence[np.ndarray]
+    ) -> TearMatch:
+        """Match two ears using one transformation across all alpha-shape scales."""
+        return self.match_stack_many(query, (candidate,))[0]
 
-    def _score_catalog_batches(
+    def match_stack_many(
         self,
-        query_variants: np.ndarray,
-        catalog_batches: Iterator[np.ndarray],
+        query: Sequence[np.ndarray],
+        candidates: Sequence[Sequence[np.ndarray]],
     ) -> tuple[TearMatch, ...]:
-        """Score prepared catalog batches using the same query variants."""
-        variant_depth_sums = query_variants.sum(axis=1)
+        """Return directional matches under one alignment per candidate stack.
+
+        Scales enter the mean overlap before its maximum is selected. In the
+        signed channel, rising and falling slopes also share that alignment.
+
+        Raises:
+            ValueError: If a stack is empty or scale counts do not agree.
+        """
+        if not candidates:
+            return ()
+        if not query or any(len(stack) != len(query) for stack in candidates):
+            raise ValueError("Profile stacks must be nonempty and pair one-to-one")
+        prepared_query = self._prepare_stack(query)
+        variants = tuple(self._build_query_variants(row) for row in prepared_query)
+        variant_count = len(self._variant_penalties)
+        batch_size = max(1, _OVERLAP_WORKSPACE_BYTES // (variant_count * 8 * 4))
         matches: list[TearMatch] = []
-
-        for catalog_batch in catalog_batches:
-            scores = self._match_profile_batch(
-                query_variants, variant_depth_sums, catalog_batch
+        for start in range(0, len(candidates), batch_size):
+            batch = np.asarray(
+                [
+                    self._prepare_stack(stack)
+                    for stack in candidates[start : start + batch_size]
+                ]
             )
+            scores = np.zeros((len(batch), variant_count))
+            for index, query_variants in enumerate(variants):
+                scores += self._overlap_scores(batch[:, index, :], query_variants)
+            scores *= self._variant_penalties / len(variants)
             matches.extend(self._select_matches(scores))
-
         return tuple(matches)
 
-    def _match_profile_batch(
-        self,
-        query_variants: np.ndarray,
-        variant_depth_sums: np.ndarray,
-        catalog_batch: np.ndarray,
-    ) -> np.ndarray:
-        """Return a `(catalog_profile_count, variant_count)` similarity matrix."""
-        overlap = np.minimum(query_variants[None, :, :], catalog_batch[:, None, :]).sum(
-            axis=2
+    @staticmethod
+    def _overlap_scores(catalog: np.ndarray, query_variants: np.ndarray) -> np.ndarray:
+        """Compute Ruzicka overlap as (total mass - L1) / (total mass + L1)."""
+        catalog = np.ascontiguousarray(catalog)
+        distance = cdist(catalog, query_variants, metric="cityblock")
+        catalog_sum = catalog.sum(axis=1)
+        variant_sum = query_variants.sum(axis=1)
+        total = catalog_sum[:, None] + variant_sum[None, :]
+        denominator = total + distance
+        overlap = np.divide(
+            total - distance,
+            denominator,
+            out=np.zeros_like(distance),
+            where=denominator > 0,
         )
+        # Rounding can put a mathematically zero overlap just below zero.
+        np.clip(overlap, 0.0, 1.0, out=overlap)
+        overlap[catalog_sum == 0.0, :] = 0.0
+        overlap[:, variant_sum == 0.0] = 0.0
+        return overlap
 
-        # min + max = sum
-        catalog_depth_sums = catalog_batch.sum(axis=1)
-        union = variant_depth_sums[None, :] + catalog_depth_sums[:, None] - overlap
-        scores = np.divide(overlap, union, out=np.zeros_like(overlap), where=union > 0)
-        scores *= self._variant_penalties
+    def _prepare_stack(self, profiles: Sequence[np.ndarray]) -> np.ndarray:
+        """Select the channel before compression, resampling, and angular weights."""
+        rows: list[np.ndarray] = []
+        for profile in profiles:
+            values = np.asarray(profile, dtype=np.float64)
+            if self._config.channel == "depth":
+                rows.append(values)
+            else:
+                gradient = (
+                    np.gradient(values) if len(values) > 1 else np.zeros_like(values)
+                )
+                if self._config.channel == "depth_change":
+                    rows.append(np.abs(gradient))
+                else:
+                    rows.extend((np.maximum(gradient, 0.0), np.maximum(-gradient, 0.0)))
+        prepared = self._prepare_profiles(rows)
+        if self._config.bin_weights is not None:
+            prepared *= np.asarray(self._config.bin_weights)
+        return prepared
 
-        return scores
+    def _prepare_profiles(self, profiles: Sequence[np.ndarray]) -> np.ndarray:
+        """Compress and resample possibly ragged one-dimensional profiles."""
+        output = np.empty((len(profiles), self._config.resampled_bins))
+        for index, profile in enumerate(profiles):
+            values = np.maximum(profile, 0.0) ** self._config.depth_exponent
+            positions = np.linspace(0.0, len(values) - 1, self._config.resampled_bins)
+            lower = np.floor(positions).astype(np.int32)
+            upper = np.minimum(lower + 1, len(values) - 1)
+            weight = positions - lower
+            output[index] = values[lower] * (1.0 - weight) + values[upper] * weight
+        return output
 
-    def _select_matches(self, scores: np.ndarray) -> tuple[TearMatch, ...]:
-        """Select each profile's best variant, retaining neutral zero-score alignments."""
-        best_indices = np.argmax(scores, axis=1)
-        best_scores = scores[np.arange(len(scores)), best_indices]
-
-        stretches = np.where(
-            best_scores > 0.0, self._variant_stretches[best_indices], 1.0
-        )
-        shifts = np.where(best_scores > 0.0, self._variant_shifts[best_indices], 0)
-
-        return tuple(
-            TearMatch(score=float(score), stretch=float(stretch), shift_bins=int(shift))
-            for score, stretch, shift in zip(
-                best_scores, stretches, shifts, strict=True
-            )
-        )
-
-    def _prepare_catalog_batches(
-        self, catalog_profiles: Sequence[np.ndarray]
-    ) -> Iterator[np.ndarray]:
-        """Resample catalog batches sized to fit the overlap workspace."""
-        variant_count = len(self._variant_stretches)
-        bytes_per_profile = (
-            variant_count * self._config.resampled_bins * np.dtype(np.float64).itemsize
-        )
-        batch_size = max(1, _OVERLAP_WORKSPACE_BYTES // bytes_per_profile)
-
-        for start in range(0, len(catalog_profiles), batch_size):
-            yield self._prepare_profiles(catalog_profiles[start : start + batch_size])
-
-    def _prepare_profiles(self, source_profiles: Sequence[np.ndarray]) -> np.ndarray:
-        """Compress ragged source depths into a `(profile_count, resampled_bins)` matrix."""
-        indices_by_length: dict[int, list[int]] = {}
-        for profile_index, profile in enumerate(source_profiles):
-            indices_by_length.setdefault(len(profile), []).append(profile_index)
-
-        resampled_profiles = np.empty(
-            (len(source_profiles), self._config.resampled_bins)
-        )
-
-        for profile_indices in indices_by_length.values():
-            source_depths = np.asarray(
-                np.stack([source_profiles[index] for index in profile_indices]),
-                dtype=np.float64,
-            )
-            compressed_depths = (
-                np.maximum(source_depths, 0.0) ** self._config.depth_exponent
-            )
-            resampled_profiles[profile_indices] = self._resample_rows(compressed_depths)
-
-        return resampled_profiles
-
-    def _resample_rows(self, profiles: np.ndarray) -> np.ndarray:
-        """Sample each profile row on the same evenly spaced bin grid."""
-        last_bin = profiles.shape[1] - 1
-        source_bins = np.linspace(0.0, last_bin, self._config.resampled_bins)
-        lower_bins = np.floor(source_bins).astype(np.int32)
-        upper_bins = np.minimum(lower_bins + 1, last_bin)
-        upper_weights = source_bins - lower_bins
-
-        return (
-            profiles[:, lower_bins] * (1.0 - upper_weights)
-            + profiles[:, upper_bins] * upper_weights
-        )
-
-    def _stretch_query(self, query: np.ndarray) -> np.ndarray:
-        """Sample the query at every configured centered stretch."""
+    def _build_query_variants(self, query: np.ndarray) -> np.ndarray:
+        """Apply every configured centered stretch and zero-padded shift."""
         stretched = (
             query[self._stretch_lower_bins] * (1.0 - self._stretch_upper_weights)
             + query[self._stretch_upper_bins] * self._stretch_upper_weights
         )
         stretched[~self._stretch_in_bounds] = 0.0
+        shifted = stretched[:, self._shift_source_bins] * self._shift_in_bounds
+        return np.ascontiguousarray(shifted.reshape(-1, self._config.resampled_bins))
 
-        return stretched
+    def _select_matches(self, scores: np.ndarray) -> tuple[TearMatch, ...]:
+        """Select the first best transformation, with neutral zero-score alignment."""
+        indices = np.argmax(scores, axis=1)
+        values = scores[np.arange(len(scores)), indices]
+        return tuple(
+            TearMatch(
+                score=float(score),
+                stretch=float(self._variant_stretches[index]) if score > 0 else 1.0,
+                shift_bins=int(self._variant_shifts[index]) if score > 0 else 0,
+            )
+            for index, score in zip(indices, values, strict=True)
+        )
 
     def _precompute_search(self) -> None:
-        """Precompute sampling positions and the stretch-by-shift search grid."""
-        bin_count = self._config.resampled_bins
-
-        max_shift_bins = round(self._config.max_shift_fraction * bin_count)
-        shift_offsets = np.arange(-max_shift_bins, max_shift_bins + 1, dtype=np.int32)
-        shift_fractions = shift_offsets / bin_count
-        shift_penalties = np.exp(
+        """Precompute interpolation positions, shifts, and penalties."""
+        bins = self._config.resampled_bins
+        max_shift = round(self._config.max_shift_fraction * bins)
+        shifts = np.arange(-max_shift, max_shift + 1, dtype=np.int32)
+        penalties = np.exp(
             -(
-                (np.abs(shift_fractions) / self._config.shift_penalty_scale)
+                (np.abs(shifts / bins) / self._config.shift_penalty_scale)
                 ** self._config.shift_penalty_power
             )
         )
-
-        shift_source_bins = np.arange(bin_count)[None, :] - shift_offsets[:, None]
-        self._shift_in_bounds = (shift_source_bins >= 0) & (
-            shift_source_bins < bin_count
-        )
-        self._shift_source_bins = np.clip(shift_source_bins, 0, bin_count - 1)
-
-        stretch_factors = np.asarray(self._config.stretches)
-        normalized_output_positions = np.linspace(0.0, 1.0, bin_count)
-        normalized_source_positions = (
-            normalized_output_positions - 0.5
-        ) / stretch_factors[:, None] + 0.5
-
-        self._stretch_source_bins = normalized_source_positions * (bin_count - 1)
-        self._stretch_in_bounds = (self._stretch_source_bins >= 0.0) & (
-            self._stretch_source_bins <= bin_count - 1
-        )
-
-        lower_bins = np.floor(self._stretch_source_bins).astype(np.int32)
-        self._stretch_upper_weights = self._stretch_source_bins - lower_bins
-        self._stretch_lower_bins = np.clip(lower_bins, 0, bin_count - 1)
-        self._stretch_upper_bins = np.minimum(
-            self._stretch_lower_bins + 1, bin_count - 1
-        )
-
-        stretch_grid, shift_grid = np.meshgrid(
-            stretch_factors, shift_offsets, indexing="ij"
-        )
+        sources = np.arange(bins)[None, :] - shifts[:, None]
+        self._shift_in_bounds = (sources >= 0) & (sources < bins)
+        self._shift_source_bins = np.clip(sources, 0, bins - 1)
+        stretches = np.asarray(self._config.stretches)
+        positions = (np.linspace(0.0, 1.0, bins) - 0.5) / stretches[:, None] + 0.5
+        sources = positions * (bins - 1)
+        self._stretch_in_bounds = (sources >= 0) & (sources <= bins - 1)
+        lower = np.floor(sources).astype(np.int32)
+        self._stretch_upper_weights = sources - lower
+        self._stretch_lower_bins = np.clip(lower, 0, bins - 1)
+        self._stretch_upper_bins = np.minimum(self._stretch_lower_bins + 1, bins - 1)
+        stretch_grid, shift_grid = np.meshgrid(stretches, shifts, indexing="ij")
         self._variant_stretches = stretch_grid.ravel()
         self._variant_shifts = shift_grid.ravel()
-        self._variant_penalties = np.tile(shift_penalties, len(stretch_factors))
+        self._variant_penalties = np.tile(penalties, len(stretches))

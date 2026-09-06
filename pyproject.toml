@@ -40,6 +40,7 @@ local = [
     "timm>=1.0.27",
     "torch>=2.12.0",
     "torchvision>=0.27.0",
+    "transformers>=4.51,<5",
     "ultralytics>=8.4.51",
 ]
 visualization = [

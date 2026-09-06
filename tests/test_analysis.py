@@ -17,6 +17,7 @@ from elephant_id.analysis import (
     SightingAnalysisError,
     SightingAnalysisStage,
     SightingAnalyzer,
+    SightingPreparer,
     TearProfile,
     prepare_ear,
 )
@@ -263,9 +264,9 @@ def test_sighting_analyzer_returns_two_source_labelled_profiles() -> None:
     )
     extractor = _ProfileExtractor()
     analyzer = SightingAnalyzer(
-        photo_store=store,
-        ear_segmenter=segmenter,
-        landmark_detector=detector,
+        prepare_ears=SightingPreparer(
+            photo_store=store, ear_segmenter=segmenter, landmark_detector=detector
+        ).prepare,
         profile_extractor=extractor,
     )
     pair = SightingEarPair(PHOTO.sighting_id, PHOTO, RIGHT_PHOTO)
@@ -284,7 +285,10 @@ def test_sighting_analyzer_returns_two_source_labelled_profiles() -> None:
     assert [ear.inferred_side for ear in extractor.calls] == ["left", "right"]
 
 
-def test_sighting_analyzer_prepares_one_photo_once_for_both_sides() -> None:
+@pytest.mark.parametrize("prepare_only", (False, True))
+def test_sighting_analyzer_prepares_one_photo_once_for_both_sides(
+    prepare_only: bool,
+) -> None:
     """Same-photo pairs reuse segmentation, landmarks, and prepared geometry."""
     left = _segmented_rectangle(2, 3, 12, 20)
     right = _segmented_rectangle(16, 3, 27, 20)
@@ -298,17 +302,25 @@ def test_sighting_analyzer_prepares_one_photo_once_for_both_sides() -> None:
             right_box: _landmarks((26.0, 3.0), (26.0, 19.0)),
         }
     )
+    extractor = _ProfileExtractor()
     analyzer = SightingAnalyzer(
-        photo_store=store,
-        ear_segmenter=segmenter,
-        landmark_detector=detector,
-        profile_extractor=_ProfileExtractor(),
+        prepare_ears=SightingPreparer(
+            photo_store=store, ear_segmenter=segmenter, landmark_detector=detector
+        ).prepare,
+        profile_extractor=extractor,
     )
 
-    result = analyzer.analyze(SightingEarPair(PHOTO.sighting_id, PHOTO, PHOTO))
+    pair = SightingEarPair(PHOTO.sighting_id, PHOTO, PHOTO)
+    if prepare_only:
+        prepared_left, prepared_right = analyzer.prepare(pair)
+        assert extractor.calls == []
+    else:
+        result = analyzer.analyze(pair)
+        prepared_left, prepared_right = result.left, result.right
+        assert len(extractor.calls) == 2
 
-    assert result.left.source_box == left_box
-    assert result.right.source_box == right_box
+    assert prepared_left.source_box == left_box
+    assert prepared_right.source_box == right_box
     assert segmenter.calls == [PHOTO]
     assert detector.calls == [(PHOTO, left_box), (PHOTO, right_box)]
 
@@ -322,23 +334,21 @@ def test_sighting_analyzer_preserves_input_order_for_equal_matching_ears() -> No
     second_box = BoundingBox(12, 3, 20, 20)
     right_box = BoundingBox(20, 3, 28, 20)
     analyzer = SightingAnalyzer(
-        photo_store=_PhotoStore(_encoded_image()),
-        ear_segmenter=_Segmenter(
-            {PHOTO: (first, second), RIGHT_PHOTO: (right,)}
-        ),
-        landmark_detector=_LandmarkDetector(
-            {
-                first_box: _landmarks((2.0, 3.0), (2.0, 19.0)),
-                second_box: _landmarks((12.0, 3.0), (12.0, 19.0)),
-                right_box: _landmarks((27.0, 3.0), (27.0, 19.0)),
-            }
-        ),
+        prepare_ears=SightingPreparer(
+            photo_store=_PhotoStore(_encoded_image()),
+            ear_segmenter=_Segmenter({PHOTO: (first, second), RIGHT_PHOTO: (right,)}),
+            landmark_detector=_LandmarkDetector(
+                {
+                    first_box: _landmarks((2.0, 3.0), (2.0, 19.0)),
+                    second_box: _landmarks((12.0, 3.0), (12.0, 19.0)),
+                    right_box: _landmarks((27.0, 3.0), (27.0, 19.0)),
+                }
+            ),
+        ).prepare,
         profile_extractor=_ProfileExtractor(),
     )
 
-    result = analyzer.analyze(
-        SightingEarPair(PHOTO.sighting_id, PHOTO, RIGHT_PHOTO)
-    )
+    result = analyzer.analyze(SightingEarPair(PHOTO.sighting_id, PHOTO, RIGHT_PHOTO))
 
     assert result.left.source_box == first_box
 
@@ -346,9 +356,11 @@ def test_sighting_analyzer_preserves_input_order_for_equal_matching_ears() -> No
 def test_sighting_analyzer_reports_declared_side_and_domain_stage() -> None:
     """A missing declared ear raises an inspectable domain-level failure."""
     analyzer = SightingAnalyzer(
-        photo_store=_PhotoStore(_encoded_image()),
-        ear_segmenter=_Segmenter({PHOTO: ()}),
-        landmark_detector=_LandmarkDetector({}),
+        prepare_ears=SightingPreparer(
+            photo_store=_PhotoStore(_encoded_image()),
+            ear_segmenter=_Segmenter({PHOTO: ()}),
+            landmark_detector=_LandmarkDetector({}),
+        ).prepare,
         profile_extractor=_ProfileExtractor(),
     )
     pair = SightingEarPair(PHOTO.sighting_id, PHOTO, RIGHT_PHOTO)
@@ -376,18 +388,16 @@ def test_sighting_analyzer_wraps_extraction_failure_with_its_cause() -> None:
             raise ArithmeticError("synthetic extraction failure")
 
     analyzer = SightingAnalyzer(
-        photo_store=_PhotoStore(_encoded_image()),
-        ear_segmenter=_Segmenter({PHOTO: (left,), RIGHT_PHOTO: (right,)}),
-        landmark_detector=_LandmarkDetector(
-            {
-                BoundingBox(2, 3, 12, 20): _landmarks(
-                    (2.0, 3.0), (2.0, 19.0)
-                ),
-                BoundingBox(16, 3, 27, 20): _landmarks(
-                    (26.0, 3.0), (26.0, 19.0)
-                ),
-            }
-        ),
+        prepare_ears=SightingPreparer(
+            photo_store=_PhotoStore(_encoded_image()),
+            ear_segmenter=_Segmenter({PHOTO: (left,), RIGHT_PHOTO: (right,)}),
+            landmark_detector=_LandmarkDetector(
+                {
+                    BoundingBox(2, 3, 12, 20): _landmarks((2.0, 3.0), (2.0, 19.0)),
+                    BoundingBox(16, 3, 27, 20): _landmarks((26.0, 3.0), (26.0, 19.0)),
+                }
+            ),
+        ).prepare,
         profile_extractor=_FailingExtractor(),
     )
 

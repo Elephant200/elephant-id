@@ -1,6 +1,6 @@
 """Orchestration from a sighting ear pair to tear profiles."""
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 
@@ -51,7 +51,9 @@ class SightingAnalysisError(RuntimeError):
         self.photo_id = photo.photo_id
         self.side = side
         self.stage = stage
-        super().__init__(f"{stage.value.capitalize()} failed for {side} ear in photo {photo.photo_id}: {message}")
+        super().__init__(
+            f"{stage.value.capitalize()} failed for {side} ear in photo {photo.photo_id}: {message}"
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,8 +74,8 @@ class SightingAnalysis:
     right: EarAnalysis
 
 
-class SightingAnalyzer:
-    """Analyze a sighting ear pair to extract tear profiles."""
+class SightingPreparer:
+    """Resolve neutral sighting ear pairs into shared prepared-ear geometry."""
 
     def __init__(
         self,
@@ -81,24 +83,26 @@ class SightingAnalyzer:
         photo_store: PhotoStore,
         ear_segmenter: EarSegmenter,
         landmark_detector: EarLandmarkDetector,
-        profile_extractor: TearProfileExtractor,
     ) -> None:
         """Initialize analysis with storage and processing dependencies."""
         self._photo_store = photo_store
         self._ear_segmenter = ear_segmenter
         self._landmark_detector = landmark_detector
-        self._profile_extractor = profile_extractor
 
-    def analyze(self, pair: SightingEarPair) -> SightingAnalysis:
-        """Return left- and right-ear analysis for one sighting ear pair."""
+    def prepare(self, pair: SightingEarPair) -> tuple[PreparedEar, PreparedEar]:
+        """Prepare the declared ears for any catalog-matching representation.
+
+        When one Photo supplies both sides, its inference and geometry are
+        computed once. This method does not extract tear profiles.
+        """
         left_candidates = self._prepare_photo_ears(pair.left_photo, "left")
         left_ear = self._resolve_declared_side(
             left_candidates,
             pair.left_photo,
             "left",
         )
-        
-        if pair.right_photo == pair.left_photo: # same photo has the same ears
+
+        if pair.right_photo == pair.left_photo:
             right_candidates = left_candidates
         else:
             right_candidates = self._prepare_photo_ears(pair.right_photo, "right")
@@ -108,10 +112,7 @@ class SightingAnalyzer:
             "right",
         )
 
-        return SightingAnalysis(
-            left=self._extract(left_ear, "left"),
-            right=self._extract(right_ear, "right"),
-        )
+        return left_ear, right_ear
 
     def _prepare_photo_ears(
         self,
@@ -201,9 +202,7 @@ class SightingAnalyzer:
     ) -> tuple[Detection, ...]:
         """An ear-area heuristic to limit the number of candidate ears."""
         if len(detections) > 2:
-            detections = tuple(
-                sorted(detections, key=Detection.area, reverse=True)[:2]
-            )
+            detections = tuple(sorted(detections, key=Detection.area, reverse=True)[:2])
         if len(detections) != 2:
             return detections
         first_area = detections[0].area()
@@ -232,6 +231,32 @@ class SightingAnalyzer:
                 message=f"no prepared ear matches inferred side {side}",
             )
         return max(matching, key=lambda candidate: candidate.cleaned_area)
+
+
+class SightingAnalyzer:
+    """Extract tear profiles from an injected ear-preparation computation."""
+
+    def __init__(
+        self,
+        *,
+        prepare_ears: Callable[[SightingEarPair], tuple[PreparedEar, PreparedEar]],
+        profile_extractor: TearProfileExtractor,
+    ) -> None:
+        """Compose shared preparation with one tear-profile producer."""
+        self._prepare_ears = prepare_ears
+        self._profile_extractor = profile_extractor
+
+    def prepare(self, pair: SightingEarPair) -> tuple[PreparedEar, PreparedEar]:
+        """Expose the same prepared ears to alternative catalog matchers."""
+        return self._prepare_ears(pair)
+
+    def analyze(self, pair: SightingEarPair) -> SightingAnalysis:
+        """Return left- and right-ear analysis for one sighting ear pair."""
+        left_ear, right_ear = self.prepare(pair)
+        return SightingAnalysis(
+            left=self._extract(left_ear, "left"),
+            right=self._extract(right_ear, "right"),
+        )
 
     def _extract(self, ear: PreparedEar, side: EarSide) -> EarAnalysis:
         """Extract and label one resolved prepared ear."""

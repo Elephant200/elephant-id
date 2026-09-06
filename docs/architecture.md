@@ -38,7 +38,7 @@ A candidate catalog is exposed directly as a read-only mapping from opaque candi
 
 Catalog matching is logically stateless: a result depends on the query, candidate catalog, composed configuration, and source photo bytes, never on earlier `match` calls. Identity-neutral caches may change performance but not behavior. Each call to `evaluate` generates one fresh opaque key assignment and may reuse those keys across its query folds; the trusted matcher interface is not an adversarial sandbox.
 
-**Evaluation** owns the parsed benchmark manifest, Dataset cross-reference validation, private ground truth, candidate keys, splits, structured failure accounting, derived ranks, and metrics. `evaluate` receives the benchmark, identity-aware Dataset, and an already-composed catalog matcher; only neutral sighting ear pairs and opaque candidate keys cross the matcher seam defined in [evaluation.md](evaluation.md#evaluation-seam).
+**Evaluation** owns the parsed benchmark manifest, Dataset cross-reference validation, private ground truth, candidate keys, splits, structured failure accounting, derived ranks, and metrics. `evaluate` receives the benchmark, identity-aware Dataset, and an already-composed catalog matcher; only neutral sighting ear pairs and opaque candidate keys cross the matcher seam defined in [evaluation.md](evaluation.md).
 
 `CatalogMatcher.match` stays fixed across complete retrieval systems. AlphaPhant experiments replace internal profile-comparison or catalog-aggregation modules through construction rather than adding flags to `match`. A future AlphaPhant-specific result may expose winning evidence and alignments, but it must reuse the same underlying matching computation as the generic candidate scores.
 
@@ -46,8 +46,7 @@ Catalog matching is logically stateless: a result depends on the query, candidat
 
 ## Processing Module Shape
 
-Processing code is organized by capability rather than generic implementation
-buckets:
+Processing code is organized by capability rather than generic implementation buckets:
 
 ```text
 analysis/
@@ -73,17 +72,9 @@ inference/
     cached.py
 ```
 
-`PreparedEar` is the single semantic intermediate between inference and
-profile extraction. It is immutable and contains the source Photo and raster
-box, original detector landmarks, snapped contour anchors, a finite full-image
-contour running between those anchors, inferred side, and positive cleaned
-area. `TearProfile` contains only immutable normalized one-dimensional depths.
-AlphaTear configurations expose intentional research parameters; numerical
-implementation constants remain private.
+`PreparedEar` is the single semantic intermediate between inference and profile extraction. It is immutable and contains the source Photo and raster box, original detector landmarks, snapped contour anchors, a finite full-image contour running between those anchors, inferred side, and positive cleaned area. `TearProfile` contains only immutable normalized one-dimensional depths. AlphaTear configurations expose intentional research parameters; numerical implementation constants remain private.
 
-A settled AlphaTear configuration and its producer slug travel together as one
-colocated `AlphaTearVersion`. Experimental tuning passes a raw
-`AlphaTearConfig` and therefore has no persistent producer slug.
+A settled AlphaTear configuration and its producer slug travel together as one colocated `AlphaTearVersion`. Experimental tuning passes a raw `AlphaTearConfig` and therefore has no persistent producer slug.
 
 ## Data and Identity
 
@@ -114,11 +105,19 @@ SightingEarPair + PhotoStore
   -> immutable prepared ear
   -> AlphaTear profile for each side
   -> same-side matching against catalog evidence
-  -> strongest left and right evidence per candidate
+  -> catalog background correction for each side
+  -> similarity-weighted evidence mean for each candidate and side
+  -> arithmetic mean of left and right scores
   -> one similarity score per candidate
 ```
 
 ## Inference Seams
+
+`SightingPreparer` owns photo access, inference, and prepared-ear geometry. `SightingAnalyzer` receives its preparation callable and a profile extractor. Composition shares one preparation callable across extraction scales and the AlphaPhant, CurvRank, and MiewID comparison. The latter two consume prepared ears without depending on AlphaTear depths.
+
+CurvRank and MiewID constructors accept the ear-preparation callable directly. They do not require a `SightingAnalyzer`. The current comparison composition obtains this callable through the analyzer's preparation forwarding method.
+
+The standard AlphaPhant composition fixes seven extraction scales and two comparison channels. It exposes no product of experimental configuration flags. Its in-memory directional comparison cache uses neutral sighting ear pairs and ear sides. Each call recomputes catalog background similarity from the supplied catalog, so a held-out sighting cannot contribute through a previous fold.
 
 Sighting analysis depends on three semantic processing capabilities:
 
@@ -151,13 +150,6 @@ CacheManager namespaces and safely stores caller-supplied keys; it does not hash
 
 Standard construction caches SAM3's full feature computation, landmark detection, and settled AlphaTear extraction. Parameter-tuning construction injects a raw experimental AlphaTear extractor, bypassing profile reads and writes while retaining cached SAM3 features and landmark detection. CacheManager has no permission or tuning modes. Sighting analysis and catalog matching are unaware of cache policy.
 
-When one source Photo supplies both declared sides, it is prepared on the first
-side encountered and then reused. A retrieval, decoding, inference, or
-preparation failure before side resolution is attributed to that first declared
-side; analysis processes left before right.
+When one source Photo supplies both declared sides, it is prepared on the first side encountered and then reused. A retrieval, decoding, inference, or preparation failure before side resolution is attributed to that first declared side; analysis processes left before right.
 
-Source paths and legacy identifiers are metadata, not cache identity. Existing cache records are migrated from legacy identifiers to photo UUIDs by joining the preserved original CSV and assigned CSV through unchanged image paths.
-
-## Unsupported Prototypes
-
-The existing `apps/` prototypes are historical and receive no compatibility guarantees. The API prototype is preserved on the `desktop-prototype` branch and removed from the active branch. Active modules do not retain legacy interfaces solely to keep prototypes runnable.
+Source paths are private metadata, not cache identity.

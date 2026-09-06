@@ -1,80 +1,72 @@
-# Identity-Retrieval Evaluation
+# Identity-retrieval evaluation
 
-This document defines the implementation-independent benchmark for complete elephant catalog matchers. Model-specific localization, segmentation, and landmark evaluation belongs beside model training code.
+Evaluation compares complete catalog matchers. It owns known-elephant identity, manifest validation, query/catalog splits, candidate keys, and metric calculation. Matchers receive neutral sighting ear pairs and an image-only PhotoStore, never Dataset. All returned candidate scores must be finite and cover exactly the supplied candidate keys. Ranking is derived from these scores.
 
-## Evaluation Seam
+## Inputs and folds
 
-The evaluator owns ground truth and the research Dataset. It receives a catalog matcher already composed with its image-only PhotoStore and other implementation dependencies, then hands it only neutral SightingEarPair objects and an opaque candidate-key assignment generated once per call to `evaluate`. The known-elephant label stays with the Dataset, which the matcher never receives; paths serve solely as PhotoStore locators, never read as strings.
+`load_benchmark(path)` reads a manifest with columns `known_elephant_name,sighting_id,left_photo_id,right_photo_id`. IDs are permanent UUIDv4 values. Dataset validates identity assignments and photo membership before matching. Names, grouping, and ear side are never inferred from filenames.
 
-The catalog matcher uses its injected PhotoStore to obtain original encoded bytes and returns a read-only mapping whose keys exactly equal the catalog keys and whose values are finite similarity floats. Larger scores mean stronger matches; no universal score range or ordering is promised. The PhotoStore exposes no identity resolution. Each call is logically independent of earlier calls, although identity-neutral caches may accelerate repeated processing.
+`evaluate(benchmark, dataset, matcher)` holds each eligible sighting out once. That sighting and its photos are absent from the catalog. All other sightings remain, grouped under opaque candidate keys. A sighting is eligible only if its elephant retains catalog evidence. Single-sighting elephants remain distractors but do not supply queries. The correct elephant is always among the candidates.
 
-The package exposes `load_benchmark(path) -> RetrievalBenchmark` and `evaluate(benchmark, dataset, matcher) -> EvaluationResult`. `RetrievalBenchmark` is a simple parsed benchmark manifest: it retains the declared known-elephant names and sighting and Photo IDs, but no Dataset, resolved domain objects, paths, or PhotoStore. Evaluation owns the fixed retrieval protocol and returns its deterministic scientific result. The package defines no evaluation-run or report value.
+A malformed manifest raises `BenchmarkValidationError`. Missing bytes, model or preparation failures, and incomplete or nonfinite scores raise `EvaluationError`. The curated benchmark requires complete analysis, so errors abort evaluation; failed cases are not silently omitted. This protocol therefore does not estimate field preparation coverage. A field study must report that outcome separately.
 
-## Retrieval Benchmark
+## Metrics and uncertainty
 
-The private retrieval benchmark set at `dataset/elephants-alive/benchmark/` contains a `manifest.csv`. Each row has exactly `known_elephant_name,sighting_id,left_photo_id,right_photo_id`: one real same-sighting ear pair selected by permanent IDs, with its true known-elephant identity used only by evaluation. Dataset resolves each `photo_id` to its canonical Photo and original bytes.
+Target rank is one plus the number of strictly higher candidate scores. Ties share a competition rank. The result retains every candidate score per query; top-k rates, reciprocal rank, median rank, and eligibility counts are derived views. Point estimates weight eligible queries equally.
 
-Evaluation code never derives names, dates, labels, or grouping from paths or filenames. The manifest and Dataset metadata supply those facts directly. The private benchmark set is gitignored, so no identity data enters version control.
+Primary comparisons are top-1 and top-5. Paired percentile intervals resample queried elephants with replacement, retain all their queries, and recompute the same query-weighted difference. Use 100,000 resamples and seed 42. Pair queries and candidates by explicit keys rather than iteration order.
 
-The benchmark is a sample used to estimate expected closed-set retrieval performance beyond the benchmark itself, not merely a fixed collection whose descriptive statistics are the scientific endpoint. An unseen elephant is unseen during system development but represented by prior catalog evidence when queried. Detailed population and deployment claims belong in scientific reporting rather than this package contract.
+The bootstrap holds recorded catalog scores fixed. It accounts for repeated queries within an elephant, but does not rebuild catalogs, repeat selection, or measure curation uncertainty. Shared reference evidence can induce additional dependence. Do not describe these intervals as covering all population uncertainty.
 
-Primary metric point estimates treat every eligible query equally for compatibility and clarity. Elephants are the independent sampling unit for uncertainty; sightings and eligible queries are repeated observations nested within elephants.
+When candidate counts differ, use pool-matched expectations with `BENCHMARK_POOL_SIZE=89`. The target competes against 88 uniformly drawn distractors; the number scoring above it follows a hypergeometric distribution. Bootstrap those per-query expectations, not the unadjusted ranks. The requested pool cannot exceed the observed catalog. Report target ties and their convention.
 
-`load_benchmark` reports all manifest-internal errors together through one `BenchmarkValidationError`. It validates exact columns, canonical UUIDv4 values, required fields, and duplicate declarations without resolving Dataset metadata.
+## Development and confirmation
 
-Before its first catalog-matcher call, `evaluate` resolves the complete benchmark against the separately supplied Dataset and reports all cross-reference errors together through `BenchmarkValidationError`. Every sighting and Photo must resolve, the declared identity must agree with Dataset, and the declared left and right Photos must carry the row's sighting ID. The same Photo may serve both sides. Missing bytes, models, corrupt caches, extraction failures, and invalid matcher results raise `EvaluationError`; no partial result is returned.
+Develop on identity-disjoint tuning catalogs A and B, each with 89 elephants and histogram `{1:36, 2:25, 3:20, 4:7, 5:1}`. Fixed image-quality gates and machine visual review precede matching. Analyzability alone is not image quality. Both catalogs guide selection and are development data, not independent final tests.
 
-## Leave-One-Sighting-Out Protocol
+A new mechanism must avoid losses at both primary endpoints in both catalogs and improve at least one endpoint in each. Choose shared plateaus, not sweep maxima. Exact Shapley covers at most eight binary decisions. Retain positive contributions in each catalog whose mean across catalogs is at least 0.5 points at both primary endpoints. Document bundled and dependent decisions explicitly.
 
-For each eligible query:
+Prefer fewer decisions when observed loss is within one query per catalog and paired intervals do not establish a loss. This is a practical parsimony rule, not a formal noninferiority test. Benchmark attributions cannot guide pruning.
 
-1. Hold its SightingEarPair out as the query.
-2. Exclude that sighting and its Photos from the catalog.
-3. Retain every other benchmark sighting, including other sightings of the query elephant and ineligible queries.
-4. Group catalog examples by private known-elephant label.
-5. Replace labels with `evaluate`'s fresh opaque candidate keys before calling the catalog matcher.
-6. Match the query against the complete candidate set.
-7. Recover the target key privately and derive its rank from the candidate scores.
+Confirmation requires fixed source, extraction producers, model identities, manifest hashes, comparator settings, and endpoints. Use the same preparation and folds for all matchers. The benchmark is not a historically untouched set; stronger generalization claims require a genuinely independent cohort.
 
-A query whose elephant has no remaining catalog sighting is ineligible. Its evidence remains in other queries' catalogs, so ineligibility does not alter valid distractor evidence. Ineligible queries are determined before any catalog matcher runs and reported explicitly.
+## Reproduction
 
-## Failure Accounting
+Run Python from the repository root with `uv`. Install local inference and development dependencies with `uv sync --all-groups`. Private photos and model access are required for end-to-end evaluation.
 
-Every catalog matcher uses the same eligible-query denominator.
+```bash
+uv run eval
+uv run python scripts/compare_matchers.py MANIFEST --output comparison.json
+uv run python scripts/ablation.py MANIFEST --reference comparison.json --output ablation.json
+```
 
-The benchmark set is curated so every selected image yields a valid two-sided extraction. Any extraction failure - query or catalog side - is therefore unexpected: the first runtime failure aborts evaluation with query and Photo context and a clear error naming the curation expectation, rather than being scored or counted. A failure signals a selection error, not a retrieval outcome. Missing photo bytes, weights, or required infrastructure, corrupt required cache state, and invalid catalog-matcher results also abort evaluation.
+Comparison and ablation commands require explicit paths and refuse to overwrite existing result reports. Matrix reuse checks the script, active source, numerical runtime, settings, producers, and manifest. MiewID uses `conservationxlabs/miewid-msv3` revision `4f1d7f2b521149e5fe34bb85f377248ce9971a7d`. It is a separate zero-shot comparator.
 
-`EvaluationStage` has two values: `CATALOG_MATCHING` when the matcher raises while processing a query fold, and `MATCHER_RESULT_VALIDATION` when returned keys or scores violate the matcher interface. `EvaluationError` records the stage, active query sighting ID, and any recoverable query/catalog role, photo ID, and side. An underlying `SightingAnalysisError` remains the cause and retains its more precise analysis stage. `BenchmarkValidationError` remains separate because it aggregates declaration problems before evaluation starts. Metric or bootstrap failures after validated finite scores are programming defects, not another public evaluation stage.
+The completed study's private evidence is in `.scratch/alphaphant_optimization/evidence.tar.gz`. Its index describes source snapshots, immutable score tables, tuning manifests, quality records, and hashes. The archive includes the numerical source used for the published confirmation; current score-preserving engineering changes are identified separately.
 
-## Ranking and Metrics
+After extracting the evidence and the locked source into separate directories, verify existing results without model inference or photo access:
 
-Each result contains every issued candidate key exactly once, no foreign keys, and finite scores. The evaluator rejects partial results. It derives ranks from these candidate scores; ordering is a view, not part of the catalog-matcher contract.
+```bash
+uv run python scripts/audit_publication.py EVIDENCE --source LOCKED_SOURCE --output audit.json
+```
 
-Target rank is one plus the number of candidates with a strictly higher score. Equal scores share a competition rank.
+The audit checks source hashes, score coverage, finite values, target ties, metrics, paired intervals, and all 128 exact ablation subsets. Saved-score verification is distinct from a clean-environment end-to-end reproduction. Never commit private photos, manifests, canonical identity-bearing scores, or model secrets. Controlled data access is needed for independent reproduction.
 
-Initial metrics are:
+## Excluded mechanisms
 
-- top-1, top-3, top-5, top-10, and top-15 retrieval rate;
-- mean reciprocal rank;
-- median rank;
-- eligible query count.
+These mechanisms do not belong in the production configuration. Retest one only with a new mechanism not covered by its existing evidence.
 
-Primary metric point estimates are unweighted over eligible queries. Two-sided 95% percentile intervals use 100,000 bootstrap resamples with seed `42`: sample eligible elephants with replacement, retain all eligible queries nested within each sampled elephant, and recompute the ordinary unweighted query metrics over the resampled observations. Bootstrap calculation uses completed query scores and never reruns matching. Paired system comparisons reuse the same sampled elephant indices. Extraction parameters are set qualitatively from the alpha shapes; matching parameters are tuned on a separate parameter-tuning set. Neither uses the benchmark, so its numbers carry no tuning leakage.
+| Family | Excluded alternatives |
+|---|---|
+| Geometry and representation | Radial depth, negative depth, free per-bin weights, depth deadbanding, whole-profile cosine substitution |
+| Alignment | DTW/per-segment elasticity, independent scale alignment, shared depth/change-channel alignment, symmetric comparison in the selected composition |
+| Local matching | Window LNBNN and local winning intervals |
+| Scale or channel combination | Rank fusion, scale-subset winners, per-scale CSLS, scale/channel z-normalization |
+| Catalog correction | Query-side CSLS constant, own-candidate exclusion, incoming background similarity, candidate-balanced neighbors |
+| Evidence combination | Ear-decisiveness weighting, paired-sighting evidence, neighbor diffusion across queries |
 
-## Reproducibility
+The candidate-balanced and paired-sighting alternatives have mixed-sign exact Shapley contributions across tuning catalogs. The query-side CSLS term is a candidate-independent constant and adds no ranking information. MiewID fusion is outside the AlphaPhant-alone result and adds no component to this implementation.
 
-Reproduction inputs are code, models, images, and the assigned identity data.
+## Scientific claim boundaries
 
-The assigned photo and sighting IDs are preserved artifacts rather than values derived from image content. They may be shared with reviewers under the same controlled data access as the private images.
-
-`EvaluationResult` is the deterministic scientific value returned by `evaluate`; evaluation defines no separate run or report value. For every eligible query it retains every candidate similarity score mapped privately back to known-elephant name. It does not retain the input `RetrievalBenchmark`. Target ranks, aggregate metrics, and uncertainty intervals are reconstructed from the canonical scores rather than recorded independently. Candidate keys, model intermediates, and matching provenance are not retained.
-
-Its interface consists of three mappings: `scores`, `metrics`, and `intervals`. `scores` is grouped as true known-elephant name to query sighting ID to candidate known-elephant name to finite similarity float. `metrics` and `intervals` are deterministic derived views of those canonical scores. Evaluation exposes no folds, stored ranks, candidate keys, serialization, or matcher provenance through the result.
-
-The thin CLI composes standard AlphaPhant and prints metrics and intervals. It defines no report or persistence model. A parameter-tuning entry point may reuse `evaluate` with trial-specific matcher composition: it uses a raw AlphaTear extractor while retaining cached SAM3 feature segmentation and landmark detection.
-
-See [ADR 0005](adr/0005-separate-retrieval-evaluation-from-implementation.md), [ADR 0007](adr/0007-pin-evaluation-by-git-commit.md), [ADR 0008](adr/0008-use-permanent-opaque-photo-identity.md), and [ADR 0010](adr/0010-cache-reusable-processing-through-composition.md).
-
-## Future Protocols
-
-Add another protocol only for a concrete research question; candidate directions live in [future.md](future.md).
+Selection on finite data can overfit even without fitting a neural network; see [Cawley and Talbot](https://www.jmlr.org/papers/v11/cawley10a.html). Exact subset attribution does not remove sampling or selection uncertainty. A prospective replication should fix eligibility, quality criteria, model versions, endpoints, an elephant-level sample-size rationale, and a stopping rule before outcomes are seen. Include independent quality review, near-duplicate screening, inference-training overlap checks where records permit them, temporal splits when relevant, and explicit preparation-failure coverage.

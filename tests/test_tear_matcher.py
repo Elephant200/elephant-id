@@ -186,3 +186,46 @@ def test_positive_alignment_ties_preserve_configured_search_order() -> None:
     )
     match = TearMatcher(config).match(np.ones(9), np.ones(9))
     assert (match.score, match.stretch, match.shift_bins) == (1.0, 1.2, 0)
+
+
+def test_scale_stack_cannot_choose_incompatible_alignments() -> None:
+    """Two scales cannot each claim a different perfect tear correspondence."""
+    config = TearMatcherConfig(
+        resampled_bins=81,
+        depth_exponent=1.0,
+        stretches=(1.0,),
+        max_shift_fraction=0.25,
+        shift_penalty_scale=100.0,
+    )
+    profiles = np.zeros((4, 81))
+    profiles[np.arange(4), [20, 50, 25, 45]] = 1.0
+    matcher = TearMatcher(config)
+    independent = (
+        matcher.match(profiles[0], profiles[2]).score
+        + matcher.match(profiles[1], profiles[3]).score
+    ) / 2
+    shared = matcher.match_stack(tuple(profiles[:2]), tuple(profiles[2:])).score
+    assert independent == pytest.approx(1.0)
+    assert shared == pytest.approx(0.5)
+
+
+def test_signed_depth_change_distinguishes_rising_from_falling() -> None:
+    """Equal slope magnitudes with opposite directions are not matching boundaries."""
+    from dataclasses import replace
+
+    config = TearMatcherConfig(
+        resampled_bins=41,
+        depth_exponent=1.0,
+        stretches=(1.0,),
+        max_shift_fraction=0.0,
+        channel="depth_change",
+    )
+    rising = np.linspace(0.0, 1.0, 41)
+    falling = 1.0 - rising
+    magnitude = TearMatcher(config).match(rising, falling)
+    signed = TearMatcher(replace(config, channel="signed_depth_change")).match(
+        rising, falling
+    )
+    assert magnitude.score == pytest.approx(1.0)
+    assert signed.score == 0.0
+    assert (signed.stretch, signed.shift_bins) == (1.0, 0)

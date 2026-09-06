@@ -48,6 +48,19 @@ DEFAULT_VERSION = AlphaTearVersion(
     config=AlphaTearConfig(),
 )
 
+MULTISCALE_VERSIONS = tuple(
+    AlphaTearVersion(
+        slug=f"alpha-tear-v3-a{round(alpha * 100):03d}",
+        config=AlphaTearConfig(alpha_fraction=alpha),
+    )
+    for alpha in (0.11, 0.22, 0.50, 1.10, 2.50, 5.00, 12.00)
+)
+"""Octave-spaced alpha-shape scales of the tuned representation.
+
+A small `alpha_fraction` rolls a tight disk that follows single tears; a
+large one approaches the convex envelope and shows overall margin shape.
+"""
+
 
 def _resample(points: np.ndarray, count: int) -> np.ndarray:
     """Resample a two-dimensional polyline uniformly by arc length."""

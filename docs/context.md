@@ -68,6 +68,24 @@ _Avoid_: Ranking, probabilities, confidence labels
 The processing of a sighting ear pair into left- and right-ear tear profiles for catalog matching.
 _Avoid_: Per-photo identification, SEEK coding
 
+**Ear preparation**:
+The shared processing that retrieves and decodes a photo, segments its ears, detects landmarks, and constructs immutable prepared-ear geometry. `SightingPreparer` prepares both declared sides. `SightingAnalyzer` then extracts tear profiles. All compared catalog matchers use the same preparation computation.
+
+**Depth change**:
+The difference between neighboring tear-profile depths. Its magnitude describes how abruptly the profile changes.
+
+**Signed depth change**:
+Depth change represented by separate nonnegative rising and falling components. This preserves whether a tear profile rises or falls at a position. It does not add negative tear depths.
+
+**Shared scale alignment**:
+One angular shift and stretch applied to every extraction scale within a comparison channel. The depth and depth-change channels can select different alignments.
+
+**Catalog background similarity**:
+The mean of an ear's ten strongest outgoing similarities to other ears of the same side in the current catalog. It measures how broadly that catalog ear matches. The query sighting is absent from this calculation.
+
+**Similarity-weighted evidence mean**:
+A mean over one candidate's same-side sighting scores, with greater weight on stronger scores. It combines available evidence while limiting the influence of weak views. Its temperature is the standard deviation of all corrected catalog scores for that side and query.
+
 **Ear localization**:
 The determination of where a left or right ear appears in a photo.
 _Avoid_: Ear segmentation when referring only to location
@@ -131,8 +149,12 @@ The identity-aware declaration of the benchmark set, with one row per selected s
 _Avoid_: Picker manifest, benchmark folders
 
 **Parameter-tuning set**:
-The image set on which AlphaPhant's non-qualitative matching parameters, such as the profile stretch exponent and penalty weights, are tuned. Disjoint from the retrieval benchmark set. Extraction parameters are not tuned here; they are set qualitatively from the alpha shapes.
+The image set used to compare AlphaPhant mechanisms and choose matching parameters. Its elephants are disjoint from the retrieval benchmark set. Extraction geometry changes require a separate mechanism and an immutable producer version.
 _Avoid_: Validation set, training set, dev set
+
+**Tuning catalog A / tuning catalog B**:
+Two catalogs formed from different elephants in the parameter-tuning set. Each has 89 elephants and the benchmark's sightings-per-elephant histogram. They are not subdivisions of the human-curated benchmark. A proposed enhancement must help in both before selection.
+_Avoid_: Half A / Half B without explaining what was split
 
 **AI-model datasets**:
 The ear-segmentation and landmark models use their own train, validation, and test splits, drawn from singly-sighted elephants so they stay disjoint from all matching data. Those three terms name model data only; the AlphaPhant algorithm has no training phase and tunes its parameters on the parameter-tuning set.

@@ -2,6 +2,10 @@
 
 This document records directions beyond the pipeline being locked down now. None are current implementation requirements.
 
+## Additional Images
+
+Pick additional high-quality sighting ear pairs for better tuning and accuracy estimates.
+
 ## Better Preprocessing
 
 The first priority is extraction repeatability. Candidate replacements for current inference include:
