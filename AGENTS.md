@@ -38,13 +38,15 @@ After Python changes, run `uv run ruff check .` and relevant tests. `legacy` is 
 
 - **domain** owns neutral immutable `Photo`, `Sighting`, and `SightingEarPair` values with permanent opaque UUID identity.
 - **dataset** owns private metadata and known-elephant resolution; its **PhotoStore** resolves a `Photo` to original encoded bytes without exposing identity.
-- **analysis** owns sighting analysis, ear preparation, and AlphaTear profile extraction.
+- **preparation** owns shared sighting preparation and immutable prepared-ear geometry.
 - **inference** owns swappable implementations of ear localization, ear segmentation, and ear landmark detection.
-- **matching** owns tear-profile similarity and catalog matching. Its public `CatalogMatcher` interface returns candidate scores; ranking is a derived view.
+- **matching** exposes the implementation-independent `CatalogMatcher` contract. Each algorithm owns its representations and scoring; `matching.alphaphant` exports `AlphaPhant` and owns AlphaTear extraction and similarity.
 - **evaluation** owns implementation-independent identity-retrieval evaluation.
 - **image** owns encoded-byte decoding, BGR images, and basic + universal geometry utilities.
 
 Keep interfaces narrow and justified by current variation. Catalog matchers receive neutral domain objects and an image-only PhotoStore, never the identity-aware Dataset. Research supplies a sighting ear pair directly; future application ear selection remains upstream of the shared AlphaPhant pipeline.
+
+Inject shared preparation directly into matchers. Keep fixed numerical settings beside their algorithms and composition limited to object construction. Evaluation owns manifests, folds, labels, and comparisons on actual candidate catalogs.
 
 ## Python Style
 
@@ -52,6 +54,7 @@ Keep interfaces narrow and justified by current variation. Catalog matchers rece
 - Give every package, module, class, function, and method a concise accurate Google-style docstring. Code in docstrings uses single backticks.
 - Add `Args`, `Returns`, `Yields`, or `Raises` sections only when they clarify a non-obvious interface. Document validation errors that are part of the interface.
 - Prefer clear names and structure over comments. Comment only non-trivial reasoning.
+- Code should be clear enough that pipeline flow is obvious at a glance.
 - Use `loguru` for logging. Library code never configures logging; entry points call `elephant_id.log.configure_logging` once.
 - Log identifiers, counts, durations, and cache hits at appropriate levels. Never log credentials or raw image and mask buffers.
 - Avoid over-engineering by making unnecessary abstractions or defensive guards that you don't need. Never hesitate to ask when in doubt.
