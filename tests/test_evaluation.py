@@ -10,7 +10,6 @@ from uuid import UUID
 
 import pytest
 
-from elephant_id.analysis import SightingAnalysisError, SightingAnalysisStage
 from elephant_id.dataset import Dataset
 from elephant_id.domain import SightingEarPair
 from elephant_id.evaluation import (
@@ -20,7 +19,7 @@ from elephant_id.evaluation import (
     evaluate,
     load_benchmark,
 )
-from elephant_id.matching import CandidateKey, CandidateScores
+from elephant_id.matching import CandidateKey, CandidateScores, MatchingError
 
 
 def _uuid(value: int) -> UUID:
@@ -303,10 +302,10 @@ class FailingMatcher:
     ) -> CandidateScores:
         """Fail on the first catalog pair."""
         pair = next(iter(catalog.values()))[0]
-        raise SightingAnalysisError(
+        raise MatchingError(
             photo=pair.left_photo,
             side="left",
-            stage=SightingAnalysisStage.TEAR_PROFILE_EXTRACTION,
+            stage="tear-profile extraction",
             message="controlled failure",
         )
 
@@ -327,7 +326,7 @@ def test_evaluate_preserves_matching_failure_and_evidence_context(
     assert error.role == "catalog"
     assert error.photo_id == _uuid(3)
     assert error.side == "left"
-    assert isinstance(error.__cause__, SightingAnalysisError)
+    assert isinstance(error.__cause__, MatchingError)
 
 
 def test_evaluate_rejects_a_benchmark_without_eligible_queries(tmp_path: Path) -> None:

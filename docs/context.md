@@ -69,7 +69,7 @@ The processing of a sighting ear pair into left- and right-ear tear profiles for
 _Avoid_: Per-photo identification, SEEK coding
 
 **Ear preparation**:
-The shared processing that retrieves and decodes a photo, segments its ears, detects landmarks, and constructs immutable prepared-ear geometry. `SightingPreparer` prepares both declared sides. `SightingAnalyzer` then extracts tear profiles. All compared catalog matchers use the same preparation computation.
+The shared processing that retrieves and decodes a photo, segments its ears, detects landmarks, and constructs immutable prepared-ear geometry. `SightingPreparer` prepares both declared sides. AlphaPhant then extracts its own tear profiles, while CurvRank and MiewID derive their own representations. All compared catalog matchers use the same preparation computation.
 
 **Depth change**:
 The difference between neighboring tear-profile depths. Its magnitude describes how abruptly the profile changes.

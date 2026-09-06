@@ -14,24 +14,36 @@ from pathlib import Path
 
 import numpy as np
 
-from elephant_id.analysis import EarSide, SightingAnalyzer
-from elephant_id.analysis.profile_extraction.alpha_tear import (
-    DEFAULT_VERSION,
-    MULTISCALE_VERSIONS,
-)
+from elephant_id.cache import CacheManager
 from elephant_id.composition import (
-    CHANNEL_WEIGHTS,
-    SELECTED_PROFILE_SETTINGS,
-    build_versioned_analyzers,
+    build_preparer,
+    build_profile_extractors,
+    compose_alphaphant,
 )
 from elephant_id.dataset import Dataset
 from elephant_id.domain import SightingEarPair
-from elephant_id.evaluation import evaluate, load_benchmark
+from elephant_id.evaluation import EvaluationResult, evaluate, load_benchmark
+from elephant_id.evaluation.comparison import paired_delta, top_hits
 from elephant_id.evaluation.evaluator import _resolve_benchmark
-from elephant_id.evaluation.pooled import paired_delta, pool_hits, pool_metrics
 from elephant_id.log import configure_logging
-from elephant_id.matching import AlphaPhant
-from elephant_id.matching.tear_matcher import TearMatcher, TearMatcherConfig
+from elephant_id.matching import CandidateKey, CandidateScores
+from elephant_id.matching.alphaphant import AlphaPhant
+from elephant_id.matching.alphaphant.extraction import (
+    DEFAULT_VERSION,
+    MULTISCALE_VERSIONS,
+)
+from elephant_id.matching.alphaphant.matcher import (
+    CHANNEL_WEIGHTS,
+    aggregate_evidence,
+    correct_catalog,
+    score_catalog,
+)
+from elephant_id.matching.alphaphant.similarity import (
+    SELECTED_PROFILE_SETTINGS,
+    TearMatcher,
+    TearMatcherConfig,
+)
+from elephant_id.preparation import EarSide
 
 DECISIONS = (
     "depth_shift",
@@ -57,7 +69,7 @@ DECISION_NAMES = {
 
 def _source_fingerprints() -> dict[str, str]:
     """Identify this script and active package sources before reusing matrices."""
-    package = Path(inspect.getfile(AlphaPhant)).parents[1]
+    package = Path(inspect.getfile(AlphaPhant)).parents[2]
     files = [Path(__file__)]
     for folder, directories, names in os.walk(package):
         directories[:] = sorted(
@@ -72,21 +84,33 @@ def _source_fingerprints() -> dict[str, str]:
     }
 
 
-class _MatrixAlphaPhant(AlphaPhant):
+class _MatrixAlphaPhant:
     """Reuse computed profile similarities while retaining actual catalog scoring."""
 
     def __init__(
         self,
-        analyzer: SightingAnalyzer,
         pairs: Sequence[SightingEarPair],
         matrix: np.ndarray,
         chosen: frozenset[str],
     ) -> None:
         """Keep neutral row identities and the two catalog-rule interventions."""
-        super().__init__(scale_analyzers=(analyzer,), channel_matchers=(TearMatcher(),))
         self._rows = {pair: index for index, pair in enumerate(pairs)}
         self._matrix = matrix
         self._chosen = chosen
+
+    def match(
+        self,
+        query: SightingEarPair,
+        catalog: Mapping[CandidateKey, tuple[SightingEarPair, ...]],
+    ) -> CandidateScores:
+        """Apply the declared scoring interventions to the current fold only."""
+        return score_catalog(
+            query,
+            catalog,
+            self._side_matrix,
+            correction=self._correct_catalog,
+            aggregation=self._aggregate,
+        )
 
     def _side_matrix(
         self, pairs: Sequence[SightingEarPair], side: EarSide
@@ -99,13 +123,13 @@ class _MatrixAlphaPhant(AlphaPhant):
         """Remove the background correction only for its declared ablation."""
         if "catalog_neighborhood" not in self._chosen:
             return raw
-        return super()._correct_catalog(raw, internal)
+        return correct_catalog(raw, internal)
 
     def _aggregate(self, scores: Sequence[float], spread: float) -> float:
         """Replace the similarity-weighted mean with the original maximum."""
         if "evidence_mean" not in self._chosen:
             return float(max(scores))
-        return super()._aggregate(scores, spread)
+        return aggregate_evidence(scores, spread)
 
 
 def _shapley(values: Mapping[int, np.ndarray]) -> np.ndarray:
@@ -222,12 +246,17 @@ def main() -> None:
     pairs = tuple(
         pair for sightings in resolved.values() for pair in sightings.values()
     )
-    scale_analyzers = build_versioned_analyzers(
-        dataset.photo_store, (DEFAULT_VERSION, *MULTISCALE_VERSIONS)
+    cache_store = CacheManager()
+    preparer = build_preparer(dataset.photo_store, cache_store)
+    inspector = compose_alphaphant(
+        preparer.prepare,
+        build_profile_extractors(
+            preparer, cache_store, (DEFAULT_VERSION, *MULTISCALE_VERSIONS)
+        ),
     )
     profiles = []
     for pair in pairs:
-        analyses = tuple(analyzer.analyze(pair) for analyzer in scale_analyzers)
+        analyses = inspector.profiles(pair)
         profiles.append(
             [
                 [getattr(analysis, side).tear_profile.depths for analysis in analyses]
@@ -246,9 +275,7 @@ def main() -> None:
         chosen = frozenset(
             name for index, name in enumerate(DECISIONS) if mask & (1 << index)
         )
-        matcher = _MatrixAlphaPhant(
-            scale_analyzers[0], pairs, _coalition_matrix(mask, matrices), chosen
-        )
+        matcher = _MatrixAlphaPhant(pairs, _coalition_matrix(mask, matrices), chosen)
         result = evaluate(benchmark, dataset, matcher)
         scores = {
             name: {str(sid): dict(candidates) for sid, candidates in queries.items()}
@@ -294,15 +321,15 @@ def main() -> None:
             )
         rows[str(mask)] = {
             "decisions": sorted(chosen),
-            "pool_matched": pool_metrics(scores, CUTOFFS),
+            "metrics": EvaluationResult(scores).metrics,
         }
         if baseline is not None:
             rows[str(mask)]["paired_delta_vs_baseline"] = {
                 str(k): paired_delta(scores, baseline, k) for k in (1, 5)
             }
-        hits[mask] = np.asarray([pool_hits(scores, cutoff) for cutoff in CUTOFFS]).T
+        hits[mask] = np.asarray([top_hits(scores, cutoff) for cutoff in CUTOFFS]).T
         print(
-            f"Coalition {mask:03d}: {json.dumps(rows[str(mask)]['pool_matched'])}",
+            f"Coalition {mask:03d}: {json.dumps(rows[str(mask)]['metrics'])}",
             flush=True,
         )
     rows[str(full_mask)]["paired_delta_vs_baseline"] = {

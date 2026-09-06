@@ -8,7 +8,6 @@ import numpy as np
 import pytest
 from numpy.typing import NDArray
 
-from elephant_id.analysis import EarSide, PreparedEar
 from elephant_id.domain import Photo, SightingEarPair
 from elephant_id.image.boxes import BoundingBox
 from elephant_id.matching.curvrank import (
@@ -17,6 +16,7 @@ from elephant_id.matching.curvrank import (
     extract_descriptors,
 )
 from elephant_id.matching.protocol import CandidateKey
+from elephant_id.preparation import EarSide, PreparedEar
 
 _TEST_CONFIG = CurvRankConfig(
     curv_length=128,

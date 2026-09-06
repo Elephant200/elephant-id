@@ -1,26 +1,20 @@
-"""Orchestration from a sighting ear pair to tear profiles."""
+"""Retrieve and prepare declared sighting ears for independent matchers."""
 
-from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from collections.abc import Sequence
 from enum import StrEnum
 
-from elephant_id.analysis.ear_preparation import (
-    EarSide,
-    PreparedEar,
-    prepare_ear,
-)
-from elephant_id.analysis.profile_extraction.protocol import TearProfileExtractor
-from elephant_id.analysis.tear_profile import TearProfile
 from elephant_id.dataset import PhotoStore
 from elephant_id.domain import Photo, SightingEarPair
 from elephant_id.image import decode_image
 from elephant_id.image.boxes import BoundingBox
 from elephant_id.inference import Detection, EarLandmarkDetector, EarSegmenter
+from elephant_id.matching.protocol import MatchingError
+from elephant_id.preparation.ear import EarSide, PreparedEar, prepare_ear
 
 _MULTIPLE_EAR_AREA_RATIO = 2.0
 
 
-class SightingAnalysisStage(StrEnum):
+class PreparationStage(StrEnum):
     """Domain stages at which sighting analysis can fail."""
 
     PHOTO_RETRIEVAL = "photo retrieval"
@@ -29,49 +23,6 @@ class SightingAnalysisStage(StrEnum):
     EAR_LANDMARK_DETECTION = "ear landmark detection"
     EAR_CONTOUR_PREPARATION = "ear-contour preparation"
     DECLARED_EAR_RESOLUTION = "declared-ear resolution"
-    TEAR_PROFILE_EXTRACTION = "tear-profile extraction"
-
-
-class SightingAnalysisError(RuntimeError):
-    """Report a failed declared side and domain stage.
-
-    A shared source photo is prepared when its first declared side is analyzed,
-    so a pre-resolution failure is attributed to that side.
-    """
-
-    def __init__(
-        self,
-        *,
-        photo: Photo,
-        side: EarSide,
-        stage: SightingAnalysisStage,
-        message: str,
-    ) -> None:
-        """Initialize one structured sighting-analysis failure."""
-        self.photo_id = photo.photo_id
-        self.side = side
-        self.stage = stage
-        super().__init__(
-            f"{stage.value.capitalize()} failed for {side} ear in photo {photo.photo_id}: {message}"
-        )
-
-
-@dataclass(frozen=True, slots=True)
-class EarAnalysis:
-    """One ear tear profile with source photo and box required for reproduction."""
-
-    source_photo: Photo
-    side: EarSide
-    source_box: BoundingBox
-    tear_profile: TearProfile
-
-
-@dataclass(frozen=True, slots=True)
-class SightingAnalysis:
-    """Left- and right-ear analysis for one sighting."""
-
-    left: EarAnalysis
-    right: EarAnalysis
 
 
 class SightingPreparer:
@@ -84,10 +35,20 @@ class SightingPreparer:
         ear_segmenter: EarSegmenter,
         landmark_detector: EarLandmarkDetector,
     ) -> None:
-        """Initialize analysis with storage and processing dependencies."""
+        """Initialize preparation with storage and processing dependencies."""
         self._photo_store = photo_store
         self._ear_segmenter = ear_segmenter
         self._landmark_detector = landmark_detector
+
+    @property
+    def segmentation_producer_slug(self) -> str:
+        """Identify the segmenter for dependent profile cache records."""
+        return self._ear_segmenter.producer_slug
+
+    @property
+    def landmark_producer_slug(self) -> str:
+        """Identify the landmark detector for dependent profile cache records."""
+        return self._landmark_detector.producer_slug
 
     def prepare(self, pair: SightingEarPair) -> tuple[PreparedEar, PreparedEar]:
         """Prepare the declared ears for any catalog-matching representation.
@@ -123,28 +84,28 @@ class SightingPreparer:
         try:
             encoded = self._photo_store.read(photo)
         except Exception as error:
-            raise SightingAnalysisError(
+            raise MatchingError(
                 photo=photo,
                 side=side,
-                stage=SightingAnalysisStage.PHOTO_RETRIEVAL,
+                stage=PreparationStage.PHOTO_RETRIEVAL,
                 message=str(error),
             ) from error
         try:
             image = decode_image(encoded)
         except Exception as error:
-            raise SightingAnalysisError(
+            raise MatchingError(
                 photo=photo,
                 side=side,
-                stage=SightingAnalysisStage.IMAGE_DECODING,
+                stage=PreparationStage.IMAGE_DECODING,
                 message=str(error),
             ) from error
         try:
             detections = self._ear_segmenter.segment(photo, image)
         except Exception as error:
-            raise SightingAnalysisError(
+            raise MatchingError(
                 photo=photo,
                 side=side,
-                stage=SightingAnalysisStage.EAR_SEGMENTATION,
+                stage=PreparationStage.EAR_SEGMENTATION,
                 message=str(error),
             ) from error
 
@@ -157,10 +118,10 @@ class SightingPreparer:
                     image_height=image.shape[0],
                 )
             except ValueError as error:
-                raise SightingAnalysisError(
+                raise MatchingError(
                     photo=photo,
                     side=side,
-                    stage=SightingAnalysisStage.EAR_SEGMENTATION,
+                    stage=PreparationStage.EAR_SEGMENTATION,
                     message=str(error),
                 ) from error
             try:
@@ -170,10 +131,10 @@ class SightingPreparer:
                     source_box,
                 )
             except Exception as error:
-                raise SightingAnalysisError(
+                raise MatchingError(
                     photo=photo,
                     side=side,
-                    stage=SightingAnalysisStage.EAR_LANDMARK_DETECTION,
+                    stage=PreparationStage.EAR_LANDMARK_DETECTION,
                     message=str(error),
                 ) from error
             if landmarks is None:
@@ -188,10 +149,10 @@ class SightingPreparer:
                     )
                 )
             except Exception as error:
-                raise SightingAnalysisError(
+                raise MatchingError(
                     photo=photo,
                     side=side,
-                    stage=SightingAnalysisStage.EAR_CONTOUR_PREPARATION,
+                    stage=PreparationStage.EAR_CONTOUR_PREPARATION,
                     message=str(error),
                 ) from error
         return tuple(prepared)
@@ -224,54 +185,10 @@ class SightingPreparer:
             candidate for candidate in candidates if candidate.inferred_side == side
         )
         if not matching:
-            raise SightingAnalysisError(
+            raise MatchingError(
                 photo=photo,
                 side=side,
-                stage=SightingAnalysisStage.DECLARED_EAR_RESOLUTION,
+                stage=PreparationStage.DECLARED_EAR_RESOLUTION,
                 message=f"no prepared ear matches inferred side {side}",
             )
         return max(matching, key=lambda candidate: candidate.cleaned_area)
-
-
-class SightingAnalyzer:
-    """Extract tear profiles from an injected ear-preparation computation."""
-
-    def __init__(
-        self,
-        *,
-        prepare_ears: Callable[[SightingEarPair], tuple[PreparedEar, PreparedEar]],
-        profile_extractor: TearProfileExtractor,
-    ) -> None:
-        """Compose shared preparation with one tear-profile producer."""
-        self._prepare_ears = prepare_ears
-        self._profile_extractor = profile_extractor
-
-    def prepare(self, pair: SightingEarPair) -> tuple[PreparedEar, PreparedEar]:
-        """Expose the same prepared ears to alternative catalog matchers."""
-        return self._prepare_ears(pair)
-
-    def analyze(self, pair: SightingEarPair) -> SightingAnalysis:
-        """Return left- and right-ear analysis for one sighting ear pair."""
-        left_ear, right_ear = self.prepare(pair)
-        return SightingAnalysis(
-            left=self._extract(left_ear, "left"),
-            right=self._extract(right_ear, "right"),
-        )
-
-    def _extract(self, ear: PreparedEar, side: EarSide) -> EarAnalysis:
-        """Extract and label one resolved prepared ear."""
-        try:
-            profile = self._profile_extractor.extract(ear)
-        except Exception as error:
-            raise SightingAnalysisError(
-                photo=ear.source_photo,
-                side=side,
-                stage=SightingAnalysisStage.TEAR_PROFILE_EXTRACTION,
-                message=str(error),
-            ) from error
-        return EarAnalysis(
-            source_photo=ear.source_photo,
-            side=side,
-            source_box=ear.source_box,
-            tear_profile=profile,
-        )

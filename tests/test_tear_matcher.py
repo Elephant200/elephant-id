@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from elephant_id.matching.tear_matcher import TearMatcher, TearMatcherConfig
+from elephant_id.matching.alphaphant.similarity import TearMatcher, TearMatcherConfig
 
 
 def make_profile(peaks: list[tuple[int, float]], bins: int = 720) -> np.ndarray:
@@ -155,7 +155,7 @@ def test_bulk_chunking_preserves_order_and_does_not_mutate_inputs(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Chunk boundaries leave scores, ordering, and caller-owned arrays unchanged."""
-    import elephant_id.matching.tear_matcher as module
+    import elephant_id.matching.alphaphant.similarity as module
 
     rng = np.random.default_rng(12)
     query = rng.random(720)

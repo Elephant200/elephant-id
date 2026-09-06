@@ -3,29 +3,27 @@
 import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import cast
 from uuid import UUID
 
 import numpy as np
 import pytest
 
 import elephant_id.matching as public_matching
-from elephant_id.analysis import (
-    EarAnalysis,
-    EarSide,
-    SightingAnalysis,
-    SightingAnalyzer,
-    TearProfile,
-)
 from elephant_id.domain import Photo, SightingEarPair
 from elephant_id.image.boxes import BoundingBox
 from elephant_id.matching import (
-    AlphaPhant,
     CandidateKey,
     CandidateScores,
     CatalogMatcher,
 )
-from elephant_id.matching.tear_matcher import TearMatch, TearMatcher
+from elephant_id.matching.alphaphant import AlphaPhant
+from elephant_id.matching.alphaphant.profile import (
+    EarProfile,
+    SightingProfiles,
+    TearProfile,
+)
+from elephant_id.matching.alphaphant.similarity import TearMatch, TearMatcher
+from elephant_id.preparation import EarSide, PreparedEar
 
 
 def _uuid(value: int) -> UUID:
@@ -43,9 +41,9 @@ def _pair(value: int) -> SightingEarPair:
     )
 
 
-def _ear(value: int, side: EarSide, depths: list[float]) -> EarAnalysis:
+def _ear(value: int, side: EarSide, depths: list[float]) -> EarProfile:
     """Return one analyzed ear with deterministic neutral provenance."""
-    return EarAnalysis(
+    return EarProfile(
         source_photo=Photo(
             photo_id=_uuid(value),
             sighting_id=_uuid(value + 1000),
@@ -56,39 +54,63 @@ def _ear(value: int, side: EarSide, depths: list[float]) -> EarAnalysis:
     )
 
 
-def _analysis(value: int, left: list[float], right: list[float]) -> SightingAnalysis:
+def _analysis(value: int, left: list[float], right: list[float]) -> SightingProfiles:
     """Return one analyzed two-sided sighting."""
-    return SightingAnalysis(
+    return SightingProfiles(
         left=_ear(value, "left", left),
         right=_ear(value + 1, "right", right),
     )
 
 
-class RecordingAnalyzer:
+class RecordingPreparation:
     """Return controlled analyses while recording neutral pair inputs."""
 
     def __init__(
         self,
-        analyses: Mapping[SightingEarPair, SightingAnalysis],
+        analyses: Mapping[SightingEarPair, SightingProfiles],
     ) -> None:
         """Initialize the analyzer with one result per neutral pair."""
         self._analyses = analyses
         self.calls: list[SightingEarPair] = []
 
-    def analyze(self, pair: SightingEarPair) -> SightingAnalysis:
+    def prepare(self, pair: SightingEarPair) -> tuple[PreparedEar, PreparedEar]:
         """Record and return the analysis for `pair`."""
         self.calls.append(pair)
-        return self._analyses[pair]
+        profiles = self._analyses[pair]
+        return tuple(
+            PreparedEar(
+                source_photo=ear.source_photo,
+                source_box=ear.source_box,
+                contour=np.asarray([[0, 0], [3, 2], [0, 3]], dtype=float),
+                original_landmarks=((0, 0), (0, 3)),
+                contour_anchors=((0, 0), (0, 3)),
+                inferred_side=ear.side,
+                cleaned_area=4.5,
+            )
+            for ear in (profiles.left, profiles.right)
+        )
+
+    producer_slug = "synthetic-profiles"
+
+    def extract(self, ear: PreparedEar) -> TearProfile:
+        """Return controlled numerical profiles for the prepared source photo."""
+        return next(
+            item.tear_profile
+            for profiles in self._analyses.values()
+            for item in (profiles.left, profiles.right)
+            if item.source_photo == ear.source_photo and item.side == ear.inferred_side
+        )
 
 
 def _alphaphant(
-    analyses: Mapping[SightingEarPair, SightingAnalysis],
-) -> tuple[AlphaPhant, RecordingAnalyzer]:
+    analyses: Mapping[SightingEarPair, SightingProfiles],
+) -> tuple[AlphaPhant, RecordingPreparation]:
     """Return AlphaPhant with a controlled recording analyzer."""
-    analyzer = RecordingAnalyzer(analyses)
+    analyzer = RecordingPreparation(analyses)
     return (
         AlphaPhant(
-            scale_analyzers=(cast(SightingAnalyzer, analyzer),),
+            prepare_ears=analyzer.prepare,
+            profile_extractors=(analyzer,),
             channel_matchers=(TearMatcher(),),
         ),
         analyzer,
@@ -294,10 +316,10 @@ def test_alphaphant_compares_only_corresponding_sides() -> None:
 def test_matching_package_exports_only_public_catalog_interface() -> None:
     """Matching internals remain importable only from their implementation modules."""
     assert public_matching.__all__ == [
-        "AlphaPhant",
         "CandidateKey",
         "CandidateScores",
         "CatalogMatcher",
+        "MatchingError",
     ]
 
 
@@ -363,11 +385,12 @@ def test_catalog_neighborhood_excludes_held_out_evidence() -> None:
                 for stack in candidates
             )
 
-    analyzer = RecordingAnalyzer(
+    analyzer = RecordingPreparation(
         {pair: _analysis(500 + i, [i], [i]) for i, pair in enumerate(pairs)}
     )
     matcher = AlphaPhant(
-        scale_analyzers=(cast(SightingAnalyzer, analyzer),),
+        prepare_ears=analyzer.prepare,
+        profile_extractors=(analyzer,),
         channel_matchers=(ControlledTearMatcher(),),
     )
     first, second = CandidateKey(_uuid(900)), CandidateKey(_uuid(901))
@@ -386,12 +409,11 @@ def test_channel_weight_magnitude_does_not_change_scores(magnitude: float) -> No
     """Finite extreme weights preserve relative influence without overflow."""
     query, evidence = _pair(10), _pair(20)
     analysis = _analysis(100, [0.0, 0.2, 0.0], [0.0, 0.1, 0.0])
-    analyzer = cast(
-        SightingAnalyzer, RecordingAnalyzer({query: analysis, evidence: analysis})
-    )
+    analyzer = RecordingPreparation({query: analysis, evidence: analysis})
     catalog = {CandidateKey(_uuid(100)): (evidence,)}
     common = {
-        "scale_analyzers": (analyzer,),
+        "prepare_ears": analyzer.prepare,
+        "profile_extractors": (analyzer,),
         "channel_matchers": (TearMatcher(), TearMatcher()),
     }
     reference = AlphaPhant(**common, channel_weights=(1.0, 1.0)).match(query, catalog)
@@ -400,3 +422,49 @@ def test_channel_weight_magnitude_does_not_change_scores(magnitude: float) -> No
     )
     assert next(iter(reference.values())) > 0.0
     assert result == pytest.approx(reference, abs=1e-12)
+
+
+def test_profiles_share_preparation_across_scales_and_matching() -> None:
+    """Inspection and repeated matching reuse the same multiscale extraction."""
+    pair = _pair(10)
+    prepared = RecordingPreparation(
+        {pair: _analysis(100, [0.0, 0.2, 0.0], [0.0, 0.1, 0.0])}
+    )
+
+    class RecordingExtractor:
+        """Record per-ear calls for one synthetic extraction scale."""
+
+        producer_slug = "synthetic-scale"
+
+        def __init__(self) -> None:
+            """Start without extracted ears."""
+            self.calls: list[PreparedEar] = []
+
+        def extract(self, ear: PreparedEar) -> TearProfile:
+            """Retain the prepared ear and return its synthetic profile."""
+            self.calls.append(ear)
+            return prepared.extract(ear)
+
+    fine, coarse = RecordingExtractor(), RecordingExtractor()
+    matcher = AlphaPhant(
+        prepare_ears=prepared.prepare,
+        profile_extractors=(fine, coarse),
+        channel_matchers=(TearMatcher(),),
+    )
+    profiles = matcher.profiles(pair)
+    assert len(profiles) == 2
+    assert matcher.match(pair, {}) == {}
+    assert matcher.profiles(pair) is profiles
+    assert prepared.calls == [pair]
+    assert len(fine.calls) == len(coarse.calls) == 2
+    assert all(
+        first is second for first, second in zip(fine.calls, coarse.calls, strict=True)
+    )
+
+
+def test_alphaphant_package_exports_matcher() -> None:
+    """Algorithm imports expose AlphaPhant without widening the matching package."""
+    import elephant_id.matching.alphaphant as public_alphaphant
+
+    assert public_alphaphant.__all__ == ["AlphaPhant"]
+    assert public_alphaphant.AlphaPhant is AlphaPhant

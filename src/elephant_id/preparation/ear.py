@@ -16,7 +16,9 @@ EarSide = Literal["left", "right"]
 LandmarkPair = tuple[tuple[float, float], tuple[float, float]]
 
 
-def _closed_path(points: NDArray[np.float64], start: int, end: int) -> NDArray[np.float64]:
+def _closed_path(
+    points: NDArray[np.float64], start: int, end: int
+) -> NDArray[np.float64]:
     """Return a closed-contour slice, wrapping when necessary."""
     if start <= end:
         return points[start : end + 1]
@@ -52,12 +54,8 @@ def _cut_contour(
     """Return the longer vertex path from upper to lower snapped landmark."""
     upper = min(snapped_landmarks, key=lambda point: point[1])
     lower = max(snapped_landmarks, key=lambda point: point[1])
-    upper_index = int(
-        np.argmin(np.sum((contour - np.asarray(upper)) ** 2, axis=1))
-    )
-    lower_index = int(
-        np.argmin(np.sum((contour - np.asarray(lower)) ** 2, axis=1))
-    )
+    upper_index = int(np.argmin(np.sum((contour - np.asarray(upper)) ** 2, axis=1)))
+    lower_index = int(np.argmin(np.sum((contour - np.asarray(lower)) ** 2, axis=1)))
     forward = _closed_path(contour, upper_index, lower_index)
     backward = _closed_path(contour, lower_index, upper_index)[::-1]
     return forward if len(forward) >= len(backward) else backward

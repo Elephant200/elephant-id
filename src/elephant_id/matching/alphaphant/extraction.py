@@ -8,8 +8,8 @@ import shapely
 from scipy.ndimage import gaussian_filter1d
 from scipy.spatial import Delaunay
 
-from elephant_id.analysis.ear_preparation import EarSide, PreparedEar
-from elephant_id.analysis.tear_profile import TearProfile
+from elephant_id.matching.alphaphant.profile import TearProfile
+from elephant_id.preparation.ear import EarSide, PreparedEar
 
 
 @dataclass(frozen=True, slots=True)
@@ -108,8 +108,7 @@ def _ear_side_path(
         offsets = path - upper_anchor
         return float(
             np.abs(
-                offsets[:, 0] * chord_direction[1]
-                - offsets[:, 1] * chord_direction[0]
+                offsets[:, 0] * chord_direction[1] - offsets[:, 1] * chord_direction[0]
             ).max()
         )
 
@@ -137,9 +136,7 @@ def _opened_contour(contour: np.ndarray, radius: float) -> np.ndarray:
 
 def _alpha_shape(contour: np.ndarray, radius: float) -> shapely.Polygon:
     """Return the rolling-disk alpha shape of an open ear contour."""
-    median_spacing = float(
-        np.median(np.linalg.norm(np.diff(contour, axis=0), axis=1))
-    )
+    median_spacing = float(np.median(np.linalg.norm(np.diff(contour, axis=0), axis=1)))
     chord_length = float(np.linalg.norm(contour[0] - contour[-1]))
     chord_point_count = max(int(chord_length // median_spacing), 1)
     fractions = np.linspace(0, 1, chord_point_count, endpoint=False)[1:, None]
@@ -189,8 +186,7 @@ def _nearest_crossing(
     vectors = contour[1:] - contour[:-1]
     relative_starts = starts[None, :, :] - origins[:, None, :]
     denominator = (
-        normals[:, 0:1] * vectors[None, :, 1]
-        - normals[:, 1:2] * vectors[None, :, 0]
+        normals[:, 0:1] * vectors[None, :, 1] - normals[:, 1:2] * vectors[None, :, 0]
     )
     with np.errstate(divide="ignore", invalid="ignore"):
         ray_distances = (
@@ -202,9 +198,7 @@ def _nearest_crossing(
             - relative_starts[:, :, 1] * normals[:, 0:1]
         ) / denominator
     valid = (
-        (segment_positions >= 0)
-        & (segment_positions <= 1)
-        & np.isfinite(ray_distances)
+        (segment_positions >= 0) & (segment_positions <= 1) & np.isfinite(ray_distances)
     )
     candidates = np.where(valid, ray_distances, np.inf)
     nearest = candidates[
@@ -266,9 +260,7 @@ def _inward_normals(
     normals = np.c_[tangents[nearest_indices, 1], -tangents[nearest_indices, 0]]
     normals /= np.linalg.norm(normals, axis=1, keepdims=True) + 1e-12
     probe_points = origins + 3.0 * normals
-    normals[
-        ~shapely.contains_xy(shape, probe_points[:, 0], probe_points[:, 1])
-    ] *= -1
+    normals[~shapely.contains_xy(shape, probe_points[:, 0], probe_points[:, 1])] *= -1
     return normals
 
 
@@ -288,9 +280,7 @@ def _polar_directions(
     right_of_chord = np.array((-upper_direction[1], upper_direction[0]))
     margin_direction = right_of_chord if side == "left" else -right_of_chord
     radians = np.deg2rad(angles_degrees)[:, None]
-    directions = (
-        np.cos(radians) * upper_direction + np.sin(radians) * margin_direction
-    )
+    directions = np.cos(radians) * upper_direction + np.sin(radians) * margin_direction
     return midpoint, directions
 
 
@@ -301,24 +291,24 @@ def _depths(ear: PreparedEar, config: AlphaTearConfig) -> np.ndarray:
     opened = _opened_contour(contour, config.opening_fraction * radius)
     reference_hull = _alpha_shape(opened, config.alpha_fraction * radius)
     reference_boundary = np.asarray(reference_hull.exterior.coords)[:-1]
-    reference_path = _densify(
-        _ear_side_path(reference_boundary, opened[0], opened[-1])
-    )
+    reference_path = _densify(_ear_side_path(reference_boundary, opened[0], opened[-1]))
 
     angles = np.linspace(0.0, 180.0, config.profile_bins)
-    coded = (angles > config.trim_degrees) & (
-        angles < 180.0 - config.trim_degrees
-    )
+    coded = (angles > config.trim_degrees) & (angles < 180.0 - config.trim_degrees)
     upper = np.asarray(ear.original_landmarks[0], dtype=float)
     lower = np.asarray(ear.original_landmarks[1], dtype=float)
-    midpoint, directions = _polar_directions(upper, lower, ear.inferred_side, angles[coded])
+    midpoint, directions = _polar_directions(
+        upper, lower, ear.inferred_side, angles[coded]
+    )
     origins = _furthest_ray_crossings(midpoint, directions, reference_boundary)
     valid_origins = np.isfinite(origins).all(axis=1)
     coded_depths = np.zeros(len(origins))
     if valid_origins.any():
         valid = origins[valid_origins]
         normals = _inward_normals(reference_path, reference_hull, valid)
-        coded_depths[valid_origins] = _nearest_crossing(valid, normals, contour) / radius
+        coded_depths[valid_origins] = (
+            _nearest_crossing(valid, normals, contour) / radius
+        )
 
     depths = np.zeros(config.profile_bins)
     smoothed = gaussian_filter1d(coded_depths, sigma=config.smoothing_sigma)

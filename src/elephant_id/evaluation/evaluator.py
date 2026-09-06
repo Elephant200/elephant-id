@@ -12,10 +12,9 @@ from uuid import UUID, uuid4
 import numpy as np
 from tqdm import tqdm
 
-from elephant_id.analysis import SightingAnalysisError
 from elephant_id.dataset import Dataset
 from elephant_id.domain import SightingEarPair
-from elephant_id.matching import CandidateKey, CatalogMatcher
+from elephant_id.matching import CandidateKey, CatalogMatcher, MatchingError
 
 from .benchmark import BenchmarkValidationError, RetrievalBenchmark
 
@@ -67,10 +66,15 @@ class EvaluationResult:
 
     scores: _Scores
 
+    @property
+    def ranks(self) -> np.ndarray:
+        """Return competition ranks in score mapping order for saved-score analysis."""
+        return np.concatenate(tuple(_ranks_by_elephant(self.scores).values()))
+
     @cached_property
     def metrics(self) -> dict[str, int | float]:
         """Return point metrics derived from the stored candidate scores."""
-        ranks = np.concatenate(tuple(_ranks_by_elephant(self.scores).values()))
+        ranks = self.ranks
         return _metrics(ranks)
 
     @cached_property
@@ -133,8 +137,8 @@ def _failure_context(
     UUID | None,
     Literal["left", "right"] | None,
 ]:
-    """Recover the evidence role of a structured analysis failure."""
-    if not isinstance(error, SightingAnalysisError):
+    """Recover the evidence role of a structured matching failure."""
+    if not isinstance(error, MatchingError):
         return None, None, None
     query_photos = {query.left_photo.photo_id, query.right_photo.photo_id}
     role: Literal["query", "catalog"] = (

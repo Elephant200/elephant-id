@@ -11,11 +11,11 @@ import cv2
 import numpy as np
 from matplotlib.axes import Axes
 
-from elephant_id.analysis import TearProfile
-from elephant_id.analysis.profile_extraction.alpha_tear import DEFAULT_VERSION
 from elephant_id.image import BgrImage
 from elephant_id.image.masks import decode_rle_mask
 from elephant_id.inference import Detection
+from elephant_id.matching.alphaphant.extraction import DEFAULT_VERSION
+from elephant_id.matching.alphaphant.profile import TearProfile
 
 _PROFILE_TRIM_DEGREES = DEFAULT_VERSION.config.trim_degrees
 

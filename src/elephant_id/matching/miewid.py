@@ -16,12 +16,12 @@ import numpy as np
 from loguru import logger
 from numpy.typing import NDArray
 
-from elephant_id.analysis import PreparedEar
 from elephant_id.dataset import PhotoStore
 from elephant_id.domain import SightingEarPair
 from elephant_id.image import BgrImage, decode_image
 from elephant_id.image.boxes import BoundingBox
 from elephant_id.matching.protocol import CandidateKey, CandidateScores
+from elephant_id.preparation import PreparedEar
 
 _INPUT_SIZE = 440
 _IMAGENET_MEAN = (0.485, 0.456, 0.406)

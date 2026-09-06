@@ -19,9 +19,9 @@ from scipy.ndimage import gaussian_filter1d
 from scipy.signal import argrelextrema
 from sklearn.neighbors import NearestNeighbors
 
-from elephant_id.analysis import EarSide, PreparedEar
 from elephant_id.domain import SightingEarPair
 from elephant_id.matching.protocol import CandidateKey, CandidateScores
+from elephant_id.preparation import EarSide, PreparedEar
 
 _SMOOTHING_SIGMA = 5.0
 _EXTREMA_ORDER = 3

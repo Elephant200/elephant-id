@@ -4,13 +4,18 @@ import argparse
 import itertools
 import json
 import time
+from functools import cache
 from pathlib import Path
 
-from elephant_id.analysis.profile_extraction.alpha_tear import MULTISCALE_VERSIONS
-from elephant_id.composition import build_versioned_analyzers, compose_alphaphant
+from elephant_id.cache import CacheManager
+from elephant_id.composition import (
+    build_preparer,
+    build_profile_extractors,
+    compose_alphaphant,
+)
 from elephant_id.dataset import Dataset, PhotoStore
 from elephant_id.evaluation import evaluate, load_benchmark
-from elephant_id.evaluation.pooled import paired_delta, pool_metrics
+from elephant_id.evaluation.comparison import paired_delta
 from elephant_id.log import configure_logging
 from elephant_id.matching import CatalogMatcher
 from elephant_id.matching.curvrank import CurvRankMatcher
@@ -22,12 +27,16 @@ MIEWID_REVISION = "4f1d7f2b521149e5fe34bb85f377248ce9971a7d"
 
 def build_matchers(photo_store: PhotoStore) -> dict[str, CatalogMatcher]:
     """Share one preparation computation across all three catalog matchers."""
-    scale_analyzers = build_versioned_analyzers(photo_store, MULTISCALE_VERSIONS)
+    cache_store = CacheManager()
+    preparer = build_preparer(photo_store, cache_store)
+    prepare = cache(preparer.prepare)
     return {
-        "alphaphant": compose_alphaphant(scale_analyzers),
-        "curvrank": CurvRankMatcher(prepare_ears=scale_analyzers[0].prepare),
+        "alphaphant": compose_alphaphant(
+            prepare, build_profile_extractors(preparer, cache_store)
+        ),
+        "curvrank": CurvRankMatcher(prepare_ears=prepare),
         "miewid": MiewIdMatcher(
-            prepare_ears=scale_analyzers[0].prepare,
+            prepare_ears=prepare,
             photo_store=photo_store,
             embedder=MiewIdEmbedder(model_id=MIEWID_MODEL, revision=MIEWID_REVISION),
         ),
@@ -73,12 +82,11 @@ def main() -> None:
             "scores": scores,
             "metrics": result.metrics,
             "intervals": result.intervals,
-            "pool_matched": pool_metrics(result.scores),
             "target_tie_queries": tied,
             "seconds": time.perf_counter() - started,
         }
         args.output.write_text(json.dumps(report, indent=2) + "\n")
-        print(name, json.dumps(report[name]["pool_matched"]), flush=True)
+        print(name, json.dumps(report[name]["metrics"]), flush=True)
     report["paired_deltas"] = {
         f"{first} - {second}": {
             str(cutoff): paired_delta(scored[first], scored[second], cutoff)

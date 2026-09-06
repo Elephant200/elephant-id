@@ -241,3 +241,11 @@ class TearMatcher:
         self._variant_stretches = stretch_grid.ravel()
         self._variant_shifts = shift_grid.ravel()
         self._variant_penalties = np.tile(penalties, len(stretches))
+
+
+SELECTED_PROFILE_SETTINGS = TearMatcherConfig(
+    depth_exponent=0.75,
+    shift_penalty_scale=0.16,
+    bin_weights=angular_weights(240, 120.0, 35.0),
+)
+"""Fixed profile settings selected on the frozen tuning sets."""

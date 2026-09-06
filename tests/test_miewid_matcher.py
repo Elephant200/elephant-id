@@ -9,11 +9,11 @@ import cv2
 import numpy as np
 import pytest
 
-from elephant_id.analysis import EarSide, PreparedEar
 from elephant_id.domain import Photo, SightingEarPair
 from elephant_id.image.boxes import BoundingBox
 from elephant_id.matching.miewid import MiewIdEmbedder, MiewIdMatcher
 from elephant_id.matching.protocol import CandidateKey
+from elephant_id.preparation import EarSide, PreparedEar
 
 
 def _uuid(seed: int) -> UUID:

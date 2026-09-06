@@ -6,9 +6,9 @@ AlphaPhant receives one `SightingEarPair` and a candidate catalog. It returns on
 
 `SightingPreparer` reads each neutral Photo through the image-only PhotoStore and decodes its original bytes as BGR. Cached complete SAM3 features supply ear detections. Cached YOLO landmarks supply anatomical endpoints in full-image coordinates. Existing geometry resolves the declared side, cleans its contour, and produces an immutable `PreparedEar`.
 
-A same-photo pair prepares that Photo once. Composition memoizes preparation and injects the same callable into all scale analyzers. CurvRank and MiewID receive an ear-preparation callable, rather than an AlphaTear analyzer. The comparison composition supplies `SightingAnalyzer.prepare`, which forwards to the same shared computation. Neither comparator receives Dataset or AlphaPhant scores.
+A same-photo pair prepares that Photo once. Construction can memoize preparation and share the same callable across matchers. CurvRank and MiewID receive an ear-preparation callable, directly. The comparison script injects the shared preparation callable directly into every matcher. Neither comparator receives Dataset or AlphaPhant scores.
 
-`SightingAnalyzer` combines preparation with one profile extractor. It preserves structured failures and never silently drops an ear or substitutes another sighting.
+`AlphaPhant` combines preparation with its configured profile extractors. `AlphaPhant.profiles(pair)` returns source-labelled left/right profiles in scale order using the same memoized computation as matching. Preparation and extraction failures retain their photo, side, stage, and original cause through `MatchingError`.
 
 ## AlphaTear extraction
 
@@ -53,10 +53,10 @@ The candidate's left and right scores are averaged equally. Candidate scores nee
 
 ## Composition and evaluation
 
-`build_standard_alphaphant` builds the fixed composition. `compose_alphaphant` applies its fixed matching settings to supplied scale analyzers; `build_versioned_analyzers` shares preparation across those scales. `build_standard_analyzer` retains the original single-scale analysis baseline.
+`build_standard_alphaphant` builds the fixed composition. `build_preparer` constructs cached inference; `build_profile_extractors` constructs versioned profile caches; `compose_alphaphant` wires preparation and supplied extractors to the selected scoring rule. A baseline or tuning entry point supplies its own extractor sequence. Settings remain beside the algorithms that interpret them.
 
 There is no public `AlphaPhantConfig` product. The exact ablation uses isolated scientific compositions to remove the catalog correction or replace the similarity-weighted mean with the original maximum.
 
-The constructor names state each component's role: `scale_analyzers`, `channel_matchers`, and `channel_weights`. Custom weights are scaled before normalization so large finite values cannot overflow their sum. Ablation caches identify the script, active package sources, and NumPy/SciPy versions before reusing comparison matrices.
+The constructor names state each component's role: `prepare_ears`, `profile_extractors`, `channel_matchers`, and `channel_weights`. Custom weights are scaled before normalization so large finite values cannot overflow their sum. Ablation caches identify the script, active package sources, and NumPy/SciPy versions before reusing comparison matrices.
 
 See [results.md](results.md) for measured contributions and [evaluation.md](evaluation.md) for the protocol and reproduction commands.

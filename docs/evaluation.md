@@ -18,7 +18,7 @@ Primary comparisons are top-1 and top-5. Paired percentile intervals resample qu
 
 The bootstrap holds recorded catalog scores fixed. It accounts for repeated queries within an elephant, but does not rebuild catalogs, repeat selection, or measure curation uncertainty. Shared reference evidence can induce additional dependence. Do not describe these intervals as covering all population uncertainty.
 
-When candidate counts differ, use pool-matched expectations with `BENCHMARK_POOL_SIZE=89`. The target competes against 88 uniformly drawn distractors; the number scoring above it follows a hypergeometric distribution. Bootstrap those per-query expectations, not the unadjusted ranks. The requested pool cannot exceed the observed catalog. Report target ties and their convention.
+Report metrics on the actual candidate catalog, including its size and target ties. Dataset growth changes the retrieval task; do not normalize results to a hypothetical fixed pool. Compare matchers on identical query and candidate sets using `evaluation.comparison.paired_delta`. `EvaluationResult.ranks` and `.metrics` also support saved-score inspection without constructing a matcher.
 
 ## Development and confirmation
 

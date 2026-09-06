@@ -1,114 +1,87 @@
-"""Composition of shared ear preparation and publication AlphaPhant."""
+"""Explicit construction of shared preparation and standard AlphaPhant."""
 
 from collections.abc import Callable, Sequence
 from dataclasses import replace
 from functools import cache
 from pathlib import Path
 
-from elephant_id.analysis import PreparedEar, SightingAnalyzer, SightingPreparer
-from elephant_id.analysis.profile_extraction import (
-    AlphaTearConfig,
-    AlphaTearExtractor,
-    CachedTearProfileExtractor,
-)
-from elephant_id.analysis.profile_extraction.alpha_tear import (
-    DEFAULT_VERSION,
-    MULTISCALE_VERSIONS,
-    AlphaTearVersion,
-)
 from elephant_id.cache import CacheManager
 from elephant_id.constants import DEFAULT_CACHE_ROOT
 from elephant_id.dataset import PhotoStore
 from elephant_id.domain import SightingEarPair
-from elephant_id.inference.landmarks import (
-    CachedEarLandmarkDetector,
-    YoloEarLandmarkDetector,
+from elephant_id.matching.alphaphant import AlphaPhant
+from elephant_id.matching.alphaphant.cached import CachedTearProfileExtractor
+from elephant_id.matching.alphaphant.extraction import (
+    MULTISCALE_VERSIONS,
+    AlphaTearExtractor,
+    AlphaTearVersion,
 )
-from elephant_id.inference.segmentation.sam3 import (
-    CachedSam3FeatureSegmenter,
-    Sam3EarSegmenter,
-    Sam3FeatureSegmenter,
-)
-from elephant_id.matching import AlphaPhant
-from elephant_id.matching.tear_matcher import (
+from elephant_id.matching.alphaphant.matcher import CHANNEL_WEIGHTS
+from elephant_id.matching.alphaphant.profile import TearProfileExtractor
+from elephant_id.matching.alphaphant.similarity import (
+    SELECTED_PROFILE_SETTINGS,
     TearMatcher,
-    TearMatcherConfig,
-    angular_weights,
 )
-
-SELECTED_PROFILE_SETTINGS = TearMatcherConfig(
-    depth_exponent=0.75,
-    shift_penalty_scale=0.16,
-    bin_weights=angular_weights(240, 120.0, 35.0),
-)
-"""Fixed profile settings selected on the frozen tuning sets."""
-
-CHANNEL_WEIGHTS = (0.55, 0.45)
-"""Depth and signed-depth-change shares of each directional ear similarity."""
+from elephant_id.preparation import PreparedEar, SightingPreparer
 
 
-def _shared_preparation(
+def build_preparer(
     photo_store: PhotoStore,
     cache_store: CacheManager,
-    roboflow_api_key: str | None,
-) -> tuple[Callable[[SightingEarPair], tuple[PreparedEar, PreparedEar]], str, str]:
-    """Compose reusable preparation over complete cached inference producers."""
+    *,
+    roboflow_api_key: str | None = None,
+) -> SightingPreparer:
+    """Construct shared preparation with cached segmentation and landmarks."""
+    from elephant_id.inference.landmarks.cached import CachedEarLandmarkDetector
+    from elephant_id.inference.landmarks.yolo import YoloEarLandmarkDetector
+    from elephant_id.inference.segmentation.sam3 import (
+        CachedSam3FeatureSegmenter,
+        Sam3EarSegmenter,
+        Sam3FeatureSegmenter,
+    )
+
     features = CachedSam3FeatureSegmenter(
         Sam3FeatureSegmenter(api_key=roboflow_api_key), cache_store
     )
-    segmenter = Sam3EarSegmenter(features)
-    landmarks = CachedEarLandmarkDetector(YoloEarLandmarkDetector(), cache_store)
-    preparer = SightingPreparer(
-        photo_store=photo_store, ear_segmenter=segmenter, landmark_detector=landmarks
+    return SightingPreparer(
+        photo_store=photo_store,
+        ear_segmenter=Sam3EarSegmenter(features),
+        landmark_detector=CachedEarLandmarkDetector(
+            YoloEarLandmarkDetector(), cache_store
+        ),
     )
-    return cache(preparer.prepare), segmenter.producer_slug, landmarks.producer_slug
 
 
-def build_versioned_analyzers(
-    photo_store: PhotoStore,
-    versions: Sequence[AlphaTearVersion],
-    cache_root: Path = Path(DEFAULT_CACHE_ROOT),
-    *,
-    roboflow_api_key: str | None = None,
-) -> tuple[SightingAnalyzer, ...]:
-    """Build extraction versions that share exactly one ear-preparation computation."""
-    cache_store = CacheManager(cache_root=cache_root)
-    prepare, segmentation_slug, landmark_slug = _shared_preparation(
-        photo_store, cache_store, roboflow_api_key
-    )
+def build_profile_extractors(
+    preparer: SightingPreparer,
+    cache_store: CacheManager,
+    versions: Sequence[AlphaTearVersion] = MULTISCALE_VERSIONS,
+) -> tuple[CachedTearProfileExtractor, ...]:
+    """Construct settled profile caches with the actual inference provenance."""
     return tuple(
-        SightingAnalyzer(
-            prepare_ears=prepare,
-            profile_extractor=CachedTearProfileExtractor(
-                AlphaTearExtractor(version),
-                cache_store,
-                segmentation_producer_slug=segmentation_slug,
-                landmark_producer_slug=landmark_slug,
-            ),
+        CachedTearProfileExtractor(
+            AlphaTearExtractor(version),
+            cache_store,
+            segmentation_producer_slug=preparer.segmentation_producer_slug,
+            landmark_producer_slug=preparer.landmark_producer_slug,
         )
         for version in versions
     )
 
 
-def build_standard_analyzer(
-    photo_store: PhotoStore,
-    cache_root: Path = Path(DEFAULT_CACHE_ROOT),
-    *,
-    roboflow_api_key: str | None = None,
-) -> SightingAnalyzer:
-    """Build the single-scale analysis baseline over shared standard preparation."""
-    return build_versioned_analyzers(
-        photo_store, (DEFAULT_VERSION,), cache_root, roboflow_api_key=roboflow_api_key
-    )[0]
-
-
-def compose_alphaphant(scale_analyzers: Sequence[SightingAnalyzer]) -> AlphaPhant:
-    """Apply the selected matching rule to the supplied scale analyzers."""
+def compose_alphaphant(
+    prepare_ears: Callable[[SightingEarPair], tuple[PreparedEar, PreparedEar]],
+    profile_extractors: Sequence[TearProfileExtractor],
+) -> AlphaPhant:
+    """Wire supplied preparation and raw or cached extractors to standard scoring."""
     return AlphaPhant(
-        scale_analyzers=scale_analyzers,
+        prepare_ears=prepare_ears,
+        profile_extractors=profile_extractors,
         channel_matchers=(
             TearMatcher(SELECTED_PROFILE_SETTINGS),
-            TearMatcher(replace(SELECTED_PROFILE_SETTINGS, channel="signed_depth_change")),
+            TearMatcher(
+                replace(SELECTED_PROFILE_SETTINGS, channel="signed_depth_change")
+            ),
         ),
         channel_weights=CHANNEL_WEIGHTS,
     )
@@ -120,28 +93,11 @@ def build_standard_alphaphant(
     *,
     roboflow_api_key: str | None = None,
 ) -> AlphaPhant:
-    """Build publication AlphaPhant with seven immutable extraction versions."""
+    """Construct standard AlphaPhant with cached inference and seven profile scales."""
+    cache_store = CacheManager(cache_root=cache_root)
+    preparer = build_preparer(
+        photo_store, cache_store, roboflow_api_key=roboflow_api_key
+    )
     return compose_alphaphant(
-        build_versioned_analyzers(
-            photo_store,
-            MULTISCALE_VERSIONS,
-            cache_root,
-            roboflow_api_key=roboflow_api_key,
-        )
-    )
-
-
-def build_profile_tuning_analyzer(
-    photo_store: PhotoStore,
-    profile_config: AlphaTearConfig,
-    cache_root: Path = Path(DEFAULT_CACHE_ROOT),
-    *,
-    roboflow_api_key: str | None = None,
-) -> SightingAnalyzer:
-    """Compose raw experimental extraction over the cached inference producers."""
-    prepare, _, _ = _shared_preparation(
-        photo_store, CacheManager(cache_root=cache_root), roboflow_api_key
-    )
-    return SightingAnalyzer(
-        prepare_ears=prepare, profile_extractor=AlphaTearExtractor(profile_config)
+        cache(preparer.prepare), build_profile_extractors(preparer, cache_store)
     )
