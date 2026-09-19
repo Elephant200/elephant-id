@@ -1,4 +1,4 @@
-"""Reusable AlphaTear profile value."""
+"""AlphaTear profiles and their source-labelled sighting results."""
 
 from dataclasses import dataclass
 from typing import Protocol
@@ -30,15 +30,15 @@ class TearProfile:
 
 
 class TearProfileExtractor(Protocol):
-    """Extract a reusable tear profile from one prepared ear."""
+    """Extract one complete ordered representation from a prepared ear."""
 
     @property
     def producer_slug(self) -> str | None:
         """Return the settled slug, or none for an experimental extractor."""
         ...
 
-    def extract(self, ear: PreparedEar) -> TearProfile:
-        """Extract one reusable tear profile."""
+    def extract(self, ear: PreparedEar) -> tuple[TearProfile, ...]:
+        """Return the representation's profiles in consistent reference order."""
         ...
 
 
@@ -54,7 +54,7 @@ class EarProfile:
 
 @dataclass(frozen=True, slots=True)
 class SightingProfiles:
-    """Left- and right-ear analysis for one sighting."""
+    """Source-labelled left and right profiles for one reference shape."""
 
     left: EarProfile
     right: EarProfile
@@ -62,7 +62,7 @@ class SightingProfiles:
 
 def extract_sighting_profiles(
     ears: tuple[PreparedEar, PreparedEar], extractor: TearProfileExtractor
-) -> SightingProfiles:
+) -> tuple[SightingProfiles, ...]:
     """Extract source-labelled profiles from resolved left and right ears.
 
     Raises:
@@ -71,7 +71,7 @@ def extract_sighting_profiles(
     profiles = []
     for ear, side in zip(ears, ("left", "right"), strict=True):
         try:
-            profile = extractor.extract(ear)
+            extracted = extractor.extract(ear)
         except Exception as error:
             raise MatchingError(
                 photo=ear.source_photo,
@@ -79,5 +79,12 @@ def extract_sighting_profiles(
                 stage="tear-profile extraction",
                 message=str(error),
             ) from error
-        profiles.append(EarProfile(ear.source_photo, side, ear.source_box, profile))
-    return SightingProfiles(*profiles)
+        profiles.append(
+            tuple(
+                EarProfile(ear.source_photo, side, ear.source_box, profile)
+                for profile in extracted
+            )
+        )
+    return tuple(
+        SightingProfiles(left, right) for left, right in zip(*profiles, strict=True)
+    )

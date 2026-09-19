@@ -14,10 +14,10 @@ from matplotlib.axes import Axes
 from elephant_id.image import BgrImage
 from elephant_id.image.masks import decode_rle_mask
 from elephant_id.inference import Detection
-from elephant_id.matching.alphaphant.extraction import DEFAULT_VERSION
+from elephant_id.matching.alphaphant.extraction import AlphaTearConfig
 from elephant_id.matching.alphaphant.profile import TearProfile
 
-_PROFILE_TRIM_DEGREES = DEFAULT_VERSION.config.trim_degrees
+_PROFILE_TRIM_DEGREES = AlphaTearConfig().trim_degrees
 
 
 def _blend_bgr(

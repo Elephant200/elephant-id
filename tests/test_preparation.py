@@ -12,8 +12,7 @@ from pycocotools import mask as coco_mask
 from elephant_id.cache import CacheManager
 from elephant_id.composition import (
     build_preparer,
-    build_profile_extractors,
-    compose_alphaphant,
+    build_profile_extractor,
 )
 from elephant_id.domain import Photo, SightingEarPair
 from elephant_id.image.boxes import BoundingBox
@@ -30,7 +29,6 @@ from elephant_id.matching.alphaphant.profile import (
     SightingProfiles,
     TearProfile,
 )
-from elephant_id.matching.alphaphant.similarity import TearMatcher
 from elephant_id.preparation import (
     EarSide,
     PreparationStage,
@@ -38,6 +36,7 @@ from elephant_id.preparation import (
     SightingPreparer,
     prepare_ear,
 )
+from elephant_id.preparation.ear import _cut_contour
 
 PHOTO = Photo(
     photo_id=UUID("8c47c36d-a75d-4ee4-a58a-3a08fca2c833"),
@@ -79,16 +78,16 @@ def _prepared_ear(side: EarSide = "left") -> PreparedEar:
 class _ProfileExtractor:
     """Record prepared-ear extraction."""
 
-    profile: TearProfile = field(
-        default_factory=lambda: TearProfile(np.asarray([0.0, 0.1, 0.0]))
+    profiles: tuple[TearProfile, ...] = field(
+        default_factory=lambda: (TearProfile(np.asarray([0.0, 0.1, 0.0])),)
     )
-    producer_slug: str | None = "alpha-tear-v3"
+    producer_slug: str | None = "synthetic-profile-bundle"
     calls: list[PreparedEar] = field(default_factory=list)
 
-    def extract(self, ear: PreparedEar) -> TearProfile:
-        """Record and return one configured profile."""
+    def extract(self, ear: PreparedEar) -> tuple[TearProfile, ...]:
+        """Record and return the configured ordered profile bundle."""
         self.calls.append(ear)
-        return self.profile
+        return self.profiles
 
 
 def test_cached_profile_uses_prepared_ear_lineage(tmp_path: Path) -> None:
@@ -106,15 +105,44 @@ def test_cached_profile_uses_prepared_ear_lineage(tmp_path: Path) -> None:
     first = extractor.extract(ear)
     second = extractor.extract(ear)
 
-    np.testing.assert_array_equal(first.depths, inner.profile.depths)
-    np.testing.assert_array_equal(second.depths, inner.profile.depths)
+    assert isinstance(first, tuple)
+    assert first[0].depths.flags.writeable is False
+    np.testing.assert_array_equal(first[0].depths, inner.profiles[0].depths)
+    np.testing.assert_array_equal(second[0].depths, inner.profiles[0].depths)
     assert inner.calls == [ear]
     assert extractor.producer_slug == inner.producer_slug
     key = (
         f"{PHOTO.photo_id}__seg_sam3-features__landmarks_"
         "yolo26n-keypoints-v1__side_left__crop_2_3_13_16"
     )
-    assert cache.exists("alpha-tear-v3", key)
+    assert cache.exists("synthetic-profile-bundle", key)
+
+
+def test_cached_profile_preserves_ordered_multiscale_bundle(tmp_path: Path) -> None:
+    """A cached bundle keeps scale order and returns immutable profile values."""
+    ear = _prepared_ear()
+    profiles = (
+        TearProfile(np.asarray([0.0, 0.1, 0.0])),
+        TearProfile(np.asarray([0.0, 0.4, 0.0])),
+    )
+    inner = _ProfileExtractor(profiles=profiles)
+    extractor = CachedTearProfileExtractor(
+        inner,
+        CacheManager(cache_root=tmp_path),
+        segmentation_producer_slug="segmentation-v1",
+        landmark_producer_slug="landmarks-v1",
+    )
+
+    first = extractor.extract(ear)
+    second = extractor.extract(ear)
+
+    assert tuple(profile.depths[1] for profile in first) == (0.1, 0.4)
+    assert tuple(profile.depths[1] for profile in second) == (0.1, 0.4)
+    with pytest.raises(TypeError):
+        first[0] = profiles[0]  # type: ignore[index]
+    with pytest.raises(ValueError, match="read-only"):
+        first[0].depths[0] = 1.0
+    assert inner.calls == [ear]
 
 
 def test_cached_profile_rejects_unversioned_extractor(tmp_path: Path) -> None:
@@ -134,14 +162,13 @@ def test_composition_caches_only_settled_profile_extraction(tmp_path: Path) -> N
 
     cache_store = CacheManager(cache_root=tmp_path)
     preparer = build_preparer(store, cache_store)
-    standard = build_profile_extractors(preparer, cache_store)
-    tuning = AlphaTearExtractor(AlphaTearConfig(alpha_fraction=0.4))
-    assert all(
-        isinstance(extractor, CachedTearProfileExtractor) for extractor in standard
-    )
+    standard = build_profile_extractor(preparer, cache_store)
+    tuning = AlphaTearExtractor(AlphaTearConfig(alpha_fractions=(0.4,)))
+    assert isinstance(standard, CachedTearProfileExtractor)
     assert tuning.producer_slug is None
-    raw_matcher = compose_alphaphant(
-        lambda pair: (_prepared_ear(), _prepared_ear("right")), (tuning,)
+    raw_matcher = AlphaPhant(
+        prepare_ears=lambda pair: (_prepared_ear(), _prepared_ear("right")),
+        profile_extractor=tuning,
     )
     raw_matcher.profiles(SightingEarPair(PHOTO.sighting_id, PHOTO, RIGHT_PHOTO))
     assert not list(tmp_path.rglob("*.json"))
@@ -167,6 +194,15 @@ def _segmented_rectangle(x1: int, y1: int, x2: int, y2: int) -> Detection:
         confidence=0.9,
         rle_mask=_rle(mask),
     )
+
+
+def test_cut_contour_preserves_forward_order_on_equal_vertex_counts() -> None:
+    """A symmetric contour has a deterministic forward vertex-count tie choice."""
+    contour = np.asarray([(0, 0), (5, 5), (0, 10), (-5, 5)], dtype=float)
+
+    path = _cut_contour(contour, ((0.0, 0.0), (0.0, 10.0)))
+
+    np.testing.assert_array_equal(path, contour[:3])
 
 
 def _landmarks(
@@ -275,8 +311,7 @@ def test_sighting_preparation_returns_two_source_labelled_profiles() -> None:
     )
     analyzer = AlphaPhant(
         prepare_ears=preparer.prepare,
-        profile_extractors=(extractor,),
-        channel_matchers=(TearMatcher(),),
+        profile_extractor=extractor,
     )
     pair = SightingEarPair(PHOTO.sighting_id, PHOTO, RIGHT_PHOTO)
 
@@ -317,8 +352,7 @@ def test_sighting_preparation_prepares_one_photo_once_for_both_sides(
     )
     analyzer = AlphaPhant(
         prepare_ears=preparer.prepare,
-        profile_extractors=(extractor,),
-        channel_matchers=(TearMatcher(),),
+        profile_extractor=extractor,
     )
 
     pair = SightingEarPair(PHOTO.sighting_id, PHOTO, PHOTO)
@@ -356,8 +390,7 @@ def test_sighting_preparation_preserves_input_order_for_equal_matching_ears() ->
                 }
             ),
         ).prepare,
-        profile_extractors=(_ProfileExtractor(),),
-        channel_matchers=(TearMatcher(),),
+        profile_extractor=_ProfileExtractor(),
     )
 
     result = analyzer.profiles(SightingEarPair(PHOTO.sighting_id, PHOTO, RIGHT_PHOTO))[
@@ -365,6 +398,51 @@ def test_sighting_preparation_preserves_input_order_for_equal_matching_ears() ->
     ]
 
     assert result.left.source_box == first_box
+
+
+def test_distinct_declared_photos_resolve_single_ears_independently_of_orientation() -> None:
+    """A profile view's image direction does not override its declared ear role."""
+    left = _segmented_rectangle(2, 3, 12, 20)
+    right = _segmented_rectangle(16, 3, 27, 20)
+    left_box = BoundingBox(2, 3, 12, 20)
+    right_box = BoundingBox(16, 3, 27, 20)
+    preparer = SightingPreparer(
+        photo_store=_PhotoStore(_encoded_image()),
+        ear_segmenter=_Segmenter({PHOTO: (left,), RIGHT_PHOTO: (right,)}),
+        landmark_detector=_LandmarkDetector(
+            {
+                left_box: _landmarks((2.0, 3.0), (2.0, 19.0)),
+                right_box: _landmarks((26.0, 3.0), (26.0, 19.0)),
+            }
+        ),
+    )
+
+    prepared = preparer.prepare(SightingEarPair(PHOTO.sighting_id, PHOTO, RIGHT_PHOTO))
+
+    assert tuple(ear.source_photo for ear in prepared) == (PHOTO, RIGHT_PHOTO)
+    assert tuple(ear.source_box for ear in prepared) == (left_box, right_box)
+    assert tuple(ear.inferred_side for ear in prepared) == ("left", "right")
+    assert prepared[0].contour[:, 0].min() == 2
+    assert prepared[1].contour[:, 0].max() == 26
+
+
+def test_same_photo_cannot_supply_both_roles_from_one_ear() -> None:
+    """A shared source photo still needs two geometrically distinct ear candidates."""
+    detection = _segmented_rectangle(2, 3, 12, 20)
+    box = BoundingBox(2, 3, 12, 20)
+    preparer = SightingPreparer(
+        photo_store=_PhotoStore(_encoded_image()),
+        ear_segmenter=_Segmenter({PHOTO: (detection,)}),
+        landmark_detector=_LandmarkDetector(
+            {box: _landmarks((2.0, 3.0), (2.0, 19.0))}
+        ),
+    )
+
+    with pytest.raises(MatchingError) as caught:
+        preparer.prepare(SightingEarPair(PHOTO.sighting_id, PHOTO, PHOTO))
+
+    assert caught.value.stage is PreparationStage.DECLARED_EAR_RESOLUTION
+    assert caught.value.side == "right"
 
 
 def test_sighting_preparation_reports_declared_side_and_domain_stage() -> None:
@@ -375,8 +453,7 @@ def test_sighting_preparation_reports_declared_side_and_domain_stage() -> None:
             ear_segmenter=_Segmenter({PHOTO: ()}),
             landmark_detector=_LandmarkDetector({}),
         ).prepare,
-        profile_extractors=(_ProfileExtractor(),),
-        channel_matchers=(TearMatcher(),),
+        profile_extractor=_ProfileExtractor(),
     )
     pair = SightingEarPair(PHOTO.sighting_id, PHOTO, RIGHT_PHOTO)
 
@@ -398,7 +475,7 @@ def test_sighting_preparation_wraps_extraction_failure_with_its_cause() -> None:
 
         producer_slug = None
 
-        def extract(self, ear: PreparedEar) -> TearProfile:
+        def extract(self, ear: PreparedEar) -> tuple[TearProfile, ...]:
             """Fail during profile extraction."""
             raise ArithmeticError("synthetic extraction failure")
 
@@ -413,8 +490,7 @@ def test_sighting_preparation_wraps_extraction_failure_with_its_cause() -> None:
                 }
             ),
         ).prepare,
-        profile_extractors=(_FailingExtractor(),),
-        channel_matchers=(TearMatcher(),),
+        profile_extractor=_FailingExtractor(),
     )
 
     with pytest.raises(MatchingError) as caught:

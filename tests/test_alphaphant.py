@@ -17,12 +17,13 @@ from elephant_id.matching import (
     CatalogMatcher,
 )
 from elephant_id.matching.alphaphant import AlphaPhant
+from elephant_id.matching.alphaphant.matcher import _correct_catalog
 from elephant_id.matching.alphaphant.profile import (
     EarProfile,
     SightingProfiles,
     TearProfile,
 )
-from elephant_id.matching.alphaphant.similarity import TearMatch, TearMatcher
+from elephant_id.matching.alphaphant.similarity import TearMatcher
 from elephant_id.preparation import EarSide, PreparedEar
 
 
@@ -92,13 +93,15 @@ class RecordingPreparation:
 
     producer_slug = "synthetic-profiles"
 
-    def extract(self, ear: PreparedEar) -> TearProfile:
-        """Return controlled numerical profiles for the prepared source photo."""
-        return next(
-            item.tear_profile
-            for profiles in self._analyses.values()
-            for item in (profiles.left, profiles.right)
-            if item.source_photo == ear.source_photo and item.side == ear.inferred_side
+    def extract(self, ear: PreparedEar) -> tuple[TearProfile, ...]:
+        """Return the controlled profile bundle for the prepared source photo."""
+        return (
+            next(
+                item.tear_profile
+                for profiles in self._analyses.values()
+                for item in (profiles.left, profiles.right)
+                if item.source_photo == ear.source_photo and item.side == ear.inferred_side
+            ),
         )
 
 
@@ -110,8 +113,7 @@ def _alphaphant(
     return (
         AlphaPhant(
             prepare_ears=analyzer.prepare,
-            profile_extractors=(analyzer,),
-            channel_matchers=(TearMatcher(),),
+            profile_extractor=analyzer,
         ),
         analyzer,
     )
@@ -169,7 +171,9 @@ def test_alphaphant_analyzes_neutral_catalog_and_returns_candidate_scores() -> N
 
     assert isinstance(scores, dict)
     assert scores.keys() == catalog.keys()
-    assert scores[strong_key] == pytest.approx(2 / (1 + math.exp(-3 / math.sqrt(2))))
+    assert scores[strong_key] == pytest.approx(
+        2 / (1 + math.exp(-3 / (2 * math.sqrt(2))))
+    )
     assert scores[weak_key] == pytest.approx(0.0)
     assert scores[strong_key] > scores[weak_key]
     assert all(math.isfinite(score) for score in scores.values())
@@ -277,15 +281,15 @@ def test_alphaphant_aggregates_each_side_before_averaging() -> None:
     candidate_key = CandidateKey(_uuid(500))
     alphaphant, _ = _alphaphant(
         {
-            query: _analysis(100, [0.0, 0.1, 0.0], [0.0, 0.0, 0.2]),
-            right_match: _analysis(200, [0.0, 0.0, 0.0], [0.0, 0.0, 0.2]),
+            query: _analysis(100, [0.0, 0.1, 0.0], [0.0, 0.2, 0.0]),
+            right_match: _analysis(200, [0.0, 0.0, 0.0], [0.0, 0.2, 0.0]),
             left_match: _analysis(300, [0.0, 0.1, 0.0], [0.0, 0.0, 0.0]),
         }
     )
 
     scores = alphaphant.match(query, {candidate_key: (right_match, left_match)})
 
-    assert scores[candidate_key] == pytest.approx(2 / (1 + math.exp(-2)))
+    assert scores[candidate_key] == pytest.approx(2 / (1 + math.exp(-1)))
 
 
 def test_alphaphant_compares_only_corresponding_sides() -> None:
@@ -335,18 +339,18 @@ def test_alphaphant_batches_all_candidates_by_side(
         {query: query_analysis, first: first_analysis, second: second_analysis}
     )
     calls: list[tuple[Sequence[np.ndarray], Sequence[Sequence[np.ndarray]]]] = []
-    original = TearMatcher.match_stack_many
+    original = TearMatcher.match_many
 
     def record(
         self: TearMatcher,
         profile: Sequence[np.ndarray],
         candidates: Sequence[Sequence[np.ndarray]],
-    ) -> tuple[TearMatch, ...]:
+    ) -> np.ndarray:
         """Record each bulk call while executing the real matcher."""
         calls.append((profile, candidates))
         return original(self, profile, candidates)
 
-    monkeypatch.setattr(TearMatcher, "match_stack_many", record)
+    monkeypatch.setattr(TearMatcher, "match_many", record)
     first_key, second_key = CandidateKey(_uuid(500)), CandidateKey(_uuid(501))
     scores = alphaphant.match(query, {first_key: (first,), second_key: (second,)})
     assert len(calls) == 6
@@ -359,7 +363,9 @@ def test_alphaphant_batches_all_candidates_by_side(
     )
 
 
-def test_catalog_neighborhood_excludes_held_out_evidence() -> None:
+def test_catalog_neighborhood_excludes_held_out_evidence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Cached similarities cannot leak a removed sighting into a later neighborhood."""
     pairs = tuple(_pair(100 + 10 * i) for i in range(4))
     values = np.asarray(
@@ -371,27 +377,24 @@ def test_catalog_neighborhood_excludes_held_out_evidence() -> None:
         ]
     )
 
-    class ControlledTearMatcher(TearMatcher):
-        """Provide known ear similarities so catalog arithmetic is observable."""
+    def controlled_similarity(
+        self: TearMatcher,
+        query: Sequence[np.ndarray],
+        candidates: Sequence[Sequence[np.ndarray]],
+    ) -> np.ndarray:
+        """Return scripted similarities indexed by neutral synthetic profiles."""
+        return np.asarray(
+            [values[int(query[0][0]), int(stack[0][0])] for stack in candidates]
+        )
 
-        def match_stack_many(
-            self,
-            query: Sequence[np.ndarray],
-            candidates: Sequence[Sequence[np.ndarray]],
-        ) -> tuple[TearMatch, ...]:
-            """Read an identity-neutral synthetic profile index."""
-            return tuple(
-                TearMatch(float(values[int(query[0][0]), int(stack[0][0])]), 1.0, 0)
-                for stack in candidates
-            )
+    monkeypatch.setattr(TearMatcher, "match_many", controlled_similarity)
 
     analyzer = RecordingPreparation(
         {pair: _analysis(500 + i, [i], [i]) for i, pair in enumerate(pairs)}
     )
     matcher = AlphaPhant(
         prepare_ears=analyzer.prepare,
-        profile_extractors=(analyzer,),
-        channel_matchers=(ControlledTearMatcher(),),
+        profile_extractor=analyzer,
     )
     first, second = CandidateKey(_uuid(900)), CandidateKey(_uuid(901))
     full = {first: (pairs[1], pairs[2]), second: (pairs[3],)}
@@ -404,61 +407,50 @@ def test_catalog_neighborhood_excludes_held_out_evidence() -> None:
     assert matcher.match(pairs[0], full) == scores
 
 
-@pytest.mark.parametrize("magnitude", [1e308, 5e-324])
-def test_channel_weight_magnitude_does_not_change_scores(magnitude: float) -> None:
-    """Finite extreme weights preserve relative influence without overflow."""
-    query, evidence = _pair(10), _pair(20)
-    analysis = _analysis(100, [0.0, 0.2, 0.0], [0.0, 0.1, 0.0])
-    analyzer = RecordingPreparation({query: analysis, evidence: analysis})
-    catalog = {CandidateKey(_uuid(100)): (evidence,)}
-    common = {
-        "prepare_ears": analyzer.prepare,
-        "profile_extractors": (analyzer,),
-        "channel_matchers": (TearMatcher(), TearMatcher()),
-    }
-    reference = AlphaPhant(**common, channel_weights=(1.0, 1.0)).match(query, catalog)
-    result = AlphaPhant(**common, channel_weights=(magnitude, magnitude)).match(
-        query, catalog
-    )
-    assert next(iter(reference.values())) > 0.0
-    assert result == pytest.approx(reference, abs=1e-12)
-
-
-def test_profiles_share_preparation_across_scales_and_matching() -> None:
-    """Inspection and repeated matching reuse the same multiscale extraction."""
+def test_one_extraction_call_returns_ordered_multiscale_profiles() -> None:
+    """One prepared ear extraction supplies all scales in stable order."""
     pair = _pair(10)
-    prepared = RecordingPreparation(
-        {pair: _analysis(100, [0.0, 0.2, 0.0], [0.0, 0.1, 0.0])}
-    )
+    analysis = _analysis(100, [0.0, 0.2, 0.0], [0.0, 0.1, 0.0])
+    prepared = RecordingPreparation({pair: analysis})
 
     class RecordingExtractor:
-        """Record per-ear calls for one synthetic extraction scale."""
+        """Record per-ear calls for one synthetic multiscale extraction."""
 
-        producer_slug = "synthetic-scale"
+        producer_slug = "synthetic-multiscale"
 
         def __init__(self) -> None:
             """Start without extracted ears."""
             self.calls: list[PreparedEar] = []
 
-        def extract(self, ear: PreparedEar) -> TearProfile:
-            """Retain the prepared ear and return its synthetic profile."""
+        def extract(self, ear: PreparedEar) -> tuple[TearProfile, ...]:
+            """Retain the prepared ear and return two ordered scales."""
             self.calls.append(ear)
-            return prepared.extract(ear)
+            base = prepared.extract(ear)[0]
+            return (base, TearProfile(base.depths * 0.5))
 
-    fine, coarse = RecordingExtractor(), RecordingExtractor()
+    extractor = RecordingExtractor()
     matcher = AlphaPhant(
         prepare_ears=prepared.prepare,
-        profile_extractors=(fine, coarse),
-        channel_matchers=(TearMatcher(),),
+        profile_extractor=extractor,
     )
     profiles = matcher.profiles(pair)
     assert len(profiles) == 2
     assert matcher.match(pair, {}) == {}
     assert matcher.profiles(pair) is profiles
     assert prepared.calls == [pair]
-    assert len(fine.calls) == len(coarse.calls) == 2
-    assert all(
-        first is second for first, second in zip(fine.calls, coarse.calls, strict=True)
+    assert len(extractor.calls) == 2
+    assert profiles[0].left.tear_profile is not profiles[1].left.tear_profile
+    assert all(item.left.source_photo == analysis.left.source_photo for item in profiles)
+    assert all(item.right.source_photo == analysis.right.source_photo for item in profiles)
+    with pytest.raises(AttributeError):
+        profiles[0].left.side = "right"  # type: ignore[misc]
+    np.testing.assert_array_equal(
+        profiles[0].left.tear_profile.depths,
+        [0.0, 0.2, 0.0],
+    )
+    np.testing.assert_array_equal(
+        profiles[1].left.tear_profile.depths,
+        [0.0, 0.1, 0.0],
     )
 
 
@@ -468,3 +460,14 @@ def test_alphaphant_package_exports_matcher() -> None:
 
     assert public_alphaphant.__all__ == ["AlphaPhant"]
     assert public_alphaphant.AlphaPhant is AlphaPhant
+
+
+def test_catalog_correction_uses_five_other_ears() -> None:
+    """Limit each outgoing background mean to five ears and exclude itself."""
+    internal = np.full((12, 12), 0.1)
+    internal[:, :5] = 0.9
+    np.fill_diagonal(internal, 1.0)
+
+    corrected = _correct_catalog(np.ones(12), internal)
+
+    np.testing.assert_allclose(corrected, [1.26] * 5 + [1.10] * 7)

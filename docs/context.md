@@ -55,7 +55,7 @@ A known elephant for which a catalog matcher returns a candidate score.
 _Avoid_: Identity decision, automatic identification
 
 **Catalog matcher**:
-A complete retrieval algorithm that compares one sighting ear pair with a candidate catalog and returns one comparable similarity score for every matching candidate. AlphaPhant, CurvRank, and MiewID are catalog matchers.
+A complete retrieval algorithm that compares one sighting ear pair with a candidate catalog and returns one comparable similarity score for every matching candidate. AlphaPhant and CurvRank are catalog matchers.
 _Avoid_: Candidate scorer, ranker when referring to the catalog-matching role
 
 **Candidate scores**:
@@ -69,7 +69,11 @@ The processing of a sighting ear pair into left- and right-ear tear profiles for
 _Avoid_: Per-photo identification, SEEK coding
 
 **Ear preparation**:
-The shared processing that retrieves and decodes a photo, segments its ears, detects landmarks, and constructs immutable prepared-ear geometry. `SightingPreparer` prepares both declared sides. AlphaPhant then extracts its own tear profiles, while CurvRank and MiewID derive their own representations. All compared catalog matchers use the same preparation computation.
+The shared processing that retrieves and decodes a photo, segments its ears, detects landmarks, and constructs immutable prepared-ear geometry. `SightingPreparer` prepares both declared sides. AlphaPhant then extracts its own tear profiles, while CurvRank derives its own representation. All compared catalog matchers use the same preparation computation.
+
+**Margin direction**:
+The direction in which an ear’s visible margin extends in the image relative to its anatomical endpoints. Pose can change this direction without changing whether it is the elephant’s left or right ear.
+_Avoid_: Anatomical side, inferred ear side
 
 **Depth change**:
 The difference between neighboring tear-profile depths. Its magnitude describes how abruptly the profile changes.
@@ -81,10 +85,10 @@ Depth change represented by separate nonnegative rising and falling components. 
 One angular shift and stretch applied to every extraction scale within a comparison channel. The depth and depth-change channels can select different alignments.
 
 **Catalog background similarity**:
-The mean of an ear's ten strongest outgoing similarities to other ears of the same side in the current catalog. It measures how broadly that catalog ear matches. The query sighting is absent from this calculation.
+The mean of an ear's strongest outgoing similarities to other ears of the same side in the current catalog. It measures how broadly that catalog ear matches. The query sighting is absent from this calculation.
 
 **Similarity-weighted evidence mean**:
-A mean over one candidate's same-side sighting scores, with greater weight on stronger scores. It combines available evidence while limiting the influence of weak views. Its temperature is the standard deviation of all corrected catalog scores for that side and query.
+A mean over one candidate's same-side sighting scores, with greater weight on stronger scores. It combines available evidence while limiting the influence of weak views.
 
 **Ear localization**:
 The determination of where a left or right ear appears in a photo.
@@ -144,7 +148,7 @@ A retained assessment of a photo's visible ear evidence, with independent grades
 _Avoid_: Retrieval score, identity confidence
 
 **Retrieval benchmark set**:
-The fixed private sample of real sighting ear pairs used to estimate expected retrieval performance beyond the benchmark itself. It contains one pair per sampled sighting and is held under the gitignored research dataset at `dataset/elephants-alive/benchmark/`; shorten to benchmark set in running writing.
+The fixed private sample of real sighting ear pairs used to estimate expected retrieval performance beyond the benchmark itself. It contains one pair per sampled sighting. The current versioned manifest is in `.scratch/alphaphant_research_20260914/`; the historical manifest remains at `dataset/elephants-alive/benchmark/`. Shorten to benchmark set in running writing.
 _Avoid_: Evaluation suite, test set
 
 **Target deployment population**:
@@ -156,11 +160,11 @@ The identity-aware declaration of the benchmark set, with one row per selected s
 _Avoid_: Picker manifest, benchmark folders
 
 **Parameter-tuning set**:
-The set of sighting ear pairs used to compare AlphaPhant mechanisms and choose matching parameters. Its elephants are disjoint from both AI-model data and the retrieval benchmark set.
+The set of sighting ear pairs used to compare AlphaPhant mechanisms and choose matching parameters. Its elephants are disjoint from the retrieval benchmark set. Disjointness from AI-model training identities is a separate requirement that the current model records cannot verify.
 _Avoid_: Validation set, training set, dev set
 
 **Tuning catalog A / tuning catalog B**:
-Two catalogs formed from different elephants in the parameter-tuning set. Each has 89 elephants and the benchmark's sightings-per-elephant histogram. They are not subdivisions of the human-curated benchmark. A proposed enhancement must help in both before selection.
+The two historical development catalogs. Each contains 89 elephants and follows the historical benchmark's sightings-per-elephant histogram. The current study uses one identity-disjoint tuning set with 100 elephants and exactly three sighting ear pairs per elephant.
 _Avoid_: Half A / Half B without explaining what was split
 
 **AI-model datasets**:

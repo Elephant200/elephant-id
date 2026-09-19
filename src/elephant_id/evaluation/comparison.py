@@ -16,14 +16,6 @@ def top_hits(scores: _Scores, cutoff: int = 1) -> NDArray[np.float64]:
     return (EvaluationResult(scores).ranks <= cutoff).astype(np.float64)
 
 
-def _query_elephants(scores: _Scores) -> NDArray[np.int64]:
-    """Return the elephant index of every query, in `top_hits` order."""
-    return np.asarray(
-        [index for index, queries in enumerate(scores.values()) for _ in queries],
-        dtype=np.int64,
-    )
-
-
 def paired_delta(
     scores: _Scores,
     reference: _Scores,
@@ -59,12 +51,19 @@ def paired_delta(
                 raise ValueError("Paired queries must contain identical candidates")
             aligned[name][sighting_id] = other
     difference = top_hits(scores, cutoff) - top_hits(aligned, cutoff)
-    elephants = _query_elephants(scores)
-    groups = [np.flatnonzero(elephants == value) for value in np.unique(elephants)]
+    sums = []
+    counts = []
+    offset = 0
+    for queries in scores.values():
+        count = len(queries)
+        if count:
+            sums.append(difference[offset : offset + count].sum())
+            counts.append(count)
+        offset += count
+    sums = np.asarray(sums)
+    counts = np.asarray(counts)
     generator = np.random.default_rng(seed)
-    draws = generator.integers(0, len(groups), size=(resamples, len(groups)))
-    sums = np.asarray([difference[group].sum() for group in groups])
-    counts = np.asarray([len(group) for group in groups])
+    draws = generator.integers(0, len(sums), size=(resamples, len(sums)))
     samples = sums[draws].sum(axis=1) / counts[draws].sum(axis=1)
     return float(difference.mean()), (
         float(np.percentile(samples, 2.5)),

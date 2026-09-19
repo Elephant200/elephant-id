@@ -8,18 +8,19 @@ import shapely
 from scipy.ndimage import gaussian_filter1d
 from scipy.spatial import Delaunay
 
+from elephant_id.image.geometry import resample_polyline
 from elephant_id.matching.alphaphant.profile import TearProfile
 from elephant_id.preparation.ear import EarSide, PreparedEar
 
 
 @dataclass(frozen=True, slots=True)
 class AlphaTearConfig:
-    """Intentional research parameters controlling AlphaTear extraction."""
+    """Numerical settings for one complete AlphaTear representation."""
 
     contour_points: int = 1024
     profile_bins: int = 720
     trim_degrees: float = 5.0
-    alpha_fraction: float = 0.35
+    alpha_fractions: tuple[float, ...] = (0.11, 0.22, 0.50, 1.10, 2.50, 5.00, 12.00)
     opening_fraction: float = 0.020
     smoothing_sigma: float = 2.0
 
@@ -29,49 +30,12 @@ class AlphaTearConfig:
             raise ValueError("AlphaTear sampling counts must be greater than one")
         if not 0 <= self.trim_degrees < 90:
             raise ValueError("trim_degrees must be in [0, 90)")
-        if self.alpha_fraction <= 0:
-            raise ValueError("alpha_fraction must be positive")
+        if not self.alpha_fractions or any(
+            alpha <= 0 for alpha in self.alpha_fractions
+        ):
+            raise ValueError("alpha_fractions must contain positive scales")
         if self.opening_fraction < 0 or self.smoothing_sigma < 0:
             raise ValueError("AlphaTear smoothing parameters must be non-negative")
-
-
-@dataclass(frozen=True, slots=True)
-class AlphaTearVersion:
-    """One settled AlphaTear configuration and its stable producer slug."""
-
-    slug: str
-    config: AlphaTearConfig
-
-
-DEFAULT_VERSION = AlphaTearVersion(
-    slug="alpha-tear-v3",
-    config=AlphaTearConfig(),
-)
-
-MULTISCALE_VERSIONS = tuple(
-    AlphaTearVersion(
-        slug=f"alpha-tear-v3-a{round(alpha * 100):03d}",
-        config=AlphaTearConfig(alpha_fraction=alpha),
-    )
-    for alpha in (0.11, 0.22, 0.50, 1.10, 2.50, 5.00, 12.00)
-)
-"""Octave-spaced alpha-shape scales of the tuned representation.
-
-A small `alpha_fraction` rolls a tight disk that follows single tears; a
-large one approaches the convex envelope and shows overall margin shape.
-"""
-
-
-def _resample(points: np.ndarray, count: int) -> np.ndarray:
-    """Resample a two-dimensional polyline uniformly by arc length."""
-    distances = np.sqrt(np.sum(np.diff(points, axis=0) ** 2, axis=1))
-    arc_lengths = np.concatenate([[0], np.cumsum(distances)])
-    if arc_lengths[-1] == 0:
-        raise ValueError("Cannot resample a zero-length contour")
-    sample_lengths = np.linspace(0, arc_lengths[-1], count)
-    x = np.interp(sample_lengths, arc_lengths, points[:, 0])
-    y = np.interp(sample_lengths, arc_lengths, points[:, 1])
-    return np.column_stack([x, y])
 
 
 def _densify(path: np.ndarray, max_spacing: float = 2.0) -> np.ndarray:
@@ -284,15 +248,11 @@ def _polar_directions(
     return midpoint, directions
 
 
-def _depths(ear: PreparedEar, config: AlphaTearConfig) -> np.ndarray:
-    """Compute normalized AlphaTear depths from one prepared ear."""
-    contour = _resample(ear.contour, config.contour_points)
+def _profiles(ear: PreparedEar, config: AlphaTearConfig) -> tuple[TearProfile, ...]:
+    """Share contour preparation and polar rays across the extraction scales."""
+    contour = resample_polyline(ear.contour, config.contour_points)
     radius = float(np.sqrt(2.0 * ear.cleaned_area / np.pi))
     opened = _opened_contour(contour, config.opening_fraction * radius)
-    reference_hull = _alpha_shape(opened, config.alpha_fraction * radius)
-    reference_boundary = np.asarray(reference_hull.exterior.coords)[:-1]
-    reference_path = _densify(_ear_side_path(reference_boundary, opened[0], opened[-1]))
-
     angles = np.linspace(0.0, 180.0, config.profile_bins)
     coded = (angles > config.trim_degrees) & (angles < 180.0 - config.trim_degrees)
     upper = np.asarray(ear.original_landmarks[0], dtype=float)
@@ -300,43 +260,49 @@ def _depths(ear: PreparedEar, config: AlphaTearConfig) -> np.ndarray:
     midpoint, directions = _polar_directions(
         upper, lower, ear.inferred_side, angles[coded]
     )
-    origins = _furthest_ray_crossings(midpoint, directions, reference_boundary)
-    valid_origins = np.isfinite(origins).all(axis=1)
-    coded_depths = np.zeros(len(origins))
-    if valid_origins.any():
-        valid = origins[valid_origins]
-        normals = _inward_normals(reference_path, reference_hull, valid)
-        coded_depths[valid_origins] = (
-            _nearest_crossing(valid, normals, contour) / radius
+    profiles = []
+    for alpha in config.alpha_fractions:
+        reference_hull = _alpha_shape(opened, alpha * radius)
+        reference_boundary = np.asarray(reference_hull.exterior.coords)[:-1]
+        reference_path = _densify(
+            _ear_side_path(reference_boundary, opened[0], opened[-1])
         )
+        origins = _furthest_ray_crossings(midpoint, directions, reference_boundary)
+        valid_origins = np.isfinite(origins).all(axis=1)
+        coded_depths = np.zeros(len(origins))
+        if valid_origins.any():
+            valid = origins[valid_origins]
+            normals = _inward_normals(reference_path, reference_hull, valid)
+            coded_depths[valid_origins] = (
+                _nearest_crossing(valid, normals, contour) / radius
+            )
 
-    depths = np.zeros(config.profile_bins)
-    smoothed = gaussian_filter1d(coded_depths, sigma=config.smoothing_sigma)
-    smoothed[~valid_origins] = 0.0
-    depths[coded] = smoothed
-    return depths
+        depths = np.zeros(config.profile_bins)
+        smoothed = gaussian_filter1d(coded_depths, sigma=config.smoothing_sigma)
+        smoothed[~valid_origins] = 0.0
+        depths[coded] = smoothed
+        profiles.append(TearProfile(depths))
+    return tuple(profiles)
 
 
 class AlphaTearExtractor:
-    """Extract normalized tear profiles with AlphaTear."""
+    """Extract the complete multiscale representation from one prepared ear."""
 
     def __init__(
         self,
-        configuration: AlphaTearConfig | AlphaTearVersion,
+        configuration: AlphaTearConfig | None = None,
     ) -> None:
-        """Configure settled or experimental extraction."""
-        if isinstance(configuration, AlphaTearVersion):
-            self.config = configuration.config
-            self._producer_slug: str | None = configuration.slug
-        else:
-            self.config = configuration
-            self._producer_slug = None
+        """Use the fixed standard representation or an uncached research configuration."""
+        self.config = configuration or AlphaTearConfig()
+        self._producer_slug = (
+            "alpha-tear-v3-multiscale" if configuration is None else None
+        )
 
     @property
     def producer_slug(self) -> str | None:
         """Return the settled slug, or none for an experimental configuration."""
         return self._producer_slug
 
-    def extract(self, ear: PreparedEar) -> TearProfile:
-        """Extract one reusable tear profile from prepared ear geometry."""
-        return TearProfile(_depths(ear, self.config))
+    def extract(self, ear: PreparedEar) -> tuple[TearProfile, ...]:
+        """Return normalized profiles in the representation's fixed scale order."""
+        return _profiles(ear, self.config)

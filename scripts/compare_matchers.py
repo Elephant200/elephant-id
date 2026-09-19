@@ -1,4 +1,4 @@
-"""Compare AlphaPhant, CurvRank, and zero-shot MiewID on identical sighting folds."""
+"""Compare AlphaPhant and CurvRank on identical sighting folds."""
 
 import argparse
 import itertools
@@ -10,36 +10,28 @@ from pathlib import Path
 from elephant_id.cache import CacheManager
 from elephant_id.composition import (
     build_preparer,
-    build_profile_extractors,
-    compose_alphaphant,
+    build_profile_extractor,
 )
 from elephant_id.dataset import Dataset, PhotoStore
 from elephant_id.evaluation import evaluate, load_benchmark
 from elephant_id.evaluation.comparison import paired_delta
 from elephant_id.log import configure_logging
 from elephant_id.matching import CatalogMatcher
+from elephant_id.matching.alphaphant import AlphaPhant
 from elephant_id.matching.curvrank import CurvRankMatcher
-from elephant_id.matching.miewid import MiewIdEmbedder, MiewIdMatcher
-
-MIEWID_MODEL = "conservationxlabs/miewid-msv3"
-MIEWID_REVISION = "4f1d7f2b521149e5fe34bb85f377248ce9971a7d"
 
 
 def build_matchers(photo_store: PhotoStore) -> dict[str, CatalogMatcher]:
-    """Share one preparation computation across all three catalog matchers."""
+    """Share one preparation computation across both catalog matchers."""
     cache_store = CacheManager()
     preparer = build_preparer(photo_store, cache_store)
     prepare = cache(preparer.prepare)
     return {
-        "alphaphant": compose_alphaphant(
-            prepare, build_profile_extractors(preparer, cache_store)
+        "alphaphant": AlphaPhant(
+            prepare_ears=prepare,
+            profile_extractor=build_profile_extractor(preparer, cache_store),
         ),
         "curvrank": CurvRankMatcher(prepare_ears=prepare),
-        "miewid": MiewIdMatcher(
-            prepare_ears=prepare,
-            photo_store=photo_store,
-            embedder=MiewIdEmbedder(model_id=MIEWID_MODEL, revision=MIEWID_REVISION),
-        ),
     }
 
 
@@ -48,6 +40,12 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("manifest", type=Path)
     parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument(
+        "--methods",
+        nargs="+",
+        choices=("alphaphant", "curvrank"),
+        default=("alphaphant", "curvrank"),
+    )
     args = parser.parse_args()
     if args.output.exists():
         raise FileExistsError(f"Comparison output already exists: {args.output}")
@@ -60,10 +58,11 @@ def main() -> None:
     report: dict = {
         "manifest": str(args.manifest),
         "complete": False,
-        "miewid_revision": MIEWID_REVISION,
     }
     scored = {}
-    for name, matcher in build_matchers(dataset.photo_store).items():
+    matchers = build_matchers(dataset.photo_store)
+    for name in dict.fromkeys(args.methods):
+        matcher = matchers[name]
         started = time.perf_counter()
         result = evaluate(benchmark, dataset, matcher)
         scores = {

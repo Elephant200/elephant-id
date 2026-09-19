@@ -1,4 +1,4 @@
-"""Prepare segmented ears for AlphaTear extraction."""
+"""Prepare segmented ears as shared contour geometry."""
 
 from dataclasses import dataclass
 from typing import Literal
@@ -63,7 +63,7 @@ def _cut_contour(
 
 @dataclass(frozen=True, slots=True, eq=False)
 class PreparedEar:
-    """Immutable full-image ear geometry ready for profile extraction."""
+    """Immutable full-image ear geometry shared by catalog matchers."""
 
     source_photo: Photo
     source_box: BoundingBox
@@ -97,7 +97,7 @@ def prepare_ear(
     source_photo: Photo,
     source_box: BoundingBox,
 ) -> PreparedEar:
-    """Prepare one segmented ear and its detected landmarks for AlphaTear."""
+    """Resolve one segmented ear and its landmarks into shared geometry."""
     if ear_detection.rle_mask is None:
         raise ValueError("Ear preparation requires a segmentation mask")
     if landmark_detection.keypoints is None or len(landmark_detection.keypoints) != 2:

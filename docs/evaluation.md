@@ -1,72 +1,118 @@
 # Identity-retrieval evaluation
 
-Evaluation compares complete catalog matchers. It owns known-elephant identity, manifest validation, query/catalog splits, candidate keys, and metric calculation. Matchers receive neutral sighting ear pairs and an image-only PhotoStore, never Dataset. All returned candidate scores must be finite and cover exactly the supplied candidate keys. Ranking is derived from these scores.
+Evaluation compares complete catalog matchers on the same queries and candidate evidence.
+It owns known-elephant labels, manifest validation, query folds, scores, and metrics.
+Matchers receive neutral sighting ear pairs and opaque candidate keys.
 
-## Inputs and folds
+## Inputs and query folds
 
-`load_benchmark(path)` reads a manifest with columns `known_elephant_name,sighting_id,left_photo_id,right_photo_id`. IDs are permanent UUIDv4 values. Dataset validates identity assignments and photo membership before matching. Names, grouping, and ear side are never inferred from filenames.
+A manifest has these columns:
 
-`evaluate(benchmark, dataset, matcher)` holds each eligible sighting out once. That sighting and its photos are absent from the catalog. All other sightings remain, grouped under opaque candidate keys. A sighting is eligible only if its elephant retains catalog evidence. Single-sighting elephants remain distractors but do not supply queries. The correct elephant is always among the candidates.
+```text
+known_elephant_name,sighting_id,left_photo_id,right_photo_id
+```
 
-A malformed manifest raises `BenchmarkValidationError`. Missing bytes, model or preparation failures, and incomplete or nonfinite scores raise `EvaluationError`. The curated benchmark requires complete analysis, so errors abort evaluation; failed cases are not silently omitted. This protocol therefore does not estimate field preparation coverage. A field study must report that outcome separately.
+All IDs are permanent UUIDs. Dataset verifies identity assignments and photo membership.
+Both selected Photos must belong to the stated sighting.
+Names, grouping, and ear side do not come from filenames.
 
-## Metrics and uncertainty
+`evaluate` uses each eligible sighting as a query once.
+That sighting and its photos are absent from the candidate catalog for its query.
+Other sightings remain under their opaque candidate keys.
+The correct elephant always remains a candidate.
+An elephant with one sighting supplies distractor evidence but no eligible query.
 
-Target rank is one plus the number of strictly higher candidate scores. Ties share a competition rank. The result retains every candidate score per query; top-k rates, reciprocal rank, median rank, and eligibility counts are derived views. Point estimates weight eligible queries equally.
+The original tuning and benchmark manifests each contain 100 elephants and 300 pairs, with three sightings per elephant.
+The sets have no shared elephant, sighting, or photo.
+The requested expansion preserves these manifests and adds separate versions with three to five sightings per elephant.
+[Research](research.md) records final counts, manifest locations, and results for each version.
+A new result must name its manifest. It must not reuse an older set's denominator or catalog size.
 
-Primary comparisons are top-1 and top-5. Paired percentile intervals resample queried elephants with replacement, retain all their queries, and recompute the same query-weighted difference. Use 100,000 resamples and seed 42. Pair queries and candidates by explicit keys rather than iteration order.
+## Image selection and expansion
 
-The bootstrap holds recorded catalog scores fixed. It accounts for repeated queries within an elephant, but does not rebuild catalogs, repeat selection, or measure curation uncertainty. Shared reference evidence can induce additional dependence. Do not describe these intervals as covering all population uncertainty.
+Image quality determines selection. Retrieval scores must not determine which images enter a set.
+Existing model grades determine inspection order, not automatic acceptance or rejection.
+A usable pair needs readable ear-shape evidence in both selected images from the same sighting.
+A reviewer can accept harmless interior occlusion, mild pose differences, or an incorrect model field.
+A hidden outer margin, unreliable endpoints, or insufficient edge detail can make an image unusable.
+Review records must identify the visible reason for each decision.
 
-Report metrics on the actual candidate catalog, including its size and target ties. Dataset growth changes the retrieval task; do not normalize results to a hypothetical fixed pool. Compare matchers on identical query and candidate sets using `evaluation.comparison.paired_delta`. `EvaluationResult.ranks` and `.metrics` also support saved-score inspection without constructing a matcher.
+Sol directs Luna visual reviewers for the current expansion.
+The records must distinguish agent image review from human review.
+New identities must not belong to the other set or a documented model-training group.
+Annotation-file overlap alone does not prove training on the current model weights.
+Unknown exposure must remain explicit.
 
-## Development and confirmation
+Preserve old manifest rows. Select at most five sightings per elephant.
+A new elephant needs at least three accepted pairs.
+Prefer different dates and screen obvious duplicates.
+Freeze both expanded manifests before comparison scores are available.
+Report preparation or matching failures before changing a frozen manifest.
+Record user-requested exclusions in a new manifest and preserve the previous version.
+The current benchmark revision excludes two added pairs at the user's request, before retrieval scores were available.
 
-Develop on identity-disjoint tuning catalogs A and B, each with 89 elephants and histogram `{1:36, 2:25, 3:20, 4:7, 5:1}`. Fixed image-quality gates and machine visual review precede matching. Analyzability alone is not image quality. Both catalogs guide selection and are development data, not independent final tests.
+## Metrics and paired comparisons
 
-A new mechanism must avoid losses at both primary endpoints in both catalogs and improve at least one endpoint in each. Choose shared plateaus, not sweep maxima. Exact Shapley covers at most eight binary decisions. Retain positive contributions in each catalog whose mean across catalogs is at least 0.5 points at both primary endpoints. Document bundled and dependent decisions explicitly.
+Target rank is one plus the number of strictly higher scores.
+Equal scores share a competition rank. Report target ties because this rule can affect top-k accuracy.
+Store every candidate score for every query.
+`EvaluationResult.ranks` and `.metrics` derive ranks and metrics from those scores.
 
-Prefer fewer decisions when observed loss is within one query per catalog and paired intervals do not establish a loss. This is a practical parsimony rule, not a formal noninferiority test. Benchmark attributions cannot guide pruning.
+Top-1 and top-5 are the primary measures.
+Point estimates weight queries equally. More sightings give an elephant more weight in this average.
+For unequal sighting counts, also report the mean of the per-elephant accuracies.
+Report the number of elephants, queries, and candidate sightings.
 
-Confirmation requires fixed source, extraction producers, model identities, manifest hashes, comparator settings, and endpoints. Use the same preparation and folds for all matchers. The benchmark is not a historically untouched set; stronger generalization claims require a genuinely independent cohort.
+Use paired comparisons on the same queries and candidate catalog.
+Report gains, losses, net changes, and the number of affected elephants.
+A two-percentage-point change on 300 queries equals six net outcomes; it need not mean only six queries changed.
 
-## Reproduction
+`paired_delta` uses 100,000 elephant resamples with seed 42.
+It retains all queries from each sampled elephant and recomputes the query-weighted difference.
+The method holds catalog scores fixed. It does not rebuild catalogs or repeat selection.
+Intervals omit selection, image-curation, and new-catalog uncertainty.
+An interval that includes zero proves neither equivalence nor a meaningful difference.
 
-Run Python from the repository root with `uv`. Install local inference and development dependencies with `uv sync --all-groups`. Private photos and model access are required for end-to-end evaluation.
+Expanded sets change both query evidence and reference evidence.
+Compare methods on identical expanded catalogs; do not attribute all changes from an old result to a larger sample.
+Report original-member and added-sighting results separately when useful.
+Those subgroup results still use the expanded catalog and are not direct repetitions of the old task.
+
+## Method selection
+
+The current seven-scale method remains unchanged during the expansion comparison.
+The requested alternatives are alpha scales `1.10/12.00` and alpha `1.10` plus a convex reference.
+Fix these methods before expanded-set results are available.
+Use the same preparation and evaluation procedure for all three.
+
+Earlier studies used strict two-point-gain and no-loss rules.
+Those rules explain historical decisions in the research record; they are not universal practical thresholds.
+The new report must show accuracy, uncertainty, execution cost, and representation size together.
+No automatic promotion rule is assumed from a small observed difference.
+The user will review the trade-off before the active method changes.
+
+The historical benchmark has prior development exposure.
+Additional sightings of its elephants do not create a wholly independent identity test.
+The report must separate new elephants from new sightings of existing elephants.
+
+## Failures and reproduction
+
+A malformed manifest raises `BenchmarkValidationError`.
+Missing bytes, inference failures, preparation failures, and invalid matcher results raise `EvaluationError`.
+Errors stop evaluation. They do not silently reduce the denominator.
+A failed complete run is not an accuracy result for the full set.
+Curated-set success does not estimate field preparation coverage.
+
+Run Python from the repository root with `uv`.
+Private photos and model access are required for complete evaluation.
 
 ```bash
+uv sync --all-groups
 uv run eval
-uv run python scripts/compare_matchers.py MANIFEST --output comparison.json
-uv run python scripts/ablation.py MANIFEST --reference comparison.json --output ablation.json
+uv run python scripts/compare_matchers.py MANIFEST --methods alphaphant curvrank --output comparison.json
 ```
 
-Comparison and ablation commands require explicit paths and refuse to overwrite existing result reports. Matrix reuse checks the script, active source, numerical runtime, settings, producers, and manifest. MiewID uses `conservationxlabs/miewid-msv3` revision `4f1d7f2b521149e5fe34bb85f377248ce9971a7d`. It is a separate zero-shot comparator.
-
-The completed study's private evidence is in `.scratch/alphaphant_optimization/evidence.tar.gz`. Its index describes source snapshots, immutable score tables, tuning manifests, quality records, and hashes. The archive includes the numerical source used for the published confirmation; current score-preserving engineering changes are identified separately.
-
-After extracting the evidence and the locked source into separate directories, verify existing results without model inference or photo access:
-
-```bash
-uv run python scripts/audit_publication.py EVIDENCE --source LOCKED_SOURCE --output audit.json
-```
-
-The audit checks source hashes, score coverage, finite values, target ties, metrics, paired intervals, and all 128 exact ablation subsets. Saved-score verification is distinct from a clean-environment end-to-end reproduction. Never commit private photos, manifests, canonical identity-bearing scores, or model secrets. Controlled data access is needed for independent reproduction.
-
-## Excluded mechanisms
-
-These mechanisms do not belong in the production configuration. Retest one only with a new mechanism not covered by its existing evidence.
-
-| Family | Excluded alternatives |
-|---|---|
-| Geometry and representation | Radial depth, negative depth, free per-bin weights, depth deadbanding, whole-profile cosine substitution |
-| Alignment | DTW/per-segment elasticity, independent scale alignment, shared depth/change-channel alignment, symmetric comparison in the selected composition |
-| Local matching | Window LNBNN and local winning intervals |
-| Scale or channel combination | Rank fusion, scale-subset winners, per-scale CSLS, scale/channel z-normalization |
-| Catalog correction | Query-side CSLS constant, own-candidate exclusion, incoming background similarity, candidate-balanced neighbors |
-| Evidence combination | Ear-decisiveness weighting, paired-sighting evidence, neighbor diffusion across queries |
-
-The candidate-balanced and paired-sighting alternatives have mixed-sign exact Shapley contributions across tuning catalogs. The query-side CSLS term is a candidate-independent constant and adds no ranking information. MiewID fusion is outside the AlphaPhant-alone result and adds no component to this implementation.
-
-## Scientific claim boundaries
-
-Selection on finite data can overfit even without fitting a neural network; see [Cawley and Talbot](https://www.jmlr.org/papers/v11/cawley10a.html). Exact subset attribution does not remove sampling or selection uncertainty. A prospective replication should fix eligibility, quality criteria, model versions, endpoints, an elephant-level sample-size rationale, and a stopping rule before outcomes are seen. Include independent quality review, near-duplicate screening, inference-training overlap checks where records permit them, temporal splits when relevant, and explicit preparation-failure coverage.
+The comparison command requires explicit manifest and output paths and refuses an existing report.
+Historical experimental commands need their saved source versions.
+The active comparison command does not expose rejected research options or MiewID.
+[Research](research.md#reproduction-and-preserved-evidence) lists preserved source, scores, reviews, and manifests.

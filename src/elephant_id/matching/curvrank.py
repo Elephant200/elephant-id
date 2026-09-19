@@ -7,7 +7,7 @@ the shared ear-preparation callable, descriptors are matched per ear side, and
 exact nearest-neighbor search replaces the reference Annoy index.
 """
 
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from functools import cache, partial
 from itertools import combinations
@@ -20,6 +20,7 @@ from scipy.signal import argrelextrema
 from sklearn.neighbors import NearestNeighbors
 
 from elephant_id.domain import SightingEarPair
+from elephant_id.image.geometry import resample_polyline
 from elephant_id.matching.protocol import CandidateKey, CandidateScores
 from elephant_id.preparation import EarSide, PreparedEar
 
@@ -57,26 +58,9 @@ class CurvRankConfig:
             raise ValueError("scales must be a non-empty tuple of positive fractions")
 
 
-def _resample_polyline(
-    points: NDArray[np.float64],
-    num_points: int,
+def _resample_signal(
+    values: NDArray[np.float64], num_samples: int
 ) -> NDArray[np.float64]:
-    """Resample an ordered polyline to evenly spaced points by arc length.
-
-    Raises:
-        ValueError: If the polyline has zero total length.
-    """
-    distances = np.sqrt(np.sum(np.diff(points, axis=0) ** 2, axis=1))
-    arc_lengths = np.concatenate([[0.0], np.cumsum(distances)])
-    if arc_lengths[-1] == 0:
-        raise ValueError("Cannot resample a zero-length contour")
-    sample_lengths = np.linspace(0.0, arc_lengths[-1], num_points)
-    x = np.interp(sample_lengths, arc_lengths, points[:, 0])
-    y = np.interp(sample_lengths, arc_lengths, points[:, 1])
-    return np.column_stack([x, y])
-
-
-def _resample_signal(values: NDArray[np.float64], num_samples: int) -> NDArray[np.float64]:
     """Resample a one-dimensional signal to `num_samples` values."""
     positions = np.linspace(0.0, 1.0, num_samples)
     support = np.linspace(0.0, 1.0, len(values))
@@ -124,9 +108,8 @@ def _oriented_curvature(
             chord = curve[-1] - curve[0]
             theta = float(np.arctan2(chord[1], chord[0]))
             curve_p = _reorient(curve, theta, center)
-            center_p = _reorient(center[np.newaxis], theta, center)[0]
-            lower = center_p - radius
-            upper = center_p + radius
+            lower = center - radius
+            upper = center + radius
             lower[0] = max(float(curve_p[:, 0].min()), lower[0])
             upper[0] = min(float(curve_p[:, 0].max()), upper[0])
             region_area = float(np.prod(upper - lower))
@@ -146,8 +129,7 @@ def _ear_curvature(
 
     Right-ear contours are mirrored relative to left ears, so their
     curvature is computed on the reversed traversal and re-reversed to
-    keep the upper-to-lower point order, mirroring the reference
-    left-view flip.
+    keep the upper-to-lower sample order.
     """
     if side == "right":
         return _oriented_curvature(contour[::-1], radii)[::-1]
@@ -161,8 +143,9 @@ def _keypoint_indices(
     """Select keypoint indices from one smoothed curvature scale.
 
     Local extrema are ranked by their magnitude around the straight-line
-    value `0.5`; both endpoints are always included and the strongest
-    `num_keypoints` are returned sorted by contour index. An empty array
+    value `0.5`. Endpoints are added when no extremum is within one sample;
+    the first and last choices are prioritized. The strongest `num_keypoints`
+    are returned sorted by contour index. An empty array
     is returned when the scale has no local extrema, matching the
     reference behavior.
     """
@@ -208,7 +191,7 @@ def extract_descriptors(
     `(n_descriptors, config.feat_dim)` float32 array of L2-normalized
     curvature sections between keypoint pairs.
     """
-    contour = _resample_polyline(
+    contour = resample_polyline(
         np.asarray(ear.contour, dtype=np.float64),
         config.curv_length,
     )
@@ -284,24 +267,11 @@ class CurvRankMatcher:
             for candidate_key in catalog
         }
         logger.debug(
-            "CurvRank matched sighting {} against {} candidates "
-            "({} query descriptors, {} catalog descriptors)",
+            "CurvRank matched sighting {} against {} candidates",
             query.sighting_id,
             len(catalog),
-            self._descriptor_count((query_left, query_right)),
-            self._descriptor_count(
-                ear
-                for ears in (*left_evidence.values(), *right_evidence.values())
-                for ear in ears
-            ),
         )
         return scores
-
-    def _descriptor_count(self, ears: Iterable[PreparedEar]) -> int:
-        """Count cached descriptors across all scales of the given ears."""
-        return sum(
-            len(descriptors) for ear in ears for descriptors in self._describe(ear)
-        )
 
     def _score_side(
         self,
@@ -344,6 +314,4 @@ class CurvRankMatcher:
                         continue
                     scored.add(candidate_key)
                     accumulated[candidate_key] += float(distance) - normalizer
-        return {
-            candidate_key: -value for candidate_key, value in accumulated.items()
-        }
+        return {candidate_key: -value for candidate_key, value in accumulated.items()}

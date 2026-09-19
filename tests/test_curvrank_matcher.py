@@ -13,6 +13,7 @@ from elephant_id.image.boxes import BoundingBox
 from elephant_id.matching.curvrank import (
     CurvRankConfig,
     CurvRankMatcher,
+    _ear_curvature,
     extract_descriptors,
 )
 from elephant_id.matching.protocol import CandidateKey
@@ -221,6 +222,19 @@ def test_descriptor_extraction_yields_normalized_finite_descriptors() -> None:
         if len(descriptors):
             norms = np.linalg.norm(descriptors, axis=1)
             assert norms == pytest.approx(np.ones(len(descriptors)), abs=1e-5)
+
+
+def test_curvature_handedness_follows_geometric_margin_direction() -> None:
+    """Reflecting a contour preserves curvature when its margin direction flips."""
+    contour = _jagged_contour(11, amplitude=14.0)
+    radii = np.asarray([4.0, 9.0])
+    reflected = contour * np.asarray([-1.0, 1.0])
+
+    margin_left = _ear_curvature(contour, radii, "left")
+    margin_right = _ear_curvature(reflected, radii, "right")
+
+    np.testing.assert_allclose(margin_right, margin_left, atol=1e-12)
+    assert not np.allclose(margin_right, _ear_curvature(reflected, radii, "left"))
 
 
 @pytest.mark.parametrize(

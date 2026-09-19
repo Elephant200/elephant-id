@@ -1,231 +1,173 @@
-"""Tests for tear-profile matching."""
+"""Numerical characterization of fixed AlphaTear stack similarity."""
 
 import numpy as np
 import pytest
 
-from elephant_id.matching.alphaphant.similarity import TearMatcher, TearMatcherConfig
+from elephant_id.matching.alphaphant.similarity import TearMatcher
 
 
-def make_profile(peaks: list[tuple[int, float]], bins: int = 720) -> np.ndarray:
-    """Return a profile with triangular peaks at (bin, depth) positions."""
+def make_profile(peaks: list[tuple[int, float]], bins: int = 240) -> np.ndarray:
+    """Return a profile with triangular peaks at `(bin, depth)` positions."""
     profile = np.zeros(bins)
-    half_width = 10
+    half_width = 8
     for center, depth in peaks:
         for offset in range(-half_width, half_width + 1):
             index = center + offset
             if 0 <= index < bins:
-                weight = 1.0 - abs(offset) / half_width
-                profile[index] = max(profile[index], depth * weight)
+                profile[index] = max(
+                    profile[index], depth * (1 - abs(offset) / half_width)
+                )
     return profile
 
 
-class TestTearMatcher:
-    def test_identical_profiles_score_one(self) -> None:
-        profile = make_profile([(300, 0.05)])
-        match = TearMatcher().match(profile, profile)
-        assert match.score == pytest.approx(1.0)
-        assert match.shift_bins == 0
+def test_identical_stack_has_expected_two_channel_score() -> None:
+    """An ordinary profile matches itself perfectly in both channels."""
+    profile = make_profile([(120, 0.05)])
 
-    def test_disjoint_profiles_score_zero(self) -> None:
-        query = make_profile([(120, 0.05)])
-        candidate = make_profile([(600, 0.05)])
-        assert TearMatcher().match(query, candidate).score == pytest.approx(0.0)
+    scores = TearMatcher().match_many((profile,), ((profile,),))
 
-    def test_depth_compression_tolerates_depth_mismatch(self) -> None:
-        query = make_profile([(300, 0.02)])
-        candidate = make_profile([(300, 0.08)])
-        plain = (
-            TearMatcher(TearMatcherConfig(depth_exponent=1.0))
-            .match(query, candidate)
-            .score
-        )
-        compressed = (
-            TearMatcher(TearMatcherConfig(depth_exponent=0.5))
-            .match(query, candidate)
-            .score
-        )
-        assert compressed > plain
-
-    def test_depth_compression_keeps_identical_profiles_at_one(self) -> None:
-        profile = make_profile([(300, 0.05), (500, 0.02)])
-        matcher = TearMatcher(TearMatcherConfig(depth_exponent=0.5))
-        assert matcher.match(profile, profile).score == pytest.approx(1.0)
-
-    def test_default_config_is_validated_configuration(self) -> None:
-        config = TearMatcherConfig()
-        assert config.resampled_bins == 240
-        assert config.depth_exponent == 0.5
-        assert len(config.stretches) == 17
-        assert config.stretches[0] == 0.8
-        assert config.stretches[-1] == 1.2
-
-    def test_uses_only_query_to_catalog_score_and_alignment(
-        self,
-    ) -> None:
-        """The forward score replaces the previously averaged directional scores."""
-        broad = np.zeros(720)
-        broad[280:321] = np.linspace(0.0, 0.12, 41)
-        broad[321:361] = np.linspace(0.12, 0.0, 40)
-        narrow = np.zeros(720)
-        narrow[310:331] = np.linspace(0.0, 0.08, 21)
-        narrow[331:351] = np.linspace(0.08, 0.0, 20)
-
-        result = TearMatcher().match(broad, narrow)
-
-        assert result.score == pytest.approx(0.5130298508958523)
-        assert result.stretch == pytest.approx(0.8)
-        assert result.shift_bins == 0
-        assert not hasattr(result, "catalog_to_query")
+    np.testing.assert_allclose(scores, [1.0], rtol=0, atol=1e-12)
 
 
-def _forward_reference(
-    query: np.ndarray, candidate: np.ndarray, config: TearMatcherConfig
-) -> tuple[float, float, int]:
-    """Characterize the original forward search with explicit shift padding."""
-
-    def prepare(profile: np.ndarray) -> np.ndarray:
-        """Compress and interpolate an input on the configured grid."""
-        depths = (
-            np.maximum(np.asarray(profile, dtype=np.float64), 0.0)
-            ** config.depth_exponent
-        )
-        return np.interp(
-            np.linspace(0, len(depths) - 1, config.resampled_bins),
-            np.arange(len(depths)),
-            depths,
-        )
-
-    query, candidate = prepare(query), prepare(candidate)
-    max_shift = round(config.max_shift_fraction * config.resampled_bins)
-    best = (0.0, 1.0, 0)
-    for stretch in config.stretches:
-        source = ((np.linspace(0, 1, config.resampled_bins) - 0.5) / stretch + 0.5) * (
-            config.resampled_bins - 1
-        )
-        stretched = np.interp(source, np.arange(len(query)), query, left=0, right=0)
-        for shift in range(-max_shift, max_shift + 1):
-            shifted = np.zeros_like(stretched)
-            if abs(shift) < len(shifted):
-                if shift >= 0:
-                    shifted[shift:] = stretched[: len(stretched) - shift]
-                else:
-                    shifted[:shift] = stretched[-shift:]
-            union = np.maximum(shifted, candidate).sum()
-            penalty = np.exp(
-                -(
-                    (abs(shift / config.resampled_bins) / config.shift_penalty_scale)
-                    ** config.shift_penalty_power
-                )
-            )
-            score = (
-                np.minimum(shifted, candidate).sum() / union * penalty if union else 0.0
-            )
-            if score > best[0]:
-                best = (float(score), stretch, shift)
-    return best
-
-
-@pytest.mark.parametrize(
-    "config",
-    [
-        TearMatcherConfig(),
-        TearMatcherConfig(
-            resampled_bins=31, stretches=(1.2, 0.8, 1.0), depth_exponent=1.0
+def test_two_channels_choose_alignments_independently() -> None:
+    """Depth and signed change retain different optimal transformations."""
+    query = (
+        np.asarray([0.3658017467639605, 0.39651648937307304, -0.12531048092590164]),
+        np.asarray(
+            [
+                -0.1159222795104357,
+                0.09419447939636129,
+                0.3025783232114532,
+                0.2633859408106408,
+                0.45766879154693557,
+            ]
         ),
-        TearMatcherConfig(
-            resampled_bins=20, max_shift_fraction=1.2, stretches=(0.6, 1.4)
+    )
+    candidate = (
+        np.asarray(
+            [
+                -0.24577177841555098,
+                0.09287617312558763,
+                -0.029285893523125023,
+                0.18153351422376843,
+            ]
         ),
-        TearMatcherConfig(resampled_bins=17, max_shift_fraction=0, stretches=(1.0,)),
-    ],
-)
-def test_bulk_matches_original_forward_search(config: TearMatcherConfig) -> None:
-    """Ragged profiles and custom grids retain directional numerical behavior."""
-    rng = np.random.default_rng(42)
-    query = rng.uniform(-0.02, 0.1, 73)
-    candidates = [rng.uniform(-0.03, 0.1, n) for n in (1, 15, 73, 720)]
-    candidates.append(np.zeros(29))
-    actual = TearMatcher(config).match_many(query, candidates)
-    for candidate, match in zip(candidates, actual, strict=True):
-        score, stretch, shift = _forward_reference(query, candidate, config)
-        assert match.score == pytest.approx(score, abs=2e-15)
-        assert (match.stretch, match.shift_bins) == (stretch, shift)
+        np.asarray(
+            [
+                -0.26617144755736344,
+                -0.02800164028671978,
+                -0.23464010866503002,
+                0.47699112398384197,
+                0.1710237149109526,
+                0.10614167419279162,
+            ]
+        ),
+    )
+    matcher = TearMatcher()
+
+    score = matcher.match_many(query, (candidate,))[0]
+
+    # Forcing one transformation across both channels gives 0.2637830822948914.
+    assert score == pytest.approx(0.28226587987720325, rel=0, abs=1e-12)
 
 
-def test_bulk_chunking_preserves_order_and_does_not_mutate_inputs(
+def test_shared_scale_alignment_scores_below_independent_scale_average() -> None:
+    """One alignment must serve every scale in a profile stack."""
+    query = (make_profile([(70, 1.0)]), make_profile([(150, 1.0)]))
+    candidate = (make_profile([(94, 1.0)]), make_profile([(126, 1.0)]))
+    matcher = TearMatcher()
+
+    independent = np.mean(
+        [
+            matcher.match_many((source,), ((target,),))[0]
+            for source, target in zip(query, candidate, strict=True)
+        ]
+    )
+    shared = matcher.match_many(query, (candidate,))[0]
+
+    assert shared < independent
+
+
+def test_signed_change_is_taken_before_depth_clipping() -> None:
+    """A negative-depth valley still contributes its signed derivatives."""
+    profile = np.asarray([-1.0, -0.5, -1.0])
+
+    score = TearMatcher().match_many((profile,), ((profile,),))[0]
+
+    # Depth is empty after clipping; the signed channel remains a perfect match.
+    assert score == pytest.approx(0.60, abs=1e-12)
+
+
+def test_ragged_stacks_and_empty_or_zero_candidates() -> None:
+    """Ragged source lengths, empty catalogs, and zero mass have clear results."""
+    query = (np.linspace(0.0, 1.0, 7), np.linspace(1.0, 0.0, 31))
+    candidates = (
+        (np.linspace(0.0, 1.0, 3), np.linspace(1.0, 0.0, 73)),
+        (np.zeros(11), np.zeros(5)),
+    )
+    matcher = TearMatcher()
+
+    scores = matcher.match_many(query, candidates)
+
+    assert scores.shape == (2,)
+    assert np.isfinite(scores).all()
+    assert scores[1] == 0.0
+    assert matcher.match_many(query, ()).shape == (0,)
+
+
+def test_seeded_ragged_scores_match_fixed_characterization() -> None:
+    """Fixed constants and interpolation preserve a seeded ragged score vector."""
+    rng = np.random.default_rng(123)
+    query = tuple(rng.uniform(-0.02, 0.1, n) for n in (1, 2, 7))
+    candidates = tuple(
+        tuple(rng.uniform(-0.03, 0.1, n) for n in (1, 2, 7)) for _ in range(3)
+    )
+
+    scores = TearMatcher().match_many(query, candidates)
+
+    np.testing.assert_allclose(
+        scores,
+        [0.38347549947011017, 0.2076180586802313, 0.2902718480710209],
+        rtol=0,
+        atol=1e-12,
+    )
+
+
+def test_rejects_empty_or_mismatched_stacks() -> None:
+    """A candidate stack must contain one profile for every query scale."""
+    profile = np.ones(7)
+    matcher = TearMatcher()
+
+    with pytest.raises(ValueError, match="nonempty"):
+        matcher.match_many((), ((profile,),))
+    with pytest.raises(ValueError, match="one-to-one"):
+        matcher.match_many((profile,), ((),))
+
+
+def test_chunking_preserves_scores_and_inputs(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Chunk boundaries leave scores, ordering, and caller-owned arrays unchanged."""
+    """Changing the bounded batch size does not alter scores or source arrays."""
     import elephant_id.matching.alphaphant.similarity as module
 
     rng = np.random.default_rng(12)
-    query = rng.random(720)
-    candidates = rng.random((15, 720))
-    original = candidates.copy()
-    query.setflags(write=False)
-    candidates.setflags(write=False)
+    query = (rng.random(720), rng.random(73))
+    candidates = tuple((rng.random(720), rng.random(73)) for _ in range(15))
+    query_copy = tuple(profile.copy() for profile in query)
+    candidates_copy = tuple(
+        tuple(profile.copy() for profile in stack) for stack in candidates
+    )
     matcher = TearMatcher()
     expected = matcher.match_many(query, candidates)
+
     monkeypatch.setattr(module, "_OVERLAP_WORKSPACE_BYTES", 1)
-    assert matcher.match_many(query, candidates) == expected
-    np.testing.assert_array_equal(candidates, original)
-    assert matcher.match(query, candidates[0]) == expected[0]
+    actual = matcher.match_many(query, candidates)
 
-
-def test_bulk_empty_and_zero_profiles() -> None:
-    """Empty catalogs and zero-overlap profiles have explicit neutral results."""
-    matcher = TearMatcher(TearMatcherConfig(stretches=(0.8, 1.2)))
-    assert matcher.match_many(np.ones(9), ()) == ()
-    matches = matcher.match_many(np.zeros(12), [np.zeros(9), np.ones(7)])
-    assert [(m.score, m.stretch, m.shift_bins) for m in matches] == [(0.0, 1.0, 0)] * 2
-
-
-def test_positive_alignment_ties_preserve_configured_search_order() -> None:
-    """Equivalent positive alignments retain the first configured stretch."""
-    config = TearMatcherConfig(
-        resampled_bins=9, stretches=(1.2, 1.1), max_shift_fraction=0
-    )
-    match = TearMatcher(config).match(np.ones(9), np.ones(9))
-    assert (match.score, match.stretch, match.shift_bins) == (1.0, 1.2, 0)
-
-
-def test_scale_stack_cannot_choose_incompatible_alignments() -> None:
-    """Two scales cannot each claim a different perfect tear correspondence."""
-    config = TearMatcherConfig(
-        resampled_bins=81,
-        depth_exponent=1.0,
-        stretches=(1.0,),
-        max_shift_fraction=0.25,
-        shift_penalty_scale=100.0,
-    )
-    profiles = np.zeros((4, 81))
-    profiles[np.arange(4), [20, 50, 25, 45]] = 1.0
-    matcher = TearMatcher(config)
-    independent = (
-        matcher.match(profiles[0], profiles[2]).score
-        + matcher.match(profiles[1], profiles[3]).score
-    ) / 2
-    shared = matcher.match_stack(tuple(profiles[:2]), tuple(profiles[2:])).score
-    assert independent == pytest.approx(1.0)
-    assert shared == pytest.approx(0.5)
-
-
-def test_signed_depth_change_distinguishes_rising_from_falling() -> None:
-    """Equal slope magnitudes with opposite directions are not matching boundaries."""
-    from dataclasses import replace
-
-    config = TearMatcherConfig(
-        resampled_bins=41,
-        depth_exponent=1.0,
-        stretches=(1.0,),
-        max_shift_fraction=0.0,
-        channel="depth_change",
-    )
-    rising = np.linspace(0.0, 1.0, 41)
-    falling = 1.0 - rising
-    magnitude = TearMatcher(config).match(rising, falling)
-    signed = TearMatcher(replace(config, channel="signed_depth_change")).match(
-        rising, falling
-    )
-    assert magnitude.score == pytest.approx(1.0)
-    assert signed.score == 0.0
-    assert (signed.stretch, signed.shift_bins) == (1.0, 0)
+    np.testing.assert_allclose(actual, expected, rtol=0, atol=1e-12)
+    for actual_profile, original_profile in zip(query, query_copy, strict=True):
+        np.testing.assert_array_equal(actual_profile, original_profile)
+    for actual_stack, original_stack in zip(candidates, candidates_copy, strict=True):
+        for actual_profile, original_profile in zip(
+            actual_stack, original_stack, strict=True
+        ):
+            np.testing.assert_array_equal(actual_profile, original_profile)

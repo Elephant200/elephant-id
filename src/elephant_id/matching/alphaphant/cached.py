@@ -30,8 +30,8 @@ class CachedTearProfileExtractor:
         """Return the wrapped extractor's settled slug."""
         return self._producer_slug
 
-    def extract(self, ear: PreparedEar) -> TearProfile:
-        """Return cached or newly extracted tear depths."""
+    def extract(self, ear: PreparedEar) -> tuple[TearProfile, ...]:
+        """Return one cached or newly extracted complete representation."""
         crop = "_".join(map(str, ear.source_box.as_tuple()))
         key = (
             f"{ear.source_photo.photo_id}"
@@ -42,12 +42,18 @@ class CachedTearProfileExtractor:
         record = self._cache.get_or_compute(
             self.producer_slug,
             key,
-            lambda: {"depths": self._inner.extract(ear).depths.tolist()},
+            lambda: {
+                "profiles": [
+                    profile.depths.tolist() for profile in self._inner.extract(ear)
+                ]
+            },
         )
-        depths = record.get("depths")
-        if not isinstance(depths, list):
-            raise ValueError("Tear-profile cache record must contain a depths list")
+        profiles = record.get("profiles")
+        if not isinstance(profiles, list) or not profiles:
+            raise ValueError(
+                "Tear-profile cache record must contain a nonempty profiles list"
+            )
         try:
-            return TearProfile(depths)
+            return tuple(TearProfile(depths) for depths in profiles)
         except (TypeError, ValueError) as error:
             raise ValueError("Cached tear-profile depths are invalid") from error

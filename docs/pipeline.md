@@ -1,62 +1,148 @@
-# AlphaPhant Pipeline
+# AlphaPhant pipeline
 
-AlphaPhant receives one `SightingEarPair` and a candidate catalog. It returns one finite similarity score per candidate. Ranking is the descending view of those scores; the pipeline makes no identity decision. MiewID is a separate zero-shot comparison.
+AlphaPhant receives a sighting ear pair and a candidate catalog.
+It returns one finite similarity score per candidate. Higher scores indicate stronger matches.
+The caller sorts these scores to obtain a ranking. AlphaPhant does not assign an identity.
 
-## Shared ear preparation
+## Changes from main
 
-`SightingPreparer` reads each neutral Photo through the image-only PhotoStore and decodes its original bytes as BGR. Cached complete SAM3 features supply ear detections. Cached YOLO landmarks supply anatomical endpoints in full-image coordinates. Existing geometry resolves the declared side, cleans its contour, and produces an immutable `PreparedEar`.
+This comparison uses `main` at `6b522d5` and the current uncommitted source on `optimized`.
+It describes the active seven-scale method. The simpler two-reference methods remain experiments.
 
-A same-photo pair prepares that Photo once. Construction can memoize preparation and share the same callable across matchers. CurvRank and MiewID receive an ear-preparation callable, directly. The comparison script injects the shared preparation callable directly into every matcher. Neither comparator receives Dataset or AlphaPhant scores.
+| Stage | `main` | Current method |
+|---|---|---|
+| Preparation interface | `SightingAnalyzer` owns preparation and profile extraction. | `SightingPreparer` owns preparation. Each matcher owns its representation. |
+| Extractor input | One prepared ear. | Same. |
+| Reference shapes | One alpha scale: `0.35`. | Seven scales: `0.11, 0.22, 0.50, 1.10, 2.50, 5.00, 12.00`. |
+| Extractor output | One immutable tear profile. | One ordered tuple of immutable tear profiles. |
+| Shared work | One reference requires one geometry calculation. | All references share contour resampling, opening, radius, and polar rays. |
+| Comparison channels | Nonnegative depth. | Depth plus separate rising and falling depth changes. |
+| Magnitude exponent | `0.50`. | `0.75`. |
+| Angular weights | None. | Gaussian weights: center 120 degrees, width 35 degrees. |
+| Comparison grid | 240 bins. | Same. |
+| Stretch search | 0.80–1.20, step 0.025. | Same; scales share alignment within each channel. |
+| Shift limit | 15% of the profile. | 10%. |
+| Shift penalty scale | `0.08`, power 4. | `0.16`, power 4. |
+| Row similarity | Ruzicka overlap. | Same measure, with a compiled L1 calculation. |
+| Catalog correction | None. | Subtract each catalog ear's background similarity from twice the raw score. |
+| Sightings per candidate | Highest score on each side. | Similarity-weighted mean on each side. |
+| Ear combination | Equal mean of left and right scores. | Same. |
+| Inspection result | Profile matches include shift and stretch. | `AlphaPhant.profiles` exposes source-labelled profiles; matching returns scores only. |
+| Persistent profile cache | One profile record per ear. | One complete seven-profile record per ear. |
+| Alternative matcher | No CurvRank matcher. | CurvRank uses the same prepared ears through the catalog-matcher contract. |
 
-`AlphaPhant` combines preparation with its configured profile extractors. `AlphaPhant.profiles(pair)` returns source-labelled left/right profiles in scale order using the same memoized computation as matching. Preparation and extraction failures retain their photo, side, stage, and original cause through `MatchingError`.
+SAM3 segmentation, YOLO landmark detection, immutable photo IDs, and the PhotoStore contract remain.
+The active geometry keeps the original vertex-count contour selection and inferred-side rule.
+The research record separates geometry experiments from the active method.
+
+## Call sequence
+
+```text
+build_standard_alphaphant(photo_store)
+  -> build_preparer(photo_store, cache)
+  -> build_profile_extractor(preparer, cache)
+  -> AlphaPhant(prepare_ears=preparer.prepare, profile_extractor=extractor)
+
+AlphaPhant.match(query, catalog)
+  -> profiles(pair), for the query and each distinct catalog sighting
+     -> SightingPreparer.prepare(pair)
+     -> extract_sighting_profiles(ears, extractor)
+        -> extractor.extract(ear), once per ear
+  -> _score_side(query, catalog, "left")
+     -> _side_matrix -> TearMatcher.match_many
+     -> _correct_catalog
+     -> _aggregate_evidence
+  -> _score_side(query, catalog, "right")
+  -> average the two candidate scores
+```
+
+The caller supplies one extractor. It does not assemble a sequence of extractors or select comparison channels.
+`match` extracts the profiles before scoring. Both side-scoring calls receive those same profiles.
+Numerical settings stay with the algorithms that use them.
+
+## Ear preparation
+
+`SightingPreparer` retrieves encoded bytes through PhotoStore and decodes them into BGR images.
+Cached complete SAM3 features supply ear detections and masks.
+Cached YOLO records supply landmarks in full-image coordinates.
+Preparation creates an immutable `PreparedEar` for each side.
+A shared source photo requires two separate ears; preparation reads that photo once.
+
+The current side rule selects an ear by inferred image direction, then by cleaned area.
+This rule can fail on profile views.
+Snapped landmarks divide the mask boundary into two paths.
+Preparation selects the path with more vertices and orders it from upper to lower anchor.
+Unequal raster sampling can cause this rule to select the inner path.
+
+Original detector landmarks define the polar coordinate frame.
+Snapped anchors delimit the contour. These values have different purposes.
+Failures retain the photo, side, stage, and original cause in `MatchingError`.
 
 ## AlphaTear extraction
 
-The default extraction version is `alpha-tear-v3`, with 1,024 contour points, 720 profile bins, 5-degree trimming, opening fraction 0.020, and smoothing sigma 2.0. The single-scale baseline uses alpha fraction 0.35.
+The extractor resamples the contour to 1,024 points.
+The ear radius is `R = sqrt(2A / pi)`, where `A` is the cleaned contour area.
+A morphological opening with radius `0.020R` removes narrow outward mask bumps.
+Each alpha radius is its scale fraction multiplied by `R`.
+Small radii follow finer contour structure; large radii provide broader references.
 
-AlphaPhant uses seven immutable versions with alpha fractions 0.11, 0.22, 0.50, 1.10, 2.50, 5.00, and 12.00. Their producer slugs are `alpha-tear-v3-a011`, `alpha-tear-v3-a022`, `alpha-tear-v3-a050`, `alpha-tear-v3-a110`, `alpha-tear-v3-a250`, `alpha-tear-v3-a500`, and `alpha-tear-v3-a1200`. Small rolling disks follow finer contour structure; large disks give broader geometric references. No scale subset is selected per pair.
+Each reference produces 720 angular depth samples over the relevant semicircle.
+For each ray, extraction finds the furthest forward reference-boundary crossing.
+The nearest sampled reference-path point supplies a tangent.
+A three-pixel probe selects the inward normal.
+The nearest original-contour crossing along that normal supplies signed depth, divided by `R`.
+Positive depth represents an inward tear.
 
-Any future output-changing extraction change requires a new producer slug. Preparation and extraction identity are part of the version contract.
+The first and last five degrees are zero.
+Missing reference intersections are zero.
+Gaussian smoothing uses sigma two bins; missing intersections return to zero after smoothing.
+The ordered result uses the immutable producer `alpha-tear-v3-multiscale`.
+Historical cache records remain available.
 
-## Profile channels
+The coordinate system assumes a mostly star-convex ear relative to the landmark midpoint.
+Pose, occlusion, segmentation errors, and landmark errors can change the profiles.
+Radius normalization does not correct these errors.
 
-Each ear has two channel scores:
+## Channels and alignment
 
-- Depth uses the nonnegative tear depths.
-- Signed depth change separates the positive and negative angular derivatives of the original profile. Rising and falling slopes cannot substitute for each other. This is not a negative-depth channel.
+The depth channel clips negative depths to zero.
+The signed-change channel differentiates the original depth profile, then separates positive and negative changes.
+These rising and falling rows cannot substitute for each other.
+This channel does not represent negative tear depth.
 
-Each nonnegative row is raised to power 0.75, resampled to 240 bins, and multiplied by Gaussian angular weights with center 120 degrees and standard deviation 35 degrees in the resampled profile coordinate. The derivative is taken before compression and resampling.
+Each nonnegative row receives magnitude compression with exponent `0.75` and resampling to 240 bins.
+Gaussian angular weights favor the lower-ear region.
+Differentiation occurs before compression and resampling.
 
-The depth channel has one row per alpha-shape scale. Signed depth change has rising and falling rows per scale. All rows in a channel share one alignment. Depth and signed depth change may choose different alignments.
+Each channel searches 17 centered stretches and 49 integer shifts: 833 alignments.
+Values outside the shifted profile are zero.
+All reference rows share one alignment within a channel.
+The depth and signed-change channels can select different alignments.
+Only the query moves; catalog profiles stay fixed.
 
-## Directional alignment
+For each aligned row, Ruzicka similarity is `sum(min(query, catalog)) / sum(max(query, catalog))`.
+The equivalent compiled calculation is `(T - D) / (T + D)`.
+Here, `T` is total mass and `D` is L1 distance. Empty rows score zero.
+The channel averages row scores and applies `exp(-(abs(shift_fraction) / 0.16)^4)`.
+It then selects the highest score.
+Depth contributes `0.40`; signed change contributes `0.60`.
 
-`TearMatcher.match_stack_many` compares one query stack with catalog stacks. It searches centered stretches 0.80 through 1.20 in steps of 0.025 and integer shifts within 15% of the 240-bin profile. Values shifted outside the profile are zero.
+## Catalog correction and candidate scores
 
-For each transformation, a row scores by Ruzicka overlap, `sum(min(q,c)) / sum(max(q,c))`. Row scores are averaged before selecting a transformation. The shared score is multiplied by `exp(-(abs(shift_fraction)/0.16)^4)`. The first best transformation wins; zero overlap has neutral alignment.
+For each catalog ear, background strength is the mean of its five strongest outgoing same-side similarities.
+The ear itself is excluded. Other sightings of the same elephant remain eligible neighbors.
+A smaller catalog uses all available neighbors. No neighbor means zero background.
+The held-out query never enters this calculation.
+A corrected ear score is `2 * raw_similarity - background`.
 
-The implementation uses the equivalent nonnegative-vector formula `(T-D)/(T+D)`, where `T` is the sum of both vectors and `D` their L1 distance. Empty rows score zero. Compiled distance calculations and bounded batches preserve scores to high precision.
+Each candidate's sighting scores receive weights proportional to `exp((score - maximum) / temperature)`.
+Temperature is twice the standard deviation across corrected catalog-ear scores for that query side.
+The result is a weighted mean. Zero spread uses the maximum.
+The final candidate score is the equal mean of its two side scores.
 
-The selected comparison is directional: shifts and stretches apply to the query profile while the catalog profile stays fixed.
+These scores are not probabilities and need not lie between zero and one.
+Cached comparisons cannot add evidence from earlier catalog calls.
+The current catalog determines every background and candidate score.
 
-Depth contributes 0.55 and signed depth change contributes 0.45 to each ear similarity. No rank fusion, per-scale normalization, or ear-decisiveness weight is applied.
-
-## Catalog scoring
-
-For each side, the supplied catalog determines a background strength for each catalog ear: the mean of its ten strongest outgoing similarities to other catalog ears, or all available neighbors when fewer than ten exist. The ear itself is excluded. If no neighbor exists, background strength is zero. Other sightings of its candidate remain included.
-
-A query-to-catalog-ear similarity `s` becomes `2*s - background`. The held-out query never enters the catalog neighborhood. Cached pair similarities do not change which evidence a call is allowed to use. There is no query-side CSLS constant.
-
-One candidate's corrected sighting scores are combined by a similarity-weighted mean. Weights are proportional to `exp((score - maximum)/temperature)`, where temperature is the standard deviation of all corrected catalog-ear scores for this query side. Zero spread uses the maximum. This is a weighted mean, not a probability or log-sum-exp score.
-
-The candidate's left and right scores are averaged equally. Candidate scores need not lie in `[0,1]` and are not confidence probabilities.
-
-## Composition and evaluation
-
-`build_standard_alphaphant` builds the fixed composition. `build_preparer` constructs cached inference; `build_profile_extractors` constructs versioned profile caches; `compose_alphaphant` wires preparation and supplied extractors to the selected scoring rule. A baseline or tuning entry point supplies its own extractor sequence. Settings remain beside the algorithms that interpret them.
-
-There is no public `AlphaPhantConfig` product. The exact ablation uses isolated scientific compositions to remove the catalog correction or replace the similarity-weighted mean with the original maximum.
-
-The constructor names state each component's role: `prepare_ears`, `profile_extractors`, `channel_matchers`, and `channel_weights`. Custom weights are scaled before normalization so large finite values cannot overflow their sum. Ablation caches identify the script, active package sources, and NumPy/SciPy versions before reusing comparison matrices.
-
-See [results.md](results.md) for measured contributions and [evaluation.md](evaluation.md) for the protocol and reproduction commands.
+See [research](research.md) for measured results and alternatives.
+See [evaluation](evaluation.md) for the comparison procedure.

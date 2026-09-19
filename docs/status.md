@@ -1,49 +1,104 @@
 # Status
 
-The standard AlphaPhant composition is implemented and verified.
+The active seven-scale AlphaPhant method remains unchanged.
+The code uses one extractor, shared reference geometry, and one profile cache record per ear.
+The latest code checks passed 224 tests and Ruff. No commit was made.
 
-## Next steps
+## Current work
 
-### 1. Curate images
+- Completed expansion: 444 tuning pairs across 108 elephants; 448 benchmark pairs across 105 elephants.
+- Sol directed two Luna image reviewers. Image evidence overrode incorrect model fields.
+- Both original 300-pair manifests remain unchanged. Expanded sets have no shared elephant, sighting, or photo.
+- The fixed three-method comparison is complete. Two alpha scales are the preferred simplification for user review.
+- Keep the current method until the user reviews the new results and the accuracy/cost trade-off.
 
-Adapt the [image picker](../apps/image_picker/README.md) with heuristics/AI ranking and human approval. Automatically reject only unusable files and clear duplicates; keep candidates recoverable and spot-check rejected/low-ranked images. Inventory available data, then fix quality criteria, cohort targets, and an annotation budget before bulk curation or new benchmark results.
+On the expanded benchmark, seven scales score 361/448 top-1 and 403/448 top-5.
+Two alpha scales score 359/448 and 403/448. Alpha plus convex hull scores 358/448 and 403/448.
+Two alpha scales gain eight top-1 queries and lose ten against seven scales.
+The difference is -0.45 percentage points, with a 95% paired interval of [-2.36, 1.36].
+On tuning, seven scales score 362/444 top-1 and 405/444 top-5.
+Two alpha scales score 355/444 and 401/444.
+The active method remains unchanged. The observations do not establish equal accuracy.
+[Research](research.md) contains the experiment history, paired counts, limits, and evidence locations.
+[Pipeline](pipeline.md) compares the current method with `main`.
 
-Tuning and benchmark sightings need sighting ear pairs. Model data can contain additional, unpaired, side-unbalanced photos.
+## Future roadmap
 
-Enlarge the benchmark to **100–200 elephants with 3–5 approved sightings per elephant**, first securing 100 elephants with three approved sightings each. Protect sufficient clean repeated-sighting identities for that target first, preferentially using identities without human annotations; use annotated identities if image scarcity requires it. Then choose a smaller representative tuning cohort and direct annotation-rich and retrieval-ineligible identities toward model data. Seek good images in every split.
+The work below concerns model training and the future application.
+It is separate from the current append-only research-set expansion.
+Older counts describe their stated audit, not new cohort membership.
 
-Calibrate AI photo-quality review against 100–200 user-graded ear examples; a Roboflow VLM is a candidate. Freeze and retain per-photo grades for reuse across expansion and annotation selection, and derive elephant-level quality summaries from them. Interior occlusion is acceptable when the relevant outer boundary and both anatomical endpoints remain clearly visible.
+### Image selection and quality calibration
 
-Run grading as a one-time batch using the existing cache, without a grade-editing interface or override infrastructure. Each photo has independent ear-side scores and its own best-ear image score; one poor or absent opposite ear does not reduce a clean ear's score. Derive sighting quality from the weaker of its best left/right choices and elephant retrieval quality from its third-best sighting pair. Retain good-image and annotation counts for model-data selection.
+The future [image picker](../apps/image_picker/README.md) combines automated suggestions with human approval.
+Keep rejected candidates recoverable. Inspect a sample of rejected and low-grade images.
+Inventory image quality and annotation needs before a new collection or model study.
+Retrieval needs complete sighting ear pairs. Model datasets can contain unpaired images.
 
-Human-annotated photos of benchmark elephants cannot train models, even across different sightings. Include suitable annotated photos in the benchmark to study whether better segmentation is associated with better retrieval accuracy. Complete each sighting ear pair with a suitable opposite-ear photo from the same sighting. Update existing sighting entries rather than duplicate them.
+The earlier target was 100–200 benchmark elephants with three to five accepted sightings each.
+The current expansion has the separate target stated above.
+Prefer identities without known training exposure when suitable repeated sightings exist.
+Keep useful images for both retrieval and model development.
 
-Where a suitable annotated photo belongs to an existing benchmark sighting, switch that side's selection to the annotated photo after verifying its source mapping. AI assists photo-quality review, especially occlusion assessment, before human selection. The selection page shows raw ear images without numerical quality scores. Save incomplete selections and support undo; export only complete validated retrieval pairs. See the evolving curation specification in `.scratch/image-curation/spec.md`.
+Human calibration should use 100–200 user-graded ear examples. Roboflow VLM is one possible automated grader.
+Reuse per-ear quality grades across selection tasks.
+The image grade describes its best ear; a poor opposite ear does not lower that grade.
+The sighting-pair grade describes its weaker selected ear.
+The third-best complete pair can summarize an elephant's retrieval eligibility.
+Retain annotation counts and good-image counts per elephant.
 
-### 2. Freeze splits
+The grading process uses the existing cache. It does not need a new grade-editing framework.
+A harmless interior obstruction is acceptable when the required outer edge remains readable.
+The selection page shows images without numerical quality scores.
+Save incomplete selections, support undo, and export only complete validated pairs.
+The private selection specification remains in `.scratch/image-curation/spec.md`.
 
-**Sightings are indivisible:** a different photo from the same sighting still invalidates that sighting's use in a separate split. Also keep elephants disjoint across model, tuning, and benchmark cohorts. The benchmark requires 3–5 approved sightings per elephant; counts alone do not establish photo quality or eligibility. Model and tuning allocation depends on the remaining data.
+### Identity assignments and annotation
 
-Preserve benchmark membership except Lotter, whose removal from the expanded benchmark is approved because only two source sightings exist; retain the historical manifest for reproducibility. The entirely AI-selected tuning set is flexible and may be rebuilt before freezing. Freeze private manifests for each cohort and each model's train/validation/test splits, with identity-disjoint roles coordinated across models. Crops, labels, and augmentations inherit source assignments. Audit duplicates and prior training exposure; record permanent IDs, counts, versions, and hashes.
+Sightings and elephant assignments are indivisible across development groups.
+Model train, validation, and test splits require separate elephant identities.
+Crops, labels, and augmentations retain the source assignments.
+An annotated benchmark image cannot train a model, even if its sighting differs from the query sighting.
 
-### 3. Annotate
+The earlier approved removal of Lotter reflected only two available source sightings.
+Keep the historical manifest for reproduction.
+The current expansion preserves every row of both 300-pair manifests.
+Any future reassignment requires a new explicit dataset decision.
 
-- **Localization:** SAM3-generated labels with quality review. SAM3 is imperfect; human-check held-out labels rather than measure agreement with SAM3 alone.
-- **Segmentation:** the user manages human masks through an external service. Prefer new annotation expenditure on model training images; reuse existing benchmark masks for the planned segmentation-quality study. Benchmark-elephant annotations never train models.
-- **Landmarks:** older YOLO26 drafts or, potentially, drafts from another foundation model, reviewed/corrected by a human; use human-reviewed validation/test labels. Distinguish any machine-only training labels.
+Future segmentation analysis can use suitable human annotations from benchmark elephants.
+Verify source mapping and complete the opposite ear from the same sighting.
+Do not change a frozen retrieval manifest while choosing model annotations.
 
-Validate crop/full-image coordinates and retain annotation provenance. The export at `/Users/alex/Downloads/30997` contains **500 annotated image records across 461 sightings**. Whole-elephant metadata reconciliation places **132 records in benchmark identities, 295 in tuning identities, and 73 in neither** under current assignments. Tuning may be reallocated. Exact sighting overlap is narrower: 40 benchmark and 90 tuning sightings, totaling 146 records. Forty-two annotated filenames also occur in prior landmark dataset split directories; actual weight-training exposure remains to be checked. Crop mappings and duplicate checks remain outstanding.
+Planned annotation work:
 
-### 4. Train and tune
+- Localization: use SAM3 suggestions, then human-review held-out labels.
+- Segmentation: use the user's external service for human masks; prefer new training-image annotations where possible.
+- Landmarks: use model suggestions, then human-correct labels for validation and test.
 
-Train **YOLO26 localization**, compare **U-Net/BiRefNet segmentation**, and train **heatmap landmarks**. Select on model validation data and evaluate locked model test splits. Integrate through existing inference interfaces with versioned weights and producers. Tune AlphaPhant only on tuning data, then lock the complete configuration.
+Validate full-image and crop coordinates and retain annotation provenance.
+An earlier export at `/Users/alex/Downloads/30997` contains 500 records across 461 sightings.
+The then-current identity audit assigned 132 records to benchmark elephants, 295 to tuning elephants, and 73 to neither.
+Exact sighting overlap was 40 benchmark sightings and 90 tuning sightings, with 146 records in total.
+Forty-two annotated filenames also occurred in older landmark dataset split directories.
+Actual training exposure of the active weights remains unknown.
+Crop mapping and duplicate checks remain open tasks.
+These counts describe that earlier audit; they are not counts for the expanded manifests.
 
-### 5. Benchmark
+### Model training and evaluation
 
-On the expanded existing benchmark, compare AlphaPhant with current versus new preparation, then AlphaPhant/CurvRank/MiewID with shared preparation and identical query/candidate sets. Predefine a small set of ablations and the human-mask analysis of segmentation quality versus retrieval accuracy. Account for repeated sightings within elephants; association alone does not establish causation. Automated retrieval uses predicted masks and landmarks.
+Planned model work includes YOLO26 localization, U-Net/BiRefNet segmentation comparisons, and heatmap landmarks.
+Choose models on model-validation data and evaluate fixed model-test sets.
+Use versioned model producers behind the existing inference interfaces.
+Tune AlphaPhant on tuning data, then fix its complete settings before a benchmark comparison.
 
-Report top-1/top-5, paired uncertainty, actual catalog sizes, ties, and preparation failures using [evaluation.md](evaluation.md). Preserve full scores and reproduction metadata; never silently drop failures or use final results to select models or parameters.
+Future comparisons can test current and improved preparation with the same retrieval sets.
+AlphaPhant, CurvRank, and a separately justified MiewID study must use identical queries and candidate evidence.
+MiewID is not part of the active production comparison command.
+Define the human-mask analysis and limited ablations before results are available.
+An association between segmentation quality and retrieval does not establish causation.
+Automated retrieval uses predicted masks and landmarks.
 
-### 6. Write the paper
-
-Report curation, splits, annotation provenance, training, comparisons, segmentation-quality associations, and limitations of the curated high-quality-image setting. Prepare figures, tables, and reproduction instructions from the frozen experiments.
+Report counts, top-1/top-5, paired uncertainty, ties, and failures under [evaluation](evaluation.md).
+Preserve every candidate score. Do not silently remove failed queries or use benchmark outcomes to select settings.
+A paper must describe image selection, identity splits, annotation provenance, model training, and the limits of curated high-quality images.
+Use fixed experiment records for figures, tables, and reproduction instructions.

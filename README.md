@@ -9,7 +9,7 @@ AlphaPhant is a fully automated candidate-ranking algorithm for elephant re-iden
 - [Evaluation](docs/evaluation.md) — identity-retrieval benchmark protocol.
 - [Architecture](docs/architecture.md) — module responsibilities, data flow, inference seams, and caching.
 - [Context](docs/context.md) — canonical domain vocabulary.
-- [Workflow](docs/workflow.md) — future application surrounding the research pipeline.
+- [Application](docs/reference/application.md) — future application surrounding the research pipeline.
 - [Future research](docs/future.md) — deferred research directions.
 - [ADRs](docs/adr/) — durable architectural decisions.
 
@@ -20,7 +20,7 @@ Run Python from the repo root with `uv`:
 ```bash
 uv run pytest
 uv run ruff check .
-uv sync --all-groups local
+uv sync --all-groups
 ```
 
 See [AGENTS.md](AGENTS.md) for agent and contributor guidelines.
