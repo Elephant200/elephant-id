@@ -46,13 +46,25 @@ in the polar frame.
 
 ## Tear-Profile Matching
 
-Tear-profile matching compares left ears only with left ears and right ears only with right ears.
+AlphaPhant compares ears from the same side. It moves only the query profile. Each reference profile stays fixed.
 
-The alignment is forward-only: the query profile is shifted and stretched against each catalog profile. The score and retained alignment both come from that query-to-catalog search; reverse alignment is not computed or averaged.
+The comparator replaces negative depths with zero, compresses the depths, and resamples each profile to a common grid. It then applies each configured stretch and shift to the query.
 
-Bulk matching is canonical. AlphaPhant submits every catalog left profile in one call and every catalog right profile in another. The matcher resamples profiles in batches, constructs every configured query stretch and shift once per side, and reuses those transforms across the catalog. Reference batches bound overlap working memory rather than allocating a tensor for the entire catalog. A single-profile match delegates to the same bulk implementation.
+For each alignment, let `q` be the query depths and `r` be the reference depths. The overlap score is `sum(min(q, r)) / sum(max(q, r))`. The implementation uses the equivalent L1 formula:
 
-This raw similarity score contributes directly to candidate scores. Cohort normalization and learned calibration are outside the selected pipeline.
+```text
+total        = sum(q) + sum(r)
+distance     = sum(abs(q - r))
+intersection = (total - distance) / 2
+union        = total - intersection
+overlap      = intersection / union
+```
+
+If `union` is zero, the overlap score is zero. The comparator multiplies each overlap score by its shift penalty. It returns the highest score and its alignment. A zero score returns stretch 1 and shift 0. Candidate scoring uses this score directly.
+
+SciPy computes L1 distances without a large temporary array of per-bin minima. This reduces memory use and comparison time. Subtraction can lose precision when `total` and `distance` are almost equal. In that case, the comparator calculates `sum(min(q, r))` directly. This keeps zero overlap at zero and preserves small positive overlaps.
+
+AlphaPhant compares all left profiles in one call and all right profiles in another. The comparator builds query alignments once per side and processes references in batches to limit memory use. A comparison with one reference uses the same code.
 
 ## Catalog Matching
 

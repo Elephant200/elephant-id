@@ -4,6 +4,7 @@ from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 
 import numpy as np
+from scipy.spatial.distance import cdist
 
 _OVERLAP_WORKSPACE_BYTES = 16 * 1024 * 1024
 
@@ -105,12 +106,23 @@ class EarProfileSimilarity:
         variant_depth_sums: np.ndarray,
         reference_batch: np.ndarray,
     ) -> np.ndarray:
-        """Return penalized scores with reference rows and query-variant columns."""
-        overlap = np.minimum(query_variants[None, :, :], reference_batch[:, None, :]).sum(axis=2)
+        """Return scores after the shift penalty.
 
-        # min + max = sum
+        Each row is a reference. Each column is one query stretch and shift.
+        """
+        distance = cdist(reference_batch, query_variants, metric="cityblock")
         reference_depth_sums = reference_batch.sum(axis=1)
-        union = variant_depth_sums[None, :] + reference_depth_sums[:, None] - overlap
+        total = variant_depth_sums[None, :] + reference_depth_sums[:, None]
+        # For nonnegative depths: sum(min(q, r)) = (sum(q) + sum(r) - sum(abs(q - r))) / 2.
+        overlap = (total - distance) * 0.5
+        # Subtraction loses precision when total and distance are almost equal.
+        # Estimate the rounding error from the bin count and total depth.
+        # Recalculate small intersections directly, including exact zero overlaps.
+        cancellation_bound = 4 * np.finfo(np.float64).eps * query_variants.shape[1] * total
+        for index, reference in enumerate(reference_batch):
+            uncertain = overlap[index] <= cancellation_bound[index]
+            overlap[index, uncertain] = np.minimum(query_variants[uncertain], reference).sum(axis=1)
+        union = total - overlap
         scores = np.divide(overlap, union, out=np.zeros_like(overlap), where=union > 0)
         scores *= self._variant_penalties
 
