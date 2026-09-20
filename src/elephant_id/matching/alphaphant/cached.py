@@ -1,9 +1,8 @@
 """Persistence decorator for tear-profile extraction."""
 
-from elephant_id.analysis.ear_preparation import PreparedEar
-from elephant_id.analysis.profile_extraction.protocol import TearProfileExtractor
-from elephant_id.analysis.tear_profile import TearProfile
 from elephant_id.cache import CacheManager
+from elephant_id.matching.alphaphant.extraction import TearProfile, TearProfileExtractor
+from elephant_id.preparation.ear import PreparedEar
 
 
 class CachedTearProfileExtractor:
@@ -17,7 +16,11 @@ class CachedTearProfileExtractor:
         segmentation_producer_slug: str,
         landmark_producer_slug: str,
     ) -> None:
-        """Wrap a settled extractor with its upstream processor lineage."""
+        """Cache an extractor's output with its inference producer identities.
+
+        Raises:
+            ValueError: If the extractor has no settled producer slug.
+        """
         if inner.producer_slug is None:
             raise ValueError("A cached profile extractor requires a producer slug")
         self._inner = inner
@@ -32,7 +35,11 @@ class CachedTearProfileExtractor:
         return self._producer_slug
 
     def extract(self, ear: PreparedEar) -> TearProfile:
-        """Return cached or newly extracted tear depths."""
+        """Return a cached profile, or extract and store a new profile.
+
+        Raises:
+            ValueError: If a stored profile payload is invalid.
+        """
         crop = "_".join(map(str, ear.source_box.as_tuple()))
         key = (
             f"{ear.source_photo.photo_id}"

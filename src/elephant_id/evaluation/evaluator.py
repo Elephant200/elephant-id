@@ -12,10 +12,10 @@ from uuid import UUID, uuid4
 import numpy as np
 from tqdm import tqdm
 
-from elephant_id.analysis import SightingAnalysisError
 from elephant_id.dataset import Dataset
 from elephant_id.domain import SightingEarPair
 from elephant_id.matching import CandidateKey, CatalogMatcher
+from elephant_id.matching.protocol import MatchingError
 
 from .benchmark import BenchmarkValidationError, RetrievalBenchmark
 
@@ -134,7 +134,7 @@ def _failure_context(
     Literal["left", "right"] | None,
 ]:
     """Recover the evidence role of a structured analysis failure."""
-    if not isinstance(error, SightingAnalysisError):
+    if not isinstance(error, MatchingError):
         return None, None, None
     query_photos = {query.left_photo.photo_id, query.right_photo.photo_id}
     role: Literal["query", "catalog"] = (

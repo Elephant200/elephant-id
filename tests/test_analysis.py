@@ -9,30 +9,32 @@ import numpy as np
 import pytest
 from pycocotools import mask as coco_mask
 
-from elephant_id.analysis import (
-    EarAnalysis,
-    EarSide,
-    PreparedEar,
-    SightingAnalysis,
-    SightingAnalysisError,
-    SightingAnalysisStage,
-    SightingAnalyzer,
-    TearProfile,
-    prepare_ear,
-)
-from elephant_id.analysis.profile_extraction import (
-    AlphaTearConfig,
-    AlphaTearExtractor,
-    CachedTearProfileExtractor,
-)
 from elephant_id.cache import CacheManager
 from elephant_id.composition import (
-    build_profile_tuning_analyzer,
-    build_standard_analyzer,
+    build_profile_tuning_alphaphant,
+    build_standard_alphaphant,
 )
 from elephant_id.domain import Photo, SightingEarPair
 from elephant_id.image.boxes import BoundingBox
 from elephant_id.inference import Detection
+from elephant_id.matching.alphaphant import AlphaPhant
+from elephant_id.matching.alphaphant.cached import CachedTearProfileExtractor
+from elephant_id.matching.alphaphant.extraction import (
+    AlphaTearConfig,
+    AlphaTearExtractor,
+    AnalyzedEar,
+    AnalyzedSightingEarPair,
+    TearProfile,
+)
+from elephant_id.matching.alphaphant.similarity import EarProfileSimilarity
+from elephant_id.matching.protocol import MatchingError
+from elephant_id.preparation import (
+    EarSide,
+    PreparationStage,
+    PreparedEar,
+    SightingPreparer,
+    prepare_ear,
+)
 
 PHOTO = Photo(
     photo_id=UUID("8c47c36d-a75d-4ee4-a58a-3a08fca2c833"),
@@ -74,9 +76,7 @@ def _prepared_ear(side: EarSide = "left") -> PreparedEar:
 class _ProfileExtractor:
     """Record prepared-ear extraction."""
 
-    profile: TearProfile = field(
-        default_factory=lambda: TearProfile(np.asarray([0.0, 0.1, 0.0]))
-    )
+    profile: TearProfile = field(default_factory=lambda: TearProfile(np.asarray([0.0, 0.1, 0.0])))
     producer_slug: str | None = "alpha-tear-v3"
     calls: list[PreparedEar] = field(default_factory=list)
 
@@ -127,8 +127,8 @@ def test_composition_caches_only_settled_profile_extraction(tmp_path: Path) -> N
     """Standard and tuning builders differ only at profile persistence."""
     store = _PhotoStore(_encoded_image())
 
-    standard = build_standard_analyzer(store, cache_root=tmp_path / "standard")
-    tuning = build_profile_tuning_analyzer(
+    standard = build_standard_alphaphant(store, cache_root=tmp_path / "standard")
+    tuning = build_profile_tuning_alphaphant(
         store,
         AlphaTearConfig(alpha_fraction=0.4),
         cache_root=tmp_path / "tuning",
@@ -247,7 +247,7 @@ def _encoded_image() -> bytes:
     return encoded.tobytes()
 
 
-def test_sighting_analyzer_returns_two_source_labelled_profiles() -> None:
+def test_alphaphant_analysis_returns_two_source_labelled_profiles() -> None:
     """A sighting ear pair is analyzed through all three semantic processors."""
     left = _segmented_rectangle(2, 3, 12, 20)
     right = _segmented_rectangle(16, 3, 27, 20)
@@ -262,19 +262,21 @@ def test_sighting_analyzer_returns_two_source_labelled_profiles() -> None:
         }
     )
     extractor = _ProfileExtractor()
-    analyzer = SightingAnalyzer(
-        photo_store=store,
-        ear_segmenter=segmenter,
-        landmark_detector=detector,
+    analyzer = AlphaPhant(
+        prepare_ears=SightingPreparer(
+            photo_store=store, ear_segmenter=segmenter, landmark_detector=detector
+        ).prepare,
         profile_extractor=extractor,
+        ear_similarity=EarProfileSimilarity(),
     )
     pair = SightingEarPair(PHOTO.sighting_id, PHOTO, RIGHT_PHOTO)
 
     result = analyzer.analyze(pair)
 
-    assert result == SightingAnalysis(
-        left=EarAnalysis(PHOTO, "left", left_box, result.left.tear_profile),
-        right=EarAnalysis(
+    assert result == AnalyzedSightingEarPair(
+        sighting_id=pair.sighting_id,
+        left=AnalyzedEar(PHOTO, "left", left_box, result.left.tear_profile),
+        right=AnalyzedEar(
             RIGHT_PHOTO,
             "right",
             right_box,
@@ -284,7 +286,7 @@ def test_sighting_analyzer_returns_two_source_labelled_profiles() -> None:
     assert [ear.inferred_side for ear in extractor.calls] == ["left", "right"]
 
 
-def test_sighting_analyzer_prepares_one_photo_once_for_both_sides() -> None:
+def test_alphaphant_analysis_prepares_one_photo_once_for_both_sides() -> None:
     """Same-photo pairs reuse segmentation, landmarks, and prepared geometry."""
     left = _segmented_rectangle(2, 3, 12, 20)
     right = _segmented_rectangle(16, 3, 27, 20)
@@ -298,11 +300,12 @@ def test_sighting_analyzer_prepares_one_photo_once_for_both_sides() -> None:
             right_box: _landmarks((26.0, 3.0), (26.0, 19.0)),
         }
     )
-    analyzer = SightingAnalyzer(
-        photo_store=store,
-        ear_segmenter=segmenter,
-        landmark_detector=detector,
+    analyzer = AlphaPhant(
+        prepare_ears=SightingPreparer(
+            photo_store=store, ear_segmenter=segmenter, landmark_detector=detector
+        ).prepare,
         profile_extractor=_ProfileExtractor(),
+        ear_similarity=EarProfileSimilarity(),
     )
 
     result = analyzer.analyze(SightingEarPair(PHOTO.sighting_id, PHOTO, PHOTO))
@@ -313,7 +316,7 @@ def test_sighting_analyzer_prepares_one_photo_once_for_both_sides() -> None:
     assert detector.calls == [(PHOTO, left_box), (PHOTO, right_box)]
 
 
-def test_sighting_analyzer_preserves_input_order_for_equal_matching_ears() -> None:
+def test_alphaphant_analysis_preserves_input_order_for_equal_matching_ears() -> None:
     """Exact cleaned-area ties resolve to the first matching candidate."""
     first = _segmented_rectangle(2, 3, 10, 20)
     second = _segmented_rectangle(12, 3, 20, 20)
@@ -321,47 +324,49 @@ def test_sighting_analyzer_preserves_input_order_for_equal_matching_ears() -> No
     first_box = BoundingBox(2, 3, 10, 20)
     second_box = BoundingBox(12, 3, 20, 20)
     right_box = BoundingBox(20, 3, 28, 20)
-    analyzer = SightingAnalyzer(
-        photo_store=_PhotoStore(_encoded_image()),
-        ear_segmenter=_Segmenter(
-            {PHOTO: (first, second), RIGHT_PHOTO: (right,)}
-        ),
-        landmark_detector=_LandmarkDetector(
-            {
-                first_box: _landmarks((2.0, 3.0), (2.0, 19.0)),
-                second_box: _landmarks((12.0, 3.0), (12.0, 19.0)),
-                right_box: _landmarks((27.0, 3.0), (27.0, 19.0)),
-            }
-        ),
+    analyzer = AlphaPhant(
+        prepare_ears=SightingPreparer(
+            photo_store=_PhotoStore(_encoded_image()),
+            ear_segmenter=_Segmenter({PHOTO: (first, second), RIGHT_PHOTO: (right,)}),
+            landmark_detector=_LandmarkDetector(
+                {
+                    first_box: _landmarks((2.0, 3.0), (2.0, 19.0)),
+                    second_box: _landmarks((12.0, 3.0), (12.0, 19.0)),
+                    right_box: _landmarks((27.0, 3.0), (27.0, 19.0)),
+                }
+            ),
+        ).prepare,
         profile_extractor=_ProfileExtractor(),
+        ear_similarity=EarProfileSimilarity(),
     )
 
-    result = analyzer.analyze(
-        SightingEarPair(PHOTO.sighting_id, PHOTO, RIGHT_PHOTO)
-    )
+    result = analyzer.analyze(SightingEarPair(PHOTO.sighting_id, PHOTO, RIGHT_PHOTO))
 
     assert result.left.source_box == first_box
 
 
-def test_sighting_analyzer_reports_declared_side_and_domain_stage() -> None:
+def test_alphaphant_analysis_reports_declared_side_and_domain_stage() -> None:
     """A missing declared ear raises an inspectable domain-level failure."""
-    analyzer = SightingAnalyzer(
-        photo_store=_PhotoStore(_encoded_image()),
-        ear_segmenter=_Segmenter({PHOTO: ()}),
-        landmark_detector=_LandmarkDetector({}),
+    analyzer = AlphaPhant(
+        prepare_ears=SightingPreparer(
+            photo_store=_PhotoStore(_encoded_image()),
+            ear_segmenter=_Segmenter({PHOTO: ()}),
+            landmark_detector=_LandmarkDetector({}),
+        ).prepare,
         profile_extractor=_ProfileExtractor(),
+        ear_similarity=EarProfileSimilarity(),
     )
     pair = SightingEarPair(PHOTO.sighting_id, PHOTO, RIGHT_PHOTO)
 
-    with pytest.raises(SightingAnalysisError) as caught:
+    with pytest.raises(MatchingError) as caught:
         analyzer.analyze(pair)
 
     assert caught.value.side == "left"
-    assert caught.value.stage is SightingAnalysisStage.DECLARED_EAR_RESOLUTION
+    assert caught.value.stage is PreparationStage.DECLARED_EAR_RESOLUTION
     assert caught.value.photo_id == PHOTO.photo_id
 
 
-def test_sighting_analyzer_wraps_extraction_failure_with_its_cause() -> None:
+def test_alphaphant_analysis_wraps_extraction_failure_with_its_cause() -> None:
     """Processor failures retain both their domain stage and original cause."""
     left = _segmented_rectangle(2, 3, 12, 20)
     right = _segmented_rectangle(16, 3, 27, 20)
@@ -375,25 +380,24 @@ def test_sighting_analyzer_wraps_extraction_failure_with_its_cause() -> None:
             """Fail during profile extraction."""
             raise ArithmeticError("synthetic extraction failure")
 
-    analyzer = SightingAnalyzer(
-        photo_store=_PhotoStore(_encoded_image()),
-        ear_segmenter=_Segmenter({PHOTO: (left,), RIGHT_PHOTO: (right,)}),
-        landmark_detector=_LandmarkDetector(
-            {
-                BoundingBox(2, 3, 12, 20): _landmarks(
-                    (2.0, 3.0), (2.0, 19.0)
-                ),
-                BoundingBox(16, 3, 27, 20): _landmarks(
-                    (26.0, 3.0), (26.0, 19.0)
-                ),
-            }
-        ),
+    analyzer = AlphaPhant(
+        prepare_ears=SightingPreparer(
+            photo_store=_PhotoStore(_encoded_image()),
+            ear_segmenter=_Segmenter({PHOTO: (left,), RIGHT_PHOTO: (right,)}),
+            landmark_detector=_LandmarkDetector(
+                {
+                    BoundingBox(2, 3, 12, 20): _landmarks((2.0, 3.0), (2.0, 19.0)),
+                    BoundingBox(16, 3, 27, 20): _landmarks((26.0, 3.0), (26.0, 19.0)),
+                }
+            ),
+        ).prepare,
         profile_extractor=_FailingExtractor(),
+        ear_similarity=EarProfileSimilarity(),
     )
 
-    with pytest.raises(SightingAnalysisError) as caught:
+    with pytest.raises(MatchingError) as caught:
         analyzer.analyze(SightingEarPair(PHOTO.sighting_id, PHOTO, RIGHT_PHOTO))
 
     assert caught.value.side == "left"
-    assert caught.value.stage is SightingAnalysisStage.TEAR_PROFILE_EXTRACTION
+    assert caught.value.stage == "tear-profile extraction"
     assert isinstance(caught.value.__cause__, ArithmeticError)

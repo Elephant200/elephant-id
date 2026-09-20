@@ -3,7 +3,10 @@
 import numpy as np
 import pytest
 
-from elephant_id.matching.tear_matcher import TearMatcher, TearMatcherConfig
+from elephant_id.matching.alphaphant.similarity import (
+    EarProfileSimilarity,
+    EarProfileSimilarityConfig,
+)
 
 
 def make_profile(peaks: list[tuple[int, float]], bins: int = 720) -> np.ndarray:
@@ -19,40 +22,40 @@ def make_profile(peaks: list[tuple[int, float]], bins: int = 720) -> np.ndarray:
     return profile
 
 
-class TestTearMatcher:
+class TestEarProfileSimilarity:
     def test_identical_profiles_score_one(self) -> None:
         profile = make_profile([(300, 0.05)])
-        match = TearMatcher().match(profile, profile)
+        match = EarProfileSimilarity().compare(profile, profile)
         assert match.score == pytest.approx(1.0)
         assert match.shift_bins == 0
 
     def test_disjoint_profiles_score_zero(self) -> None:
         query = make_profile([(120, 0.05)])
         candidate = make_profile([(600, 0.05)])
-        assert TearMatcher().match(query, candidate).score == pytest.approx(0.0)
+        assert EarProfileSimilarity().compare(query, candidate).score == pytest.approx(0.0)
 
     def test_depth_compression_tolerates_depth_mismatch(self) -> None:
         query = make_profile([(300, 0.02)])
         candidate = make_profile([(300, 0.08)])
         plain = (
-            TearMatcher(TearMatcherConfig(depth_exponent=1.0))
-            .match(query, candidate)
+            EarProfileSimilarity(EarProfileSimilarityConfig(depth_exponent=1.0))
+            .compare(query, candidate)
             .score
         )
         compressed = (
-            TearMatcher(TearMatcherConfig(depth_exponent=0.5))
-            .match(query, candidate)
+            EarProfileSimilarity(EarProfileSimilarityConfig(depth_exponent=0.5))
+            .compare(query, candidate)
             .score
         )
         assert compressed > plain
 
     def test_depth_compression_keeps_identical_profiles_at_one(self) -> None:
         profile = make_profile([(300, 0.05), (500, 0.02)])
-        matcher = TearMatcher(TearMatcherConfig(depth_exponent=0.5))
-        assert matcher.match(profile, profile).score == pytest.approx(1.0)
+        matcher = EarProfileSimilarity(EarProfileSimilarityConfig(depth_exponent=0.5))
+        assert matcher.compare(profile, profile).score == pytest.approx(1.0)
 
     def test_default_config_is_validated_configuration(self) -> None:
-        config = TearMatcherConfig()
+        config = EarProfileSimilarityConfig()
         assert config.resampled_bins == 240
         assert config.depth_exponent == 0.5
         assert len(config.stretches) == 17
@@ -70,7 +73,7 @@ class TestTearMatcher:
         narrow[310:331] = np.linspace(0.0, 0.08, 21)
         narrow[331:351] = np.linspace(0.08, 0.0, 20)
 
-        result = TearMatcher().match(broad, narrow)
+        result = EarProfileSimilarity().compare(broad, narrow)
 
         assert result.score == pytest.approx(0.5130298508958523)
         assert result.stretch == pytest.approx(0.8)
@@ -79,7 +82,7 @@ class TestTearMatcher:
 
 
 def _forward_reference(
-    query: np.ndarray, candidate: np.ndarray, config: TearMatcherConfig
+    query: np.ndarray, candidate: np.ndarray, config: EarProfileSimilarityConfig
 ) -> tuple[float, float, int]:
     """Characterize the original forward search with explicit shift padding."""
 
@@ -128,23 +131,23 @@ def _forward_reference(
 @pytest.mark.parametrize(
     "config",
     [
-        TearMatcherConfig(),
-        TearMatcherConfig(
+        EarProfileSimilarityConfig(),
+        EarProfileSimilarityConfig(
             resampled_bins=31, stretches=(1.2, 0.8, 1.0), depth_exponent=1.0
         ),
-        TearMatcherConfig(
+        EarProfileSimilarityConfig(
             resampled_bins=20, max_shift_fraction=1.2, stretches=(0.6, 1.4)
         ),
-        TearMatcherConfig(resampled_bins=17, max_shift_fraction=0, stretches=(1.0,)),
+        EarProfileSimilarityConfig(resampled_bins=17, max_shift_fraction=0, stretches=(1.0,)),
     ],
 )
-def test_bulk_matches_original_forward_search(config: TearMatcherConfig) -> None:
+def test_bulk_matches_original_forward_search(config: EarProfileSimilarityConfig) -> None:
     """Ragged profiles and custom grids retain directional numerical behavior."""
     rng = np.random.default_rng(42)
     query = rng.uniform(-0.02, 0.1, 73)
     candidates = [rng.uniform(-0.03, 0.1, n) for n in (1, 15, 73, 720)]
     candidates.append(np.zeros(29))
-    actual = TearMatcher(config).match_many(query, candidates)
+    actual = EarProfileSimilarity(config).compare_many(query, candidates)
     for candidate, match in zip(candidates, actual, strict=True):
         score, stretch, shift = _forward_reference(query, candidate, config)
         assert match.score == pytest.approx(score, abs=2e-15)
@@ -155,7 +158,7 @@ def test_bulk_chunking_preserves_order_and_does_not_mutate_inputs(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Chunk boundaries leave scores, ordering, and caller-owned arrays unchanged."""
-    import elephant_id.matching.tear_matcher as module
+    import elephant_id.matching.alphaphant.similarity as module
 
     rng = np.random.default_rng(12)
     query = rng.random(720)
@@ -163,26 +166,26 @@ def test_bulk_chunking_preserves_order_and_does_not_mutate_inputs(
     original = candidates.copy()
     query.setflags(write=False)
     candidates.setflags(write=False)
-    matcher = TearMatcher()
-    expected = matcher.match_many(query, candidates)
+    matcher = EarProfileSimilarity()
+    expected = matcher.compare_many(query, candidates)
     monkeypatch.setattr(module, "_OVERLAP_WORKSPACE_BYTES", 1)
-    assert matcher.match_many(query, candidates) == expected
+    assert matcher.compare_many(query, candidates) == expected
     np.testing.assert_array_equal(candidates, original)
-    assert matcher.match(query, candidates[0]) == expected[0]
+    assert matcher.compare(query, candidates[0]) == expected[0]
 
 
 def test_bulk_empty_and_zero_profiles() -> None:
     """Empty catalogs and zero-overlap profiles have explicit neutral results."""
-    matcher = TearMatcher(TearMatcherConfig(stretches=(0.8, 1.2)))
-    assert matcher.match_many(np.ones(9), ()) == ()
-    matches = matcher.match_many(np.zeros(12), [np.zeros(9), np.ones(7)])
+    matcher = EarProfileSimilarity(EarProfileSimilarityConfig(stretches=(0.8, 1.2)))
+    assert matcher.compare_many(np.ones(9), ()) == ()
+    matches = matcher.compare_many(np.zeros(12), [np.zeros(9), np.ones(7)])
     assert [(m.score, m.stretch, m.shift_bins) for m in matches] == [(0.0, 1.0, 0)] * 2
 
 
 def test_positive_alignment_ties_preserve_configured_search_order() -> None:
     """Equivalent positive alignments retain the first configured stretch."""
-    config = TearMatcherConfig(
+    config = EarProfileSimilarityConfig(
         resampled_bins=9, stretches=(1.2, 1.1), max_shift_fraction=0
     )
-    match = TearMatcher(config).match(np.ones(9), np.ones(9))
+    match = EarProfileSimilarity(config).compare(np.ones(9), np.ones(9))
     assert (match.score, match.stretch, match.shift_bins) == (1.0, 1.2, 0)

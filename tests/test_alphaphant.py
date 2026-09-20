@@ -3,29 +3,26 @@
 import math
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import cast
 from uuid import UUID
 
 import numpy as np
 import pytest
 
 import elephant_id.matching as public_matching
-from elephant_id.analysis import (
-    EarAnalysis,
-    EarSide,
-    SightingAnalysis,
-    SightingAnalyzer,
-    TearProfile,
-)
 from elephant_id.domain import Photo, SightingEarPair
 from elephant_id.image.boxes import BoundingBox
-from elephant_id.matching import (
-    AlphaPhant,
-    CandidateKey,
-    CandidateScores,
-    CatalogMatcher,
+from elephant_id.matching import CandidateKey, CandidateScores, CatalogMatcher
+from elephant_id.matching.alphaphant import AlphaPhant
+from elephant_id.matching.alphaphant.extraction import (
+    AnalyzedEar,
+    AnalyzedSightingEarPair,
+    TearProfile,
 )
-from elephant_id.matching.tear_matcher import TearMatch, TearMatcher
+from elephant_id.matching.alphaphant.similarity import (
+    EarComparison,
+    EarProfileSimilarity,
+)
+from elephant_id.preparation import EarSide, PreparedEar
 
 
 def _uuid(value: int) -> UUID:
@@ -43,9 +40,9 @@ def _pair(value: int) -> SightingEarPair:
     )
 
 
-def _ear(value: int, side: EarSide, depths: list[float]) -> EarAnalysis:
+def _ear(value: int, side: EarSide, depths: list[float]) -> AnalyzedEar:
     """Return one analyzed ear with deterministic neutral provenance."""
-    return EarAnalysis(
+    return AnalyzedEar(
         source_photo=Photo(
             photo_id=_uuid(value),
             sighting_id=_uuid(value + 1000),
@@ -56,42 +53,68 @@ def _ear(value: int, side: EarSide, depths: list[float]) -> EarAnalysis:
     )
 
 
-def _analysis(value: int, left: list[float], right: list[float]) -> SightingAnalysis:
+def _analysis(value: int, left: list[float], right: list[float]) -> AnalyzedSightingEarPair:
     """Return one analyzed two-sided sighting."""
-    return SightingAnalysis(
+    return AnalyzedSightingEarPair(
+        sighting_id=_uuid(value + 1000),
         left=_ear(value, "left", left),
         right=_ear(value + 1, "right", right),
     )
 
 
-class RecordingAnalyzer:
-    """Return controlled analyses while recording neutral pair inputs."""
+class RecordingPreparation:
+    """Supply prepared ears and controlled extraction through the real analysis path."""
+
+    producer_slug = None
 
     def __init__(
-        self,
-        analyses: Mapping[SightingEarPair, SightingAnalysis],
+        self, analyses: Mapping[SightingEarPair, AnalyzedSightingEarPair]
     ) -> None:
-        """Initialize the analyzer with one result per neutral pair."""
+        """Associate each source pair with its controlled profiles."""
         self._analyses = analyses
         self.calls: list[SightingEarPair] = []
+        self._profiles: dict[tuple[Photo, EarSide], TearProfile] = {}
 
-    def analyze(self, pair: SightingEarPair) -> SightingAnalysis:
-        """Record and return the analysis for `pair`."""
+    def prepare(self, pair: SightingEarPair) -> tuple[PreparedEar, PreparedEar]:
+        """Record preparation and return valid geometry for both declared ears."""
         self.calls.append(pair)
-        return self._analyses[pair]
+        analysis = self._analyses[pair]
+        ears = []
+        for photo, analyzed, side in (
+            (pair.left_photo, analysis.left, "left"),
+            (pair.right_photo, analysis.right, "right"),
+        ):
+            self._profiles[photo, side] = analyzed.tear_profile
+            ears.append(
+                PreparedEar(
+                    source_photo=photo,
+                    source_box=analyzed.source_box,
+                    contour=np.asarray([[0.0, 0.0], [2.0, 2.0], [0.0, 4.0]]),
+                    original_landmarks=((0.0, 0.0), (0.0, 4.0)),
+                    contour_anchors=((0.0, 0.0), (0.0, 4.0)),
+                    inferred_side=side,
+                    cleaned_area=4.0,
+                )
+            )
+        return ears[0], ears[1]
+
+    def extract(self, ear: PreparedEar) -> TearProfile:
+        """Return the controlled profile for a prepared source and side."""
+        return self._profiles[ear.source_photo, ear.inferred_side]
 
 
 def _alphaphant(
-    analyses: Mapping[SightingEarPair, SightingAnalysis],
-) -> tuple[AlphaPhant, RecordingAnalyzer]:
-    """Return AlphaPhant with a controlled recording analyzer."""
-    analyzer = RecordingAnalyzer(analyses)
+    analyses: Mapping[SightingEarPair, AnalyzedSightingEarPair],
+) -> tuple[AlphaPhant, RecordingPreparation]:
+    """Compose actual AlphaPhant orchestration with controlled numerical inputs."""
+    preparation = RecordingPreparation(analyses)
     return (
         AlphaPhant(
-            analyzer=cast(SightingAnalyzer, analyzer),
-            tear_matcher=TearMatcher(),
+            prepare_ears=preparation.prepare,
+            profile_extractor=preparation,
+            ear_similarity=EarProfileSimilarity(),
         ),
-        analyzer,
+        preparation,
     )
 
 
@@ -162,9 +185,7 @@ def test_alphaphant_analyzes_neutral_catalog_and_returns_candidate_scores() -> N
 def test_alphaphant_returns_empty_scores_for_empty_catalog() -> None:
     """An empty catalog produces a complete empty score mapping."""
     query = _pair(10)
-    alphaphant, analyzer = _alphaphant(
-        {query: _analysis(100, [0.0, 0.1, 0.0], [0.0, 0.2, 0.0])}
-    )
+    alphaphant, analyzer = _alphaphant({query: _analysis(100, [0.0, 0.1, 0.0], [0.0, 0.2, 0.0])})
 
     assert alphaphant.match(query, {}) == {}
     assert analyzer.calls == [query]
@@ -235,9 +256,7 @@ def test_alphaphant_scores_do_not_depend_on_call_history() -> None:
 def test_alphaphant_rejects_empty_candidate_evidence() -> None:
     """A listed candidate must contain at least one sighting ear pair."""
     query = _pair(10)
-    alphaphant, _ = _alphaphant(
-        {query: _analysis(100, [0.0, 0.1, 0.0], [0.0, 0.2, 0.0])}
-    )
+    alphaphant, _ = _alphaphant({query: _analysis(100, [0.0, 0.1, 0.0], [0.0, 0.2, 0.0])})
     candidate_key = CandidateKey(_uuid(500))
 
     with pytest.raises(
@@ -294,10 +313,10 @@ def test_alphaphant_compares_only_corresponding_sides() -> None:
 def test_matching_package_exports_only_public_catalog_interface() -> None:
     """Matching internals remain importable only from their implementation modules."""
     assert public_matching.__all__ == [
-        "AlphaPhant",
         "CandidateKey",
         "CandidateScores",
         "CatalogMatcher",
+        "MatchingError",
     ]
 
 
@@ -309,20 +328,20 @@ def test_alphaphant_batches_all_candidates_by_side(
     query_analysis = _analysis(100, [0, 0.1, 0], [0, 0.2, 0])
     first_analysis = _analysis(200, [0, 0.1, 0], [0, 0, 0])
     second_analysis = _analysis(300, [0, 0, 0], [0, 0.2, 0])
-    alphaphant, _ = _alphaphant(
-        {query: query_analysis, first: first_analysis, second: second_analysis}
-    )
+    alphaphant, _ = _alphaphant({query: query_analysis, first: first_analysis, second: second_analysis})
     calls: list[tuple[np.ndarray, tuple[np.ndarray, ...]]] = []
-    original = TearMatcher.match_many
+    original = EarProfileSimilarity.compare_many
 
     def record(
-        self: TearMatcher, profile: np.ndarray, candidates: tuple[np.ndarray, ...]
-    ) -> tuple[TearMatch, ...]:
+        self: EarProfileSimilarity,
+        profile: np.ndarray,
+        candidates: tuple[np.ndarray, ...],
+    ) -> tuple[EarComparison, ...]:
         """Record each bulk call while executing the real matcher."""
         calls.append((profile, candidates))
         return original(self, profile, candidates)
 
-    monkeypatch.setattr(TearMatcher, "match_many", record)
+    monkeypatch.setattr(EarProfileSimilarity, "compare_many", record)
     first_key, second_key = CandidateKey(_uuid(500)), CandidateKey(_uuid(501))
     scores = alphaphant.match(query, {first_key: (first,), second_key: (second,)})
     assert len(calls) == 2
@@ -330,6 +349,4 @@ def test_alphaphant_batches_all_candidates_by_side(
     assert calls[1][0] is query_analysis.right.tear_profile.depths
     assert all(len(candidates) == 2 for _, candidates in calls)
     assert scores == pytest.approx({first_key: 0.5, second_key: 0.5})
-    assert (
-        alphaphant.match(query, {second_key: (second,), first_key: (first,)}) == scores
-    )
+    assert (alphaphant.match(query, {second_key: (second,), first_key: (first,)}) == scores)

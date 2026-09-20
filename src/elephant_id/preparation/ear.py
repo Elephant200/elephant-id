@@ -1,4 +1,4 @@
-"""Prepare segmented ears for AlphaTear extraction."""
+"""Prepare segmented ears for matching."""
 
 from dataclasses import dataclass
 from typing import Literal
@@ -99,7 +99,7 @@ def prepare_ear(
     source_photo: Photo,
     source_box: BoundingBox,
 ) -> PreparedEar:
-    """Prepare one segmented ear and its detected landmarks for AlphaTear."""
+    """Prepare one segmented ear and its detected landmarks for matching."""
     if ear_detection.rle_mask is None:
         raise ValueError("Ear preparation requires a segmentation mask")
     if landmark_detection.keypoints is None or len(landmark_detection.keypoints) != 2:
