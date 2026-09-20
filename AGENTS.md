@@ -38,9 +38,9 @@ After Python changes, run `uv run ruff check .` and relevant tests. `legacy` is 
 
 - **domain** owns neutral immutable `Photo`, `Sighting`, and `SightingEarPair` values with permanent opaque UUID identity.
 - **dataset** owns private metadata and known-elephant resolution; its **PhotoStore** resolves a `Photo` to original encoded bytes without exposing identity.
-- **analysis** owns sighting analysis, ear preparation, and AlphaTear profile extraction.
+- **preparation** owns shared sighting-ear preparation and immutable prepared geometry.
 - **inference** owns swappable implementations of ear localization, ear segmentation, and ear landmark detection.
-- **matching** owns tear-profile similarity and catalog matching. Its public `CatalogMatcher` interface returns candidate scores; ranking is a derived view.
+- **matching** owns the public `CatalogMatcher` contract. Its **alphaphant** package owns sighting analysis, AlphaTear extraction, numerical similarity, and catalog matching; ranking is a derived view.
 - **evaluation** owns implementation-independent identity-retrieval evaluation.
 - **image** owns encoded-byte decoding, BGR images, and basic + universal geometry utilities.
 
@@ -52,6 +52,7 @@ Keep interfaces narrow and justified by current variation. Catalog matchers rece
 - Give every package, module, class, function, and method a concise accurate Google-style docstring. Code in docstrings uses single backticks.
 - Add `Args`, `Returns`, `Yields`, or `Raises` sections only when they clarify a non-obvious interface. Document validation errors that are part of the interface.
 - Prefer clear names and structure over comments. Comment only non-trivial reasoning.
+- Use roughly 120+ characters as a line-length guide; wrap for readability rather than adding parentheses solely to meet a narrow limit.
 - Use `loguru` for logging. Library code never configures logging; entry points call `elephant_id.log.configure_logging` once.
 - Log identifiers, counts, durations, and cache hits at appropriate levels. Never log credentials or raw image and mask buffers.
 - Avoid over-engineering by making unnecessary abstractions or defensive guards that you don't need. Never hesitate to ask when in doubt.
@@ -72,7 +73,7 @@ Keep interfaces narrow and justified by current variation. Catalog matchers rece
 - Use the permanent photo UUID directly for photo-level source identity. Add only actual dependent inputs such as crop coordinates; keep keys readable rather than hashing them again.
 - A `producer_slug` carries model, weight, prompt, preprocessing, threshold, configuration, and algorithm identity. Any output-changing change gets a new immutable slug; those settings do not enter cache keys.
 - Keep writes atomic and validate producer payloads on load.
-- Select caching only through composition: inject a cached decorator or the raw processor. Analyzers and catalog matchers expose no cache-policy flags.
+- Select caching only through composition: inject a cached decorator or the raw processor. Preparation and catalog matchers expose no cache-policy flags.
 - Cache the complete SAM3 multi-feature computation before adapting it to the ear-only segmentation protocol. Cache landmark records in full-image coordinates.
 - Preserve SAM3 body and complete multi-feature outputs and leave heuristic records untouched. Landmark records may be replaced when their coordinate contract changes. Age and gender records may be removed.
 

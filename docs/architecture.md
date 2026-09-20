@@ -1,163 +1,69 @@
 # Architecture
 
-AlphaPhant is a research implementation of a fully automated elephant re-identification algorithm. Its current scope begins with a sighting ear pair and ends with one similarity score per known elephant. A candidate ranking is a derived view of those scores. The future application shares its neutral photo and sighting model; see [reference/application.md](reference/application.md).
+AlphaPhant accepts a sighting ear pair and a candidate catalog. It returns one finite similarity score per candidate. Ranking sorts these scores in descending order.
 
-## Design Priorities
+## Ownership
 
-- Keep the research pipeline small, explicit, and testable.
-- Use permanent opaque photo and sighting identity throughout the system.
-- Separate neutral domain objects, image storage, and identity-aware research metadata.
-- Preserve tear-profile extraction and matching behavior during restructuring.
-- Put model variation behind semantic inference interfaces.
-- Keep identity-retrieval evaluation independent of catalog-matcher implementation.
-- Cache expensive computation and final reusable tear profiles, not orchestration.
+| Package | Responsibility |
+| --- | --- |
+| `domain` | Immutable `Photo`, `Sighting`, and `SightingEarPair` values with permanent UUID identity |
+| `dataset` | Private metadata, known-elephant identity, and the image-only `PhotoStore` |
+| `image` | Encoded-byte decoding to BGR images and shared image geometry |
+| `inference` | Ear segmentation and full-image ear landmarks |
+| `preparation` | Resolved left/right ears and immutable prepared geometry |
+| `matching` | Shared catalog contract; AlphaPhant analysis, extraction, comparison, and scoring |
+| `evaluation` | Benchmark validation, splits, ground truth, failure records, ranks, and metrics |
 
-## Responsibilities
+`PhotoStore.read(photo)` returns original encoded bytes. Composition passes the PhotoStore to preparation. AlphaPhant receives the preparation callable, neutral sighting pairs, and a candidate catalog. It does not receive the identity-aware Dataset.
 
-**Domain** owns the neutral immutable values shared across the system:
-
-- `Photo` carries a UUIDv4 photo ID and its parent sighting ID;
-- `Sighting` carries a UUIDv4 sighting ID, a required sighting date, and distinct Photos;
-- `SightingEarPair` carries a sighting ID and one Photo per declared side. Both Photos belong to that sighting, and one Photo may serve both sides.
-
-**Dataset** is the private research dataset object. It constructs and resolves domain objects, owns known-elephant metadata, and owns a filesystem-backed PhotoStore. Catalog matchers never receive the Dataset.
-
-**PhotoStore** owns retrieval of original encoded bytes through `read(photo: Photo) -> bytes`. It uses `photo.photo_id` for lookup and does not expose a known-elephant resolver method.
-
-**Image** owns `decode_image(encoded: bytes) -> BgrImage` and BGR image and basic/universal geometry utilities.
-
-**Analysis** owns sighting analysis, immutable prepared-ear geometry, and AlphaTear profile extraction. A prepared ear retains both the original floating-point landmarks used by AlphaTear and the contour-snapped anchors used to delimit its contour.
-
-**Inference** owns implementations of ear localization and segmentation and ear landmark detection. Analysis depends on these semantic capabilities rather than particular model architectures.
-
-**Matching** owns tear-profile matching and catalog matching. Its public `CatalogMatcher` interface, `CandidateKey`, and `CandidateScores` types live in `matching`; evaluation is a consumer of that seam. `CatalogMatcher.match` accepts a sighting ear pair and candidate catalog and returns one similarity float per candidate. A matcher is fully composed with storage, processing, caching, and configuration dependencies before a caller receives it. AlphaPhant is the concrete catalog matcher; candidate ranking is derived from its scores.
-
-A candidate catalog is exposed directly as a read-only mapping from opaque candidate key to a tuple of SightingEarPair evidence. Mapping and tuple order carry no meaning. Catalog matchers own all implementation-specific preparation and grouping below that seam; there is no custom catalog wrapper or catalog-access interface.
-
-`CandidateKey` is a UUID-backed distinct type. `CandidateScores` is a read-only mapping from candidate key to float whose key set exactly matches the input catalog. Every score is finite, larger means a stronger match, no universal numeric range is promised, and mapping order carries no meaning. Errors propagate instead of returning partial scores.
-
-Catalog matching is logically stateless: a result depends on the query, candidate catalog, composed configuration, and source photo bytes, never on earlier `match` calls. Identity-neutral caches may change performance but not behavior. Each call to `evaluate` generates one fresh opaque key assignment and may reuse those keys across its query folds; the trusted matcher interface is not an adversarial sandbox.
-
-**Evaluation** owns the parsed benchmark manifest, Dataset cross-reference validation, private ground truth, candidate keys, splits, structured failure accounting, derived ranks, and metrics. `evaluate` receives the benchmark, identity-aware Dataset, and an already-composed catalog matcher; only neutral sighting ear pairs and opaque candidate keys cross the matcher seam defined in [evaluation.md](evaluation.md#evaluation-seam).
-
-`CatalogMatcher.match` stays fixed across complete retrieval systems. AlphaPhant experiments replace internal profile-comparison or catalog-aggregation modules through construction rather than adding flags to `match`. A future AlphaPhant-specific result may expose winning evidence and alignments, but it must reuse the same underlying matching computation as the generic candidate scores.
-
-**CacheManager** persists JSON records under stable processor slugs and caller-supplied input keys. Thin stage decorators own keys and typed serialization while preserving processor behavior and identity.
-
-## Processing Module Shape
-
-Processing code is organized by capability rather than generic implementation
-buckets:
+## Module Boundaries
 
 ```text
-analysis/
-  analyzer.py
-  ear_preparation.py
-  tear_profile.py
-  profile_extraction/
-    protocol.py
-    alpha_tear.py
-    cached.py
-
-inference/
-  detection.py
-  segmentation/
-    protocol.py
-    sam3/
-      features.py
-      cached.py
-      ear_segmenter.py
-  landmarks/
-    protocol.py
-    yolo.py
-    cached.py
+preparation/
+  ear.py             PreparedEar and contour geometry
+  sighting.py        SightingPreparer
+matching/
+  protocol.py        CatalogMatcher and MatchingError
+  alphaphant/
+    extraction.py    TearProfile, analyzed values, protocol, and AlphaTear
+    similarity.py    EarProfileSimilarity and EarComparison
+    cached.py        Profile persistence
+    matcher.py       AlphaPhant.analyze and AlphaPhant.match
+composition.py       Construct preparation and AlphaPhant
 ```
 
-`PreparedEar` is the single semantic intermediate between inference and
-profile extraction. It is immutable and contains the source Photo and raster
-box, original detector landmarks, snapped contour anchors, a finite full-image
-contour running between those anchors, inferred side, and positive cleaned
-area. `TearProfile` contains only immutable normalized one-dimensional depths.
-AlphaTear configurations expose intentional research parameters; numerical
-implementation constants remain private.
+Composition constructs AlphaPhant with a preparation callable, one extractor, and one comparator. Preparation uses storage, domain, image, and inference interfaces. Preparation and evaluation use `MatchingError` from `matching.protocol`. This protocol imports no concrete matcher.
 
-A settled AlphaTear configuration and its producer slug travel together as one
-colocated `AlphaTearVersion`. Experimental tuning passes a raw
-`AlphaTearConfig` and therefore has no persistent producer slug.
+The `matching` package exports the shared contract. Import AlphaPhant from `matching.alphaphant`.
 
-## Data and Identity
+## Analysis and Scoring
 
-`photo_id` permanently identifies one immutable original photo asset. Replacing or re-encoding its original bytes creates a new photo ID. Photo IDs are only generated upon import in the application context; they are never generated in the research context.
+`SightingPreparer.prepare` resolves both ears and returns them in left, right order. When both sides use one Photo, preparation processes it once. Left-side resolution precedes preparation of a distinct right Photo. Both sides must resolve before extraction starts.
 
-`sighting_id` permanently identifies one observed event independently of elephant identity, date, or photo identity. A Sighting contains unique Photos whose `sighting_id` matches its own.
+`PreparedEar` contains the source Photo, raster box, full-image contour, original detector landmarks, snapped contour anchors, inferred side, and cleaned area. Its contour is finite and read-only. Its area is positive. Original landmarks define the extraction frame; snapped anchors delimit the contour.
 
-Both IDs are UUIDv4 values represented as UUIDs in Python and standard UUID strings in metadata. They encode no names, dates, paths, or parent-child structure.
+`AlphaPhant.analyze` returns an immutable `AnalyzedSightingEarPair`. It retains the input sighting ID and two `AnalyzedEar` values. Each ear contains its Photo, side, raster box, and one signed `TearProfile`. Profile depths are finite, one-dimensional, and read-only.
 
-The research dataset uses one metadata file with this shape:
+`AlphaPhant.match` analyzes the query and references before comparison. It preserves candidate membership and reference order through batching. It compares corresponding sides, selects each candidate's strongest reference for each side, and averages the two scores. Each comparison retains its reference source and query alignment. See [pipeline.md](pipeline.md).
 
-```
-photo_id,sighting_id,date,name,image_path
-```
+The catalog is a mapping from opaque `CandidateKey` values to tuples of `SightingEarPair` evidence. Each candidate requires at least one pair. `CandidateScores` has exactly the catalog's keys and finite values. Larger scores indicate stronger matches. Errors stop scoring; no partial result is returned.
 
-Dataset owns the complete metadata. Its PhotoStore receives only the `photo_id -> image_path` mapping. Paths remain private storage metadata; code resolves known-elephant identity from Dataset metadata rather than parsing paths or filenames.
+Preparation and extraction failures use `MatchingError`. It records the Photo ID, declared side, and stage, and retains the original exception as its cause. A failure while processing a shared Photo before side resolution belongs to the left side. Evaluation adds the query and evidence role. See [evaluation.md](evaluation.md).
 
-The assigned photo and sighting IDs are permanent data artifacts and are preserved with the dataset.
+## Identity and Image Coordinates
 
-## Runtime Data Flow
+A Photo ID identifies one immutable original photo asset. New original bytes require a new Photo ID. A sighting ID identifies one observed event. Photos in a sighting ear pair belong to that sighting. Dataset metadata owns paths, dates, and known-elephant names.
 
-```
-SightingEarPair + PhotoStore
-  -> encoded bytes for each Photo
-  -> decode_image to BgrImage
-  -> ear localization and segmentation
-  -> ear landmark detection
-  -> immutable prepared ear
-  -> AlphaTear profile for each side
-  -> same-side matching against catalog evidence
-  -> strongest left and right evidence per candidate
-  -> one similarity score per candidate
-```
+Inference results and prepared geometry use full-image coordinates. Float boxes use half-open `xyxy` bounds. Raster conversion floors lower edges, rounds upper edges up, and clips to the image. YOLO crop coordinates are translated before they cross the landmark interface or enter a cache.
 
-## Inference Seams
+## Caches and Configuration
 
-Sighting analysis depends on three semantic processing capabilities:
+`CacheManager` owns JSON storage, safe paths, and atomic writes. Cache decorators own keys, serialization, and payload validation.
 
-- an `EarSegmenter` produces only ear masks and locations from a full BGR image;
-- an `EarLandmarkDetector` returns the strongest upper/lower landmark detection, or `None` when a crop contains no ordinary detection;
-- a `TearProfileExtractor` transforms one immutable prepared ear into a reusable tear profile.
+A producer slug identifies all settings that affect output. An output change requires a new slug. A settled `AlphaTearVersion` contains a slug and immutable `AlphaTearConfig`. A raw experimental configuration has no persistent producer slug. The extractor resolves either input at construction.
 
-SAM3 currently supplies ear localization and segmentation. Its expensive reusable computation returns every requested feature class, so that full multi-feature computation is cached before a thin semantic adapter filters it to ears exactly once. The current YOLO keypoint model supplies ear landmarks. Future implementations remain behind the same semantic interfaces.
+Inference keys use the Photo UUID and any dependent crop coordinates. SAM3 caches its complete multi-feature output before the ear-only adapter. Landmark records use full-image coordinates. Profile keys contain the Photo UUID, raster box, inferred side, segmentation slug, and landmark slug. Geometry changes that affect profiles require a new extraction slug.
 
-Technical writing uses ear landmark detection for model output. Prepared-ear code distinguishes the original detector `landmarks`, which define AlphaTear's polar frame, from contour-snapped `anchors`, which delimit the prepared contour.
+Standard composition caches inference and settled profiles. Experimental extraction uses the inference caches but does not read or write profile records. Preparation and matching expose no cache-policy flags.
 
-Model detections retain floating-point full-image geometry. Raster crops use an immutable integer `BoundingBox` with half-open coordinates, produced by flooring lower edges, ceiling upper edges, and clipping to the image. Public inference results, landmark cache records, and prepared-ear geometry all use full-image coordinates; crop-relative YOLO output is translated before it crosses the landmark processor interface or is persisted.
-
-## Cache Architecture
-
-One generic CacheManager persists records for every producer. It owns safe paths, JSON loading, atomic replacement, and obvious-corruption handling; it does not select whether a processing stage is cached or understand processor payloads.
-
-Each settled deterministic processor exposes a stable human-readable `producer_slug` identifying the model, weights, prompt, preprocessing, thresholds, and every other output-changing setting. An output-changing processor change gets a new slug; ordinary refactoring does not. An experimental AlphaTear extractor may remain unversioned because parameter-tuning composition never persists its output. Cached decorators delegate the same slug as their wrapped processors and add only persistence behavior.
-
-Keys contain only runtime input identity and actual dependent inputs. They remain readable:
-
-```
-sam3-features/<photo UUID>
-yolo26n-keypoints-v1/<photo UUID>__crop_<x1>_<y1>_<x2>_<y2>
-```
-
-The SAM3 record contains the complete multi-feature result on both hits and misses; only its downstream ear adapter filters classes. Landmark records contain full-image-relative output. Final AlphaTear keys contain the source photo UUID, integer raster box, prepared ear's inferred side, segmentation producer slug, and landmark producer slug. They do not hash the derived contour or carry separate ear-preparation provenance. A material preparation or extraction change bumps the settled AlphaTear slug.
-
-CacheManager namespaces and safely stores caller-supplied keys; it does not hash keys, read photos, resolve Dataset metadata, or understand producer payloads. Cached decorators construct keys, serialize typed outputs to JSON, parse JSON back to typed outputs, and validate their own records.
-
-Standard construction caches SAM3's full feature computation, landmark detection, and settled AlphaTear extraction. Parameter-tuning construction injects a raw experimental AlphaTear extractor, bypassing profile reads and writes while retaining cached SAM3 features and landmark detection. CacheManager has no permission or tuning modes. Sighting analysis and catalog matching are unaware of cache policy.
-
-When one source Photo supplies both declared sides, it is prepared on the first
-side encountered and then reused. A retrieval, decoding, inference, or
-preparation failure before side resolution is attributed to that first declared
-side; analysis processes left before right.
-
-Source paths and legacy identifiers are metadata, not cache identity. Existing cache records are migrated from legacy identifiers to photo UUIDs by joining the preserved original CSV and assigned CSV through unchanged image paths.
-
-## Unsupported Prototypes
-
-The existing `apps/` prototypes are historical and receive no compatibility guarantees. The API prototype is preserved on the `desktop-prototype` branch and removed from the active branch. Active modules do not retain legacy interfaces solely to keep prototypes runnable.
+AlphaPhant reuses completed analyses within one instance. Geometry and pair comparisons have no separate cache. Results depend on the supplied evidence and composed processors, not on earlier match calls.

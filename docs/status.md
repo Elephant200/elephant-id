@@ -1,19 +1,18 @@
 # Current Status
 
-AlphaPhant is mid-restructure: consolidating scattered prototypes into one locked research pipeline - sighting ear pair, AlphaTear profile extraction, tear-profile matching, and known-elephant candidate scoring - before any application work begins.
+AlphaPhant analyzes a sighting ear pair and returns one similarity score per catalog candidate. Research supplies one selected Photo for each ear.
 
-## Where This Is Going
+## Current Pipeline
 
-Research pipeline (now) -> identity-retrieval benchmark -> a future review-and-decision application. The application is not being built yet. The present goal is a small, tested, reproducible research pipeline for use in a rigorous publication.
+Shared preparation retrieves photos, runs ear segmentation and landmark detection, and resolves both ears. AlphaPhant extracts one signed tear profile per ear, compares corresponding sides, selects each candidate's strongest reference per side, and averages the two scores.
 
-## What Works Today
+SAM3 supplies segmentation. YOLO supplies landmarks. AlphaTear supplies profiles. Standard composition caches inference outputs and extracted profiles. Experimental extraction retains the inference caches.
 
-The numerical core already exists: SAM3 segmentation, YOLO ear-landmark detection, AlphaTear profile extraction, and directional tear-profile matching with catalog scoring.
+## Code and Documentation
 
-## What Is Being Removed
+The core packages are `domain`, `dataset`, `preparation`, `inference`, `matching`, `evaluation`, and `image`.
 
-Older directions are being cleared from the active path: SEEK coding and fixed-field domain objects; age, gender, body, trunk, tail, and tusk analysis; the general `PhotoAnalyzer`; identity-bearing identifiers; normalization and calibration layers; the synthetic-pair evaluator; and the API and application prototypes. New research code does not depend on these.
-
-## Target Shape
-
-Seven packages: `domain`, `dataset`, `analysis`, `inference`, `matching`, `evaluation`, `image`. Each package's responsibility is defined in [architecture.md](architecture.md#responsibilities), algorithm behavior in [pipeline.md](pipeline.md), and the benchmark in [evaluation.md](evaluation.md). Step-by-step implementation lives in the separate spec.
+- [Architecture](architecture.md): ownership, dependencies, and caches.
+- [Pipeline](pipeline.md): extraction and scoring.
+- [Evaluation](evaluation.md): identity-retrieval evaluation.
+- [Context](context.md): terms and definitions.

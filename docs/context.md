@@ -68,6 +68,14 @@ _Avoid_: Ranking, probabilities, confidence labels
 The processing of a sighting ear pair into left- and right-ear tear profiles for catalog matching.
 _Avoid_: Per-photo identification, SEEK coding
 
+**Analyzed ear**:
+One ear's extracted tear profile together with its anatomical side, source photo, and source box.
+_Avoid_: Ear representation, ear profile when referring to the source-labelled result
+
+**Analyzed sighting ear pair**:
+The analyzed counterpart of a sighting ear pair, retaining its sighting ID and its left and right analyzed ears.
+_Avoid_: Sighting representations, identity decision
+
 **Ear localization**:
 The determination of where a left or right ear appears in a photo.
 _Avoid_: Ear segmentation when referring only to location
