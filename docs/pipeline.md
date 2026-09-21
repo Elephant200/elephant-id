@@ -31,18 +31,9 @@ SAM3 currently performs ear localization and segmentation. A YOLO keypoint model
 
 ## Tear-Profile Extraction
 
-AlphaTear resamples the prepared contour and derives its radius from cleaned ear area.
-Morphological opening, controlled by `morph_opening_fraction`, supplies a contour for
-building the alpha-shape reference. The resampled, unopened contour remains the
-measured contour.
+AlphaTear resamples the prepared contour and derives its radius from cleaned ear area. Morphological opening supplies a contour for building the alpha-shape reference. The resampled, unopened contour remains the measured contour.
 
-Original detector landmarks define the polar frame. Rays at the retained profile
-angles locate origins on the reference boundary; local inward normals determine
-which direction to measure from each origin to the measured contour. Signed nearest
-crossing distances are divided by the area-derived radius, smoothed, and placed on
-the full angular grid. Trimmed bins and missing-origin bins stay zero. Snapped
-contour anchors delimit the prepared contour; they do not replace detector landmarks
-in the polar frame.
+Original detector landmarks define the polar frame. Rays at the retained profile angles locate origins on the reference boundary; local inward normals determine which direction to measure from each origin to the measured contour. Signed nearest crossing distances are divided by the area-derived radius, smoothed, and placed on the full angular grid. Trimmed bins and missing-origin bins stay zero. Snapped contour anchors delimit the prepared contour; they do not replace detector landmarks in the polar frame.
 
 ## Tear-Profile Matching
 

@@ -9,14 +9,14 @@ AlphaPhant accepts a sighting ear pair and a candidate catalog. It returns one f
 | `domain` | Immutable `Photo`, `Sighting`, and `SightingEarPair` values with permanent UUID identity |
 | `dataset` | Private metadata, known-elephant identity, and the image-only `PhotoStore` |
 | `image` | Encoded-byte decoding to BGR images and shared image geometry |
-| `inference` | Ear segmentation and full-image ear landmarks |
-| `preparation` | Resolved left/right ears and immutable prepared geometry |
-| `matching` | Shared catalog contract; AlphaPhant analysis, extraction, comparison, and scoring |
+| `inference` | Ear segmentation, ear localization, ear landmark detection models |
+| `preparation` | Left/right ear determination and prepared geometry -> contour |
+| `matching` | Shared catalog contract; AlphaPhant analysis, extraction, comparison, and scoring; CurvRank and MiewID implementations |
 | `evaluation` | Benchmark validation, splits, ground truth, failure records, ranks, and metrics |
 
-`PhotoStore.read(photo)` returns original encoded bytes. Composition passes the PhotoStore to preparation. AlphaPhant receives the preparation callable, neutral sighting pairs, and a candidate catalog. It does not receive the identity-aware Dataset.
+AlphaPhant receives the preparation callable, neutral sighting pairs, and a candidate catalog. It does not receive the identity-aware Dataset.
 
-## Module Boundaries
+## AlphaPhant Core Algorithm Module Boundaries
 
 ```text
 preparation/
@@ -32,11 +32,7 @@ matching/
 composition.py       Construct preparation and AlphaPhant
 ```
 
-Composition constructs AlphaPhant with a preparation callable, one extractor, and one comparator. Preparation uses storage, domain, image, and inference interfaces. Preparation and evaluation use `MatchingError` from `matching.protocol`. This protocol imports no concrete matcher.
-
-The `matching` package exports the shared contract. Import AlphaPhant from `matching.alphaphant`.
-
-## Analysis and Scoring
+## Extraction and Scoring
 
 `SightingPreparer.prepare` resolves both ears and returns them in left, right order. When both sides use one Photo, preparation processes it once. Left-side resolution precedes preparation of a distinct right Photo. Both sides must resolve before extraction starts.
 
@@ -44,7 +40,7 @@ The `matching` package exports the shared contract. Import AlphaPhant from `matc
 
 `AlphaPhant.analyze` returns an immutable `AnalyzedSightingEarPair`. It retains the input sighting ID and two `AnalyzedEar` values. Each ear contains its Photo, side, raster box, and one signed `TearProfile`. Profile depths are finite, one-dimensional, and read-only.
 
-`AlphaPhant.match` analyzes the query and references before comparison. It preserves candidate membership and reference order through batching. It compares corresponding sides, selects each candidate's strongest reference for each side, and averages the two scores. Each comparison retains its reference source and query alignment. See [pipeline.md](pipeline.md).
+`AlphaPhant.match` analyzes the query and references before comparison. It preserves candidate membership and reference order through batching. It compares corresponding sides, selects each candidate's strongest reference for each side, and averages the two scores. Each comparison retains its reference source and query alignment. See [pipeline.md](pipeline.md) for more.
 
 The catalog is a mapping from opaque `CandidateKey` values to tuples of `SightingEarPair` evidence. Each candidate requires at least one pair. `CandidateScores` has exactly the catalog's keys and finite values. Larger scores indicate stronger matches. Errors stop scoring; no partial result is returned.
 

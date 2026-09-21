@@ -1,6 +1,6 @@
 # Current Status
 
-AlphaPhant analyzes a sighting ear pair and returns one similarity score per catalog candidate. Research supplies one selected Photo for each ear.
+AlphaPhant is currently mid-restructure. Sloppy experimental changes were made on `optimized`, and they are now being carefully and deliberately transferred over to `main`. There may be a few documentation mismatches during this period. Consult the user when uncertain.
 
 ## Current Pipeline
 
