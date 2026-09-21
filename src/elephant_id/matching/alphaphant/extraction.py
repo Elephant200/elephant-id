@@ -369,20 +369,25 @@ class AlphaTearExtractor:
         """Return the settled slug, or none for an experimental configuration."""
         return self._producer_slug
 
-    def _depths(self, ear: PreparedEar, config: AlphaTearConfig) -> np.ndarray:
-        """Return signed, normalized depths in profile-angle order.
-
-        Set the depth to 0 for excluded angles or angles with no reference-boundary intersection.
+    def extract(self, ear: PreparedEar) -> TearProfile:
         """
-        measured_contour = _resample(ear.contour, config.contour_points)
+        Return a signed, normalized tear profile for the prepared ear.
+        
+        Args:
+            ear: The prepared ear to extract a tear profile from.
+
+        Returns:
+            A signed, normalized tear profile for the prepared ear.
+        """
+        measured_contour = _resample(ear.contour, self._config.contour_points)
         radius = float(np.sqrt(2.0 * ear.cleaned_area / np.pi))
-        shape_building_contour = _opened_contour(measured_contour, config.morph_opening_fraction * radius)
-        reference_shape = _alpha_shape(shape_building_contour, config.alpha_fraction * radius)
+        shape_building_contour = _opened_contour(measured_contour, self._config.morph_opening_fraction * radius)
+        reference_shape = _alpha_shape(shape_building_contour, self._config.alpha_fraction * radius)
         reference_boundary = np.asarray(reference_shape.exterior.coords)[:-1]
         reference_path = _densify(_ear_side_path(reference_boundary, shape_building_contour[0], shape_building_contour[-1]))
 
-        angles = np.linspace(0.0, 180.0, config.profile_bins)
-        sampled_bins = (angles > config.trim_degrees) & (angles < 180.0 - config.trim_degrees)
+        angles = np.linspace(0.0, 180.0, self._config.profile_bins)
+        sampled_bins = (angles > self._config.trim_degrees) & (angles < 180.0 - self._config.trim_degrees)
         upper = np.asarray(ear.original_landmarks[0], dtype=float)
         lower = np.asarray(ear.original_landmarks[1], dtype=float)
         polar_origin, polar_directions = _polar_directions(upper, lower, ear.inferred_side, angles[sampled_bins])
@@ -394,12 +399,8 @@ class AlphaTearExtractor:
             normals = _inward_normals(reference_path, reference_shape, valid_origins_xy)
             sampled_depths[valid_origins] = _nearest_crossing(valid_origins_xy, normals, measured_contour) / radius
 
-        depths = np.zeros(config.profile_bins)
-        smoothed = gaussian_filter1d(sampled_depths, sigma=config.smoothing_sigma)
+        depths = np.zeros(self._config.profile_bins)
+        smoothed = gaussian_filter1d(sampled_depths, sigma=self._config.smoothing_sigma)
         smoothed[~valid_origins] = 0.0
         depths[sampled_bins] = smoothed
-        return depths
-
-    def extract(self, ear: PreparedEar) -> TearProfile:
-        """Return a signed, normalized tear profile for the prepared ear."""
-        return TearProfile(self._depths(ear, self._config))
+        return TearProfile(depths)
