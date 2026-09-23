@@ -33,9 +33,8 @@ class AlphaPhant:
         self._extractor = profile_extractor
         self._profiles = cache(self._extract_profiles)
         self._matcher = TearMatcher()
-        self._similarities: dict[
-            tuple[SightingEarPair, SightingEarPair, EarSide], float
-        ] = {}
+        self._sighting_slots: dict[SightingEarPair, int] = {}
+        self._similarities: dict[tuple[int, int, EarSide], float] = {}
 
     def match(
         self,
@@ -75,9 +74,15 @@ class AlphaPhant:
         self,
         profiles_by_sighting: Mapping[SightingEarPair, tuple[SightingProfiles, ...]],
         side: EarSide,
+        evidence: Sequence[SightingEarPair],
     ) -> np.ndarray:
-        """Compute missing directional similarities in query batches."""
+        """Compare each source only to catalog evidence in directional batches."""
         pairs = tuple(profiles_by_sighting)
+        for pair in pairs:
+            if pair not in self._sighting_slots:
+                self._sighting_slots[pair] = len(self._sighting_slots)
+        sources = tuple((pair, self._sighting_slots[pair]) for pair in pairs)
+        targets = tuple((pair, self._sighting_slots[pair]) for pair in evidence)
         depths_by_sighting = {
             pair: tuple(
                 getattr(sighting_profile, side).tear_profile.depths
@@ -85,23 +90,26 @@ class AlphaPhant:
             )
             for pair, extracted in profiles_by_sighting.items()
         }
-        for first in pairs:
+        for first, first_slot in sources:
             missing = tuple(
-                second
-                for second in pairs
-                if (first, second, side) not in self._similarities
+                (second, second_slot)
+                for second, second_slot in targets
+                if (first_slot, second_slot, side) not in self._similarities
             )
             if missing:
                 scores = self._matcher.match_many(
                     depths_by_sighting[first],
-                    tuple(depths_by_sighting[second] for second in missing)
+                    tuple(depths_by_sighting[second] for second, _ in missing)
                 )
-                for second, value in zip(missing, scores, strict=True):
-                    self._similarities[first, second, side] = float(value)
+                for (_, second_slot), value in zip(missing, scores, strict=True):
+                    self._similarities[first_slot, second_slot, side] = float(value)
         return np.asarray(
             [
-                [self._similarities[first, second, side] for second in pairs]
-                for first in pairs
+                [
+                    self._similarities[first_slot, second_slot, side]
+                    for _, second_slot in targets
+                ]
+                for _, first_slot in sources
             ]
         )
 
@@ -118,10 +126,10 @@ class AlphaPhant:
         )
         slots = {pair: index for index, pair in enumerate(profiles_by_sighting)}
         catalog_rows = np.asarray([slots[pair] for pair in evidence])
-        similarities = self._side_matrix(profiles_by_sighting, side)
+        similarities = self._side_matrix(profiles_by_sighting, side, evidence)
         corrected = _correct_catalog(
-            similarities[slots[query], catalog_rows],
-            similarities[np.ix_(catalog_rows, catalog_rows)],
+            similarities[slots[query]],
+            similarities[catalog_rows],
         )
         spread = float(np.std(corrected))
         scores = dict(zip(evidence, corrected, strict=True))
@@ -142,7 +150,7 @@ def _correct_catalog(raw: np.ndarray, internal: np.ndarray) -> np.ndarray:
     neighbors = internal.copy()
     np.fill_diagonal(neighbors, -np.inf)
     count = min(_NEIGHBOR_COUNT, len(raw) - 1)
-    background = np.sort(neighbors, axis=1)[:, ::-1][:, :count].mean(axis=1)
+    background = np.partition(neighbors, -count, axis=1)[:, -count:].mean(axis=1)
     return 2.0 * raw - background
 
 

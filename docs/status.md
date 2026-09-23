@@ -1,25 +1,21 @@
 # Status
 
-The active seven-scale AlphaPhant method remains unchanged.
-The code uses one extractor, shared reference geometry, and one profile cache record per ear.
-The latest code checks passed 224 tests and Ruff. No commit was made.
+The active three-scale AlphaPhant method uses scales `0.35, 2, 10`, one shared
+alignment, square-root value compression, and the full search. It keeps contour
+opening and derives inward directions from reference edges. The code uses one
+extractor and one profile cache record per ear.
+The latest code checks passed 232 tests and Ruff. No commit was made.
 
 ## Current work
 
 - Completed expansion: 444 tuning pairs across 108 elephants; 448 benchmark pairs across 105 elephants.
 - Sol directed two Luna image reviewers. Image evidence overrode incorrect model fields.
 - Both original 300-pair manifests remain unchanged. Expanded sets have no shared elephant, sighting, or photo.
-- The fixed three-method comparison is complete. Two alpha scales are the preferred simplification for user review.
-- Keep the current method until the user reviews the new results and the accuracy/cost trade-off.
+- The three-scale benchmark is complete. The active method scores 366/448
+  first and 403/448 top five on the expanded benchmark.
+- Its accuracy limit is not established on independent elephants.
 
-On the expanded benchmark, seven scales score 361/448 top-1 and 403/448 top-5.
-Two alpha scales score 359/448 and 403/448. Alpha plus convex hull scores 358/448 and 403/448.
-Two alpha scales gain eight top-1 queries and lose ten against seven scales.
-The difference is -0.45 percentage points, with a 95% paired interval of [-2.36, 1.36].
-On tuning, seven scales score 362/444 top-1 and 405/444 top-5.
-Two alpha scales score 355/444 and 401/444.
-The active method remains unchanged. The observations do not establish equal accuracy.
-[Research](research.md) contains the experiment history, paired counts, limits, and evidence locations.
+[Research](reference/research.md) contains the earlier experiment history and preserved evidence.
 [Pipeline](pipeline.md) compares the current method with `main`.
 
 ## Future roadmap

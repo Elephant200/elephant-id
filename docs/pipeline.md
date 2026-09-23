@@ -7,20 +7,20 @@ The caller sorts these scores to obtain a ranking. AlphaPhant does not assign an
 ## Changes from main
 
 This comparison uses `main` at `6b522d5` and the current uncommitted source on `optimized`.
-It describes the active seven-scale method. The simpler two-reference methods remain experiments.
+It describes the active three-scale method. Other reference sets remain experiments.
 
 | Stage | `main` | Current method |
 |---|---|---|
 | Preparation interface | `SightingAnalyzer` owns preparation and profile extraction. | `SightingPreparer` owns preparation. Each matcher owns its representation. |
 | Extractor input | One prepared ear. | Same. |
-| Reference shapes | One alpha scale: `0.35`. | Seven scales: `0.11, 0.22, 0.50, 1.10, 2.50, 5.00, 12.00`. |
-| Extractor output | One immutable tear profile. | One ordered tuple of immutable tear profiles. |
-| Shared work | One reference requires one geometry calculation. | All references share contour resampling, opening, radius, and polar rays. |
+| Reference shapes | One alpha scale: `0.35`. | Three scales: `0.35, 2, 10`. |
+| Extractor output | One immutable tear profile. | One ordered tuple of three immutable tear profiles. |
+| Shared work | One reference requires one geometry calculation. | The three references share contour resampling, radius, and polar rays. |
 | Comparison channels | Nonnegative depth. | Depth plus separate rising and falling depth changes. |
-| Magnitude exponent | `0.50`. | `0.75`. |
+| Magnitude exponent | `0.50`. | `0.50`; restored after the benchmark audit. |
 | Angular weights | None. | Gaussian weights: center 120 degrees, width 35 degrees. |
 | Comparison grid | 240 bins. | Same. |
-| Stretch search | 0.80–1.20, step 0.025. | Same; scales share alignment within each channel. |
+| Stretch search | 0.80–1.20, step 0.025. | Full search; every scale and channel shares one alignment. |
 | Shift limit | 15% of the profile. | 10%. |
 | Shift penalty scale | `0.08`, power 4. | `0.16`, power 4. |
 | Row similarity | Ruzicka overlap. | Same measure, with a compiled L1 calculation. |
@@ -28,7 +28,7 @@ It describes the active seven-scale method. The simpler two-reference methods re
 | Sightings per candidate | Highest score on each side. | Similarity-weighted mean on each side. |
 | Ear combination | Equal mean of left and right scores. | Same. |
 | Inspection result | Profile matches include shift and stretch. | `AlphaPhant.profiles` exposes source-labelled profiles; matching returns scores only. |
-| Persistent profile cache | One profile record per ear. | One complete seven-profile record per ear. |
+| Persistent profile cache | One profile record per ear. | One complete three-profile record per ear. |
 | Alternative matcher | No CurvRank matcher. | CurvRank uses the same prepared ears through the catalog-matcher contract. |
 
 SAM3 segmentation, YOLO landmark detection, immutable photo IDs, and the PhotoStore contract remain.
@@ -82,21 +82,21 @@ Failures retain the photo, side, stage, and original cause in `MatchingError`.
 
 The extractor resamples the contour to 1,024 points.
 The ear radius is `R = sqrt(2A / pi)`, where `A` is the cleaned contour area.
-A morphological opening with radius `0.020R` removes narrow outward mask bumps.
+It rounds small contour irregularities with an opening radius of `0.02R` and keeps the original contour endpoints.
+The opened contour defines the reference shapes; depth is still measured against the original contour.
 Each alpha radius is its scale fraction multiplied by `R`.
 Small radii follow finer contour structure; large radii provide broader references.
 
 Each reference produces 720 angular depth samples over the relevant semicircle.
 For each ray, extraction finds the furthest forward reference-boundary crossing.
-The nearest sampled reference-path point supplies a tangent.
-A three-pixel probe selects the inward normal.
+The intersected reference edge supplies its inward normal directly.
 The nearest original-contour crossing along that normal supplies signed depth, divided by `R`.
 Positive depth represents an inward tear.
 
 The first and last five degrees are zero.
 Missing reference intersections are zero.
 Gaussian smoothing uses sigma two bins; missing intersections return to zero after smoothing.
-The ordered result uses the immutable producer `alpha-tear-v3-multiscale`.
+The ordered result uses the immutable producer `alpha-tear-v5-direct-edges-opening`.
 Historical cache records remain available.
 
 The coordinate system assumes a mostly star-convex ear relative to the landmark midpoint.
@@ -110,22 +110,24 @@ The signed-change channel differentiates the original depth profile, then separa
 These rising and falling rows cannot substitute for each other.
 This channel does not represent negative tear depth.
 
-Each nonnegative row receives magnitude compression with exponent `0.75` and resampling to 240 bins.
+Each nonnegative row receives square-root magnitude compression and resampling to 240 bins.
 Gaussian angular weights favor the lower-ear region.
 Differentiation occurs before compression and resampling.
 
-Each channel searches 17 centered stretches and 49 integer shifts: 833 alignments.
+Each query-candidate ear pair checks all 17 centered stretches and 49 integer shifts:
+833 alignments. The search selects the exact best combined alignment on this grid.
 Values outside the shifted profile are zero.
-All reference rows share one alignment within a channel.
-The depth and signed-change channels can select different alignments.
+All depth, rising-change, and falling-change rows at every scale share one alignment.
+This is a required property of the method, independent of measured accuracy or speed.
 Only the query moves; catalog profiles stay fixed.
 
 For each aligned row, Ruzicka similarity is `sum(min(query, catalog)) / sum(max(query, catalog))`.
 The equivalent compiled calculation is `(T - D) / (T + D)`.
 Here, `T` is total mass and `D` is L1 distance. Empty rows score zero.
-The channel averages row scores and applies `exp(-(abs(shift_fraction) / 0.16)^4)`.
-It then selects the highest score.
+At each alignment, average depth row scores across scales and average signed-change row scores across scales and directions.
 Depth contributes `0.40`; signed change contributes `0.60`.
+Combine these contributions, then apply `exp(-(abs(shift_fraction) / 0.16)^4)`.
+Select the highest combined score only after this calculation. No channel or scale selects a separate alignment.
 
 ## Catalog correction and candidate scores
 
@@ -133,6 +135,7 @@ For each catalog ear, background strength is the mean of its five strongest outg
 The ear itself is excluded. Other sightings of the same elephant remain eligible neighbors.
 A smaller catalog uses all available neighbors. No neighbor means zero background.
 The held-out query never enters this calculation.
+Comparison batches target catalog evidence only. A query outside the catalog does not cause reverse catalog-to-query or query-to-itself comparisons.
 A corrected ear score is `2 * raw_similarity - background`.
 
 Each candidate's sighting scores receive weights proportional to `exp((score - maximum) / temperature)`.
@@ -143,6 +146,6 @@ The final candidate score is the equal mean of its two side scores.
 These scores are not probabilities and need not lie between zero and one.
 Cached comparisons cannot add evidence from earlier catalog calls.
 The current catalog determines every background and candidate score.
+Within one matcher, each complete sighting ear pair receives a stable local slot for cached score lookup. The permanent domain identifiers remain unchanged.
 
-See [research](research.md) for measured results and alternatives.
 See [evaluation](evaluation.md) for the comparison procedure.

@@ -82,7 +82,7 @@ The difference between neighboring tear-profile depths. Its magnitude describes 
 Depth change represented by separate nonnegative rising and falling components. This preserves whether a tear profile rises or falls at a position. It does not add negative tear depths.
 
 **Shared scale alignment**:
-One angular shift and stretch applied to every extraction scale within a comparison channel. The depth and depth-change channels can select different alignments.
+One angular shift and stretch applied to every extraction scale and every comparison channel for a query-candidate ear pair. Depth, rising change, and falling change all use this same alignment.
 
 **Catalog background similarity**:
 The mean of an ear's strongest outgoing similarities to other ears of the same side in the current catalog. It measures how broadly that catalog ear matches. The query sighting is absent from this calculation.

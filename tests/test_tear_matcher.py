@@ -29,8 +29,8 @@ def test_identical_stack_has_expected_two_channel_score() -> None:
     np.testing.assert_allclose(scores, [1.0], rtol=0, atol=1e-12)
 
 
-def test_two_channels_choose_alignments_independently() -> None:
-    """Depth and signed change retain different optimal transformations."""
+def test_all_channels_and_scales_share_one_alignment() -> None:
+    """Conflicting channel optima cannot select different transformations."""
     query = (
         np.asarray([0.3658017467639605, 0.39651648937307304, -0.12531048092590164]),
         np.asarray(
@@ -66,9 +66,23 @@ def test_two_channels_choose_alignments_independently() -> None:
     matcher = TearMatcher()
 
     score = matcher.match_many(query, (candidate,))[0]
+    channels = []
+    for signed, weight in ((False, 0.4), (True, 0.6)):
+        query_rows = matcher._prepare_stack(query, signed=signed)
+        candidate_rows = matcher._prepare_stack(candidate, signed=signed)
+        channel = np.zeros(len(matcher._variant_penalties))
+        for source, target in zip(query_rows, candidate_rows, strict=True):
+            channel += matcher._overlap_scores(
+                target[None, :], matcher._build_query_variants(source)
+            )[0] / len(query_rows)
+        channels.append(weight * channel)
+    shared_best = np.max(sum(channels) * matcher._variant_penalties)
+    separate_best = sum(
+        np.max(channel * matcher._variant_penalties) for channel in channels
+    )
 
-    # Forcing one transformation across both channels gives 0.2637830822948914.
-    assert score == pytest.approx(0.28226587987720325, rel=0, abs=1e-12)
+    assert score <= shared_best + 1e-12
+    assert shared_best < separate_best
 
 
 def test_shared_scale_alignment_scores_below_independent_scale_average() -> None:
@@ -115,19 +129,38 @@ def test_ragged_stacks_and_empty_or_zero_candidates() -> None:
     assert matcher.match_many(query, ()).shape == (0,)
 
 
-def test_seeded_ragged_scores_match_fixed_characterization() -> None:
-    """Fixed constants and interpolation preserve a seeded ragged score vector."""
+def test_shared_scores_match_direct_min_max_overlap() -> None:
+    """Batched L1 scores match direct min/max overlap with one alignment."""
     rng = np.random.default_rng(123)
     query = tuple(rng.uniform(-0.02, 0.1, n) for n in (1, 2, 7))
     candidates = tuple(
         tuple(rng.uniform(-0.03, 0.1, n) for n in (1, 2, 7)) for _ in range(3)
     )
 
-    scores = TearMatcher().match_many(query, candidates)
+    matcher = TearMatcher()
+    scores = matcher.match_many(query, candidates)
+    expected = []
+    for candidate in candidates:
+        combined = np.zeros(len(matcher._variant_penalties))
+        for signed, weight in ((False, 0.4), (True, 0.6)):
+            query_rows = matcher._prepare_stack(query, signed=signed)
+            candidate_rows = matcher._prepare_stack(candidate, signed=signed)
+            for source, target in zip(query_rows, candidate_rows, strict=True):
+                variants = matcher._build_query_variants(source)
+                numerator = np.minimum(variants, target).sum(axis=1)
+                denominator = np.maximum(variants, target).sum(axis=1)
+                overlap = np.divide(
+                    numerator,
+                    denominator,
+                    out=np.zeros_like(numerator),
+                    where=denominator > 0,
+                )
+                combined += weight * overlap / len(query_rows)
+        expected.append(np.max(combined * matcher._variant_penalties))
 
     np.testing.assert_allclose(
         scores,
-        [0.38347549947011017, 0.2076180586802313, 0.2902718480710209],
+        expected,
         rtol=0,
         atol=1e-12,
     )

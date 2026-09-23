@@ -1,12 +1,23 @@
 """Geometric characterization of AlphaTear reference crossings and normals."""
 
 import numpy as np
+import shapely
 
 from elephant_id.matching.alphaphant.extraction import (
+    AlphaTearExtractor,
     _ear_side_path,
     _nearest_crossing,
     _polar_directions,
+    _reference_frames,
 )
+
+
+def test_standard_extractor_has_three_scales_and_distinct_cache_slug() -> None:
+    """The settled representation cannot read older profile cache records."""
+    extractor = AlphaTearExtractor()
+
+    assert extractor.config.alpha_fractions == (0.35, 2.0, 10.0)
+    assert extractor.producer_slug == "alpha-tear-v5-direct-edges-opening"
 
 
 def test_opened_path_snaps_endpoints_and_wraps_around_exterior() -> None:
@@ -25,6 +36,21 @@ def test_opened_path_preserves_backward_choice_on_equal_deviation() -> None:
     path = _ear_side_path(exterior, exterior[0], exterior[2])
 
     np.testing.assert_array_equal(path, [(0, 0), (-5, 5), (0, 10)])
+
+
+def test_reference_frames_point_inward_for_both_boundary_windings() -> None:
+    """An intersected edge gives the same inward normal in either winding."""
+    boundary = np.asarray([(-2, -1), (2, -1), (2, 1), (-2, 1)])
+    directions = np.asarray([(1, 0), (0, 1), (-1, 0), (0, -1)])
+    expected_origins = np.asarray([(2, 0), (0, 1), (-2, 0), (0, -1)])
+    expected_normals = np.asarray([(-1, 0), (0, -1), (1, 0), (0, 1)])
+
+    for exterior in (boundary, boundary[::-1]):
+        origins, normals = _reference_frames(
+            np.zeros(2), directions, shapely.Polygon(exterior)
+        )
+        np.testing.assert_allclose(origins, expected_origins, atol=1e-12)
+        np.testing.assert_allclose(normals, expected_normals, atol=1e-12)
 
 
 def test_contour_crossing_keeps_the_nearest_signed_distance() -> None:

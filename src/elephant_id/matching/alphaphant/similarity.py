@@ -10,14 +10,14 @@ _RESAMPLED_BINS = 240
 _MAX_SHIFT_FRACTION = 0.10
 _SHIFT_PENALTY_SCALE = 0.16
 _SHIFT_PENALTY_POWER = 4.0
-_MAGNITUDE_EXPONENT = 0.75
+_MAGNITUDE_EXPONENT = 0.50
 _DEPTH_WEIGHT = 0.40
 _SIGNED_DEPTH_CHANGE_WEIGHT = 0.60
 _STRETCHES = tuple(round(0.8 + index * 0.025, 3) for index in range(17))
 
 
 class TearMatcher:
-    """Compare profile stacks with fixed two-channel directional alignment."""
+    """Compare profile stacks with one alignment across all channels and scales."""
 
     def __init__(self) -> None:
         """Precompute the fixed stretch, shift, and penalty search grid."""
@@ -30,8 +30,9 @@ class TearMatcher:
     ) -> np.ndarray:
         """Return one combined similarity for each candidate profile stack.
 
-        The depth and signed-depth-change channels select their alignments
-        independently. All references share one alignment within each channel.
+        Every depth, rising-change, and falling-change row at every scale uses
+        the same shift and stretch. Combine weighted row scores before selecting
+        the best alignment for each query-candidate pair.
 
         Raises:
             ValueError: If a stack is empty or reference counts do not agree.
@@ -40,35 +41,36 @@ class TearMatcher:
             return np.empty(0, dtype=np.float64)
         if not query or any(len(stack) != len(query) for stack in candidates):
             raise ValueError("Profile stacks must be nonempty and pair one-to-one")
-        depth = self._match_channel(query, candidates, signed=False)
-        signed_change = self._match_channel(query, candidates, signed=True)
-        return _DEPTH_WEIGHT * depth + _SIGNED_DEPTH_CHANGE_WEIGHT * signed_change
-
-    def _match_channel(
-        self,
-        query: Sequence[np.ndarray],
-        candidates: Sequence[Sequence[np.ndarray]],
-        *,
-        signed: bool,
-    ) -> np.ndarray:
-        """Match one fixed channel in bounded candidate batches."""
-        prepared_query = self._prepare_stack(query, signed=signed)
-        variants = tuple(self._build_query_variants(row) for row in prepared_query)
+        channels = tuple(
+            (
+                signed,
+                weight,
+                tuple(
+                    self._build_query_variants(row)
+                    for row in self._prepare_stack(query, signed=signed)
+                ),
+            )
+            for signed, weight in (
+                (False, _DEPTH_WEIGHT),
+                (True, _SIGNED_DEPTH_CHANGE_WEIGHT),
+            )
+        )
         variant_count = len(self._variant_penalties)
         batch_size = max(1, _OVERLAP_WORKSPACE_BYTES // (variant_count * 8 * 4))
         scores = np.empty(len(candidates), dtype=np.float64)
         for start in range(0, len(candidates), batch_size):
-            batch = np.asarray(
-                [
-                    self._prepare_stack(stack, signed=signed)
-                    for stack in candidates[start : start + batch_size]
-                ]
-            )
-            matches = np.zeros((len(batch), variant_count))
-            for index, query_variants in enumerate(variants):
-                matches += self._overlap_scores(batch[:, index, :], query_variants)
-            matches *= self._variant_penalties / len(variants)
-            scores[start : start + len(batch)] = np.max(matches, axis=1)
+            stacks = candidates[start : start + batch_size]
+            matches = np.zeros((len(stacks), variant_count))
+            for signed, weight, variants in channels:
+                batch = np.asarray(
+                    [self._prepare_stack(stack, signed=signed) for stack in stacks]
+                )
+                for index, query_variants in enumerate(variants):
+                    matches += (weight / len(variants)) * self._overlap_scores(
+                        batch[:, index, :], query_variants
+                    )
+            matches *= self._variant_penalties
+            scores[start : start + len(stacks)] = np.max(matches, axis=1)
         return scores
 
     @staticmethod

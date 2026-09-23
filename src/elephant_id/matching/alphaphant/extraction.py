@@ -20,7 +20,7 @@ class AlphaTearConfig:
     contour_points: int = 1024
     profile_bins: int = 720
     trim_degrees: float = 5.0
-    alpha_fractions: tuple[float, ...] = (0.11, 0.22, 0.50, 1.10, 2.50, 5.00, 12.00)
+    alpha_fractions: tuple[float, ...] = (0.35, 2.0, 10.0)
     opening_fraction: float = 0.020
     smoothing_sigma: float = 2.0
 
@@ -173,12 +173,13 @@ def _nearest_crossing(
     return nearest
 
 
-def _furthest_ray_crossings(
+def _reference_frames(
     origin: np.ndarray,
     directions: np.ndarray,
-    exterior: np.ndarray,
-) -> np.ndarray:
-    """Return the furthest forward boundary crossing for each ray."""
+    shape: shapely.Polygon,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return the furthest ray crossings and inward normals of their edges."""
+    exterior = np.asarray(shape.exterior.coords)[:-1]
     vectors = np.roll(exterior, -1, axis=0) - exterior
     relative_starts = exterior[None, :, :] - origin
     denominator = (
@@ -202,30 +203,18 @@ def _furthest_ray_crossings(
         & (segment_positions >= -tolerance)
         & (segment_positions <= 1 + tolerance)
     )
-    furthest = np.where(valid, ray_distances, -np.inf).max(axis=1)
+    distances = np.where(valid, ray_distances, -np.inf)
+    segments = np.argmax(distances, axis=1)
+    furthest = distances[np.arange(len(directions)), segments]
     crossings = np.full(directions.shape, np.nan, dtype=float)
-    valid_rays = np.isfinite(furthest)
-    crossings[valid_rays] = origin + furthest[valid_rays, None] * directions[valid_rays]
-    return crossings
-
-
-def _inward_normals(
-    reference_path: np.ndarray,
-    shape: shapely.Polygon,
-    origins: np.ndarray,
-) -> np.ndarray:
-    """Return local unit normals pointing inward from reference origins."""
-    tangents = np.gradient(reference_path, axis=0)
-    tangents /= np.linalg.norm(tangents, axis=1, keepdims=True) + 1e-12
-    nearest_indices = np.argmin(
-        np.sum((origins[:, None, :] - reference_path[None, :, :]) ** 2, axis=2),
-        axis=1,
-    )
-    normals = np.c_[tangents[nearest_indices, 1], -tangents[nearest_indices, 0]]
-    normals /= np.linalg.norm(normals, axis=1, keepdims=True) + 1e-12
-    probe_points = origins + 3.0 * normals
-    normals[~shapely.contains_xy(shape, probe_points[:, 0], probe_points[:, 1])] *= -1
-    return normals
+    normals = np.full(directions.shape, np.nan, dtype=float)
+    hit = np.isfinite(furthest)
+    crossings[hit] = origin + furthest[hit, None] * directions[hit]
+    selected = vectors[segments[hit]]
+    inward = np.c_[-selected[:, 1], selected[:, 0]]
+    inward *= 1.0 if shape.exterior.is_ccw else -1.0
+    normals[hit] = inward / np.linalg.norm(inward, axis=1, keepdims=True)
+    return crossings, normals
 
 
 def _polar_directions(
@@ -263,18 +252,13 @@ def _profiles(ear: PreparedEar, config: AlphaTearConfig) -> tuple[TearProfile, .
     profiles = []
     for alpha in config.alpha_fractions:
         reference_hull = _alpha_shape(opened, alpha * radius)
-        reference_boundary = np.asarray(reference_hull.exterior.coords)[:-1]
-        reference_path = _densify(
-            _ear_side_path(reference_boundary, opened[0], opened[-1])
-        )
-        origins = _furthest_ray_crossings(midpoint, directions, reference_boundary)
+        origins, normals = _reference_frames(midpoint, directions, reference_hull)
         valid_origins = np.isfinite(origins).all(axis=1)
         coded_depths = np.zeros(len(origins))
         if valid_origins.any():
-            valid = origins[valid_origins]
-            normals = _inward_normals(reference_path, reference_hull, valid)
             coded_depths[valid_origins] = (
-                _nearest_crossing(valid, normals, contour) / radius
+                _nearest_crossing(origins[valid_origins], normals[valid_origins], contour)
+                / radius
             )
 
         depths = np.zeros(config.profile_bins)
@@ -295,7 +279,7 @@ class AlphaTearExtractor:
         """Use the fixed standard representation or an uncached research configuration."""
         self.config = configuration or AlphaTearConfig()
         self._producer_slug = (
-            "alpha-tear-v3-multiscale" if configuration is None else None
+            "alpha-tear-v5-direct-edges-opening" if configuration is None else None
         )
 
     @property

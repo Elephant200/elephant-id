@@ -356,11 +356,60 @@ def test_alphaphant_batches_all_candidates_by_side(
     assert len(calls) == 6
     assert calls[0][0][0] is query_analysis.left.tear_profile.depths
     assert calls[3][0][0] is query_analysis.right.tear_profile.depths
-    assert all(len(candidates) == 3 for _, candidates in calls)
+    assert all(len(candidates) == 2 for _, candidates in calls)
+    assert all(
+        (alphaphant._sighting_slots[source], alphaphant._sighting_slots[query], side)
+        not in alphaphant._similarities
+        for source in (query, first, second)
+        for side in ("left", "right")
+    )
     assert scores == pytest.approx({first_key: 1.0, second_key: 1.0})
     assert (
         alphaphant.match(query, {second_key: (second,), first_key: (first,)}) == scores
     )
+    assert len(calls) == 6
+
+
+def test_new_query_compares_only_to_warm_catalog(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A new query needs one forward batch per side without reverse comparisons."""
+    pairs = tuple(_pair(value) for value in (10, 20, 30, 40))
+    analyses = {
+        pair: _analysis(100 + i, [0, i + 1, 0], [0, i + 2, 0])
+        for i, pair in enumerate(pairs)
+    }
+    matcher, _ = _alphaphant(analyses)
+    catalog = {CandidateKey(_uuid(500)): pairs[2:]}
+    matcher.match(pairs[0], catalog)
+    counts = []
+    original = TearMatcher.match_many
+
+    def record(
+        self: TearMatcher,
+        query: Sequence[np.ndarray],
+        candidates: Sequence[Sequence[np.ndarray]],
+    ) -> np.ndarray:
+        """Count actual comparisons while retaining real similarity arithmetic."""
+        counts.append(len(candidates))
+        return original(self, query, candidates)
+
+    monkeypatch.setattr(TearMatcher, "match_many", record)
+    actual = matcher.match(pairs[1], catalog)
+    assert counts == [2, 2]
+    fresh, _ = _alphaphant(analyses)
+    assert actual == fresh.match(pairs[1], catalog)
+
+
+def test_query_in_catalog_retains_explicit_self_evidence() -> None:
+    """Rectangular comparison preserves caller-supplied self evidence."""
+    query = _pair(10)
+    matcher, _ = _alphaphant(
+        {query: _analysis(100, [0, 1, 0], [0, 2, 0])}
+    )
+    key = CandidateKey(_uuid(500))
+
+    assert matcher.match(query, {key: (query,)})[key] == pytest.approx(2.0)
 
 
 def test_catalog_neighborhood_excludes_held_out_evidence(

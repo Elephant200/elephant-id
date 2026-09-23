@@ -78,18 +78,16 @@ Compare methods on identical expanded catalogs; do not attribute all changes fro
 Report original-member and added-sighting results separately when useful.
 Those subgroup results still use the expanded catalog and are not direct repetitions of the old task.
 
-## Method selection
+## Historical expansion method selection
 
-The current seven-scale method remains unchanged during the expansion comparison.
-The requested alternatives are alpha scales `1.10/12.00` and alpha `1.10` plus a convex reference.
-Fix these methods before expanded-set results are available.
-Use the same preparation and evaluation procedure for all three.
+The earlier expansion comparison held its then-current seven-scale method fixed.
+Its alternatives were alpha scales `1.10/12.00` and alpha `1.10` plus a convex reference.
+All three used the same preparation and evaluation procedure.
 
 Earlier studies used strict two-point-gain and no-loss rules.
 Those rules explain historical decisions in the research record; they are not universal practical thresholds.
-The new report must show accuracy, uncertainty, execution cost, and representation size together.
-No automatic promotion rule is assumed from a small observed difference.
-The user will review the trade-off before the active method changes.
+For method comparisons, report accuracy, uncertainty, execution cost, and representation size together.
+A small observed difference alone does not establish a gain.
 
 The historical benchmark has prior development exposure.
 Additional sightings of its elephants do not create a wholly independent identity test.
