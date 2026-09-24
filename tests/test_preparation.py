@@ -23,10 +23,8 @@ from elephant_id.matching.alphaphant.cached import CachedTearProfileExtractor
 from elephant_id.matching.alphaphant.extraction import (
     AlphaTearConfig,
     AlphaTearExtractor,
-)
-from elephant_id.matching.alphaphant.profile import (
-    EarProfile,
-    SightingProfiles,
+    AnalyzedEar,
+    AnalyzedSightingEarPair,
     TearProfile,
 )
 from elephant_id.preparation import (
@@ -36,7 +34,7 @@ from elephant_id.preparation import (
     SightingPreparer,
     prepare_ear,
 )
-from elephant_id.preparation.ear import _cut_contour
+from elephant_id.preparation.ear import ear_flap_path
 
 PHOTO = Photo(
     photo_id=UUID("8c47c36d-a75d-4ee4-a58a-3a08fca2c833"),
@@ -170,7 +168,7 @@ def test_composition_caches_only_settled_profile_extraction(tmp_path: Path) -> N
         prepare_ears=lambda pair: (_prepared_ear(), _prepared_ear("right")),
         profile_extractor=tuning,
     )
-    raw_matcher.profiles(SightingEarPair(PHOTO.sighting_id, PHOTO, RIGHT_PHOTO))
+    raw_matcher.analyze(SightingEarPair(PHOTO.sighting_id, PHOTO, RIGHT_PHOTO))
     assert not list(tmp_path.rglob("*.json"))
 
 
@@ -196,17 +194,17 @@ def _segmented_rectangle(x1: int, y1: int, x2: int, y2: int) -> Detection:
     )
 
 
-def test_cut_contour_preserves_forward_order_on_equal_areas() -> None:
+def test_ear_flap_path_preserves_forward_order_on_equal_areas() -> None:
     """A symmetric contour has a deterministic forward tie choice."""
     contour = np.asarray([(0, 0), (5, 5), (0, 10), (-5, 5)], dtype=float)
 
-    path = _cut_contour(contour, ((0.0, 0.0), (0.0, 10.0)))
+    path = ear_flap_path(contour, np.asarray((0.0, 0.0)), np.asarray((0.0, 10.0)))
 
     np.testing.assert_array_equal(path, contour[:3])
 
 
 @pytest.mark.parametrize("flap_x", [8.0, -8.0])
-def test_cut_contour_keeps_larger_flap_over_jagged_head_edge(flap_x: float) -> None:
+def test_ear_flap_path_keeps_larger_flap_over_jagged_head_edge(flap_x: float) -> None:
     """A ragged path near the landmark chord loses to a smooth, larger ear flap."""
     head_side = -np.sign(flap_x)
     jagged = [(head_side * (0.5 + 0.5 * (i % 2)), float(i)) for i in range(1, 20)]
@@ -214,7 +212,7 @@ def test_cut_contour_keeps_larger_flap_over_jagged_head_edge(flap_x: float) -> N
         [(0.0, 0.0), (flap_x, 5.0), (flap_x, 15.0), (0.0, 20.0), *jagged[::-1]]
     )
 
-    path = _cut_contour(contour, ((0.0, 0.0), (0.0, 20.0)))
+    path = ear_flap_path(contour, np.asarray((0.0, 0.0)), np.asarray((0.0, 20.0)))
 
     np.testing.assert_array_equal(path, contour[:4])
 
@@ -329,16 +327,12 @@ def test_sighting_preparation_returns_two_source_labelled_profiles() -> None:
     )
     pair = SightingEarPair(PHOTO.sighting_id, PHOTO, RIGHT_PHOTO)
 
-    result = analyzer.profiles(pair)[0]
+    result = analyzer.analyze(pair)
 
-    assert result == SightingProfiles(
-        left=EarProfile(PHOTO, "left", left_box, result.left.tear_profile),
-        right=EarProfile(
-            RIGHT_PHOTO,
-            "right",
-            right_box,
-            result.right.tear_profile,
-        ),
+    assert result == AnalyzedSightingEarPair(
+        sighting_id=PHOTO.sighting_id,
+        left=AnalyzedEar(PHOTO, "left", left_box, extractor.profiles),
+        right=AnalyzedEar(RIGHT_PHOTO, "right", right_box, extractor.profiles),
     )
     assert [ear.inferred_side for ear in extractor.calls] == ["left", "right"]
 
@@ -374,7 +368,7 @@ def test_sighting_preparation_prepares_one_photo_once_for_both_sides(
         prepared_left, prepared_right = preparer.prepare(pair)
         assert extractor.calls == []
     else:
-        result = analyzer.profiles(pair)[0]
+        result = analyzer.analyze(pair)
         prepared_left, prepared_right = result.left, result.right
         assert len(extractor.calls) == 2
 
@@ -407,9 +401,7 @@ def test_sighting_preparation_preserves_input_order_for_equal_matching_ears() ->
         profile_extractor=_ProfileExtractor(),
     )
 
-    result = analyzer.profiles(SightingEarPair(PHOTO.sighting_id, PHOTO, RIGHT_PHOTO))[
-        0
-    ]
+    result = analyzer.analyze(SightingEarPair(PHOTO.sighting_id, PHOTO, RIGHT_PHOTO))
 
     assert result.left.source_box == first_box
 
@@ -495,7 +487,7 @@ def test_sighting_preparation_reports_declared_side_and_domain_stage() -> None:
     pair = SightingEarPair(PHOTO.sighting_id, PHOTO, RIGHT_PHOTO)
 
     with pytest.raises(MatchingError) as caught:
-        analyzer.profiles(pair)[0]
+        analyzer.analyze(pair)
 
     assert caught.value.side == "left"
     assert caught.value.stage is PreparationStage.DECLARED_EAR_RESOLUTION
@@ -531,7 +523,7 @@ def test_sighting_preparation_wraps_extraction_failure_with_its_cause() -> None:
     )
 
     with pytest.raises(MatchingError) as caught:
-        analyzer.profiles(SightingEarPair(PHOTO.sighting_id, PHOTO, RIGHT_PHOTO))[0]
+        analyzer.analyze(SightingEarPair(PHOTO.sighting_id, PHOTO, RIGHT_PHOTO))
 
     assert caught.value.side == "left"
     assert caught.value.stage == "tear-profile extraction"

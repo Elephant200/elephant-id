@@ -27,7 +27,7 @@ It describes the active three-scale method. Other reference sets remain experime
 | Catalog correction | None. | Subtract each catalog ear's background similarity from twice the raw score. |
 | Sightings per candidate | Highest score on each side. | Similarity-weighted mean on each side. |
 | Ear combination | Equal mean of left and right scores. | Same. |
-| Inspection result | Profile matches include shift and stretch. | `AlphaPhant.profiles` exposes source-labelled profiles; matching returns scores only. |
+| Inspection result | Profile matches include shift and stretch. | `AlphaPhant.analyze` exposes source-labelled profiles; matching returns scores only. |
 | Persistent profile cache | One profile record per ear. | One complete three-profile record per ear. |
 | Alternative matcher | No CurvRank matcher. | CurvRank uses the same prepared ears through the catalog-matcher contract. |
 
@@ -44,20 +44,19 @@ build_standard_alphaphant(photo_store)
   -> AlphaPhant(prepare_ears=preparer.prepare, profile_extractor=extractor)
 
 AlphaPhant.match(query, catalog)
-  -> profiles(pair), for the query and each distinct catalog sighting
+  -> analyze(pair), for the query and each distinct catalog sighting
      -> SightingPreparer.prepare(pair)
-     -> extract_sighting_profiles(ears, extractor)
-        -> extractor.extract(ear), once per ear
-  -> _score_side(query, catalog, "left")
-     -> _side_matrix -> TearMatcher.match_many
-     -> _correct_catalog
-     -> _aggregate_evidence
-  -> _score_side(query, catalog, "right")
+     -> extractor.extract(ear), once per ear
+  -> _score_side("left", ...)
+     -> _similarity_matrix -> EarProfileSimilarity.compare_many
+     -> _subtract_background
+     -> _weighted_evidence_mean
+  -> _score_side("right", ...)
   -> average the two candidate scores
 ```
 
 The caller supplies one extractor. It does not assemble a sequence of extractors or select comparison channels.
-`match` extracts the profiles before scoring. Both side-scoring calls receive those same profiles.
+`match` analyzes every sighting before scoring. Both side-scoring calls read those same analyses.
 Numerical settings stay with the algorithms that use them.
 
 ## Ear preparation

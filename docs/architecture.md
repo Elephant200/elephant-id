@@ -16,6 +16,7 @@ One extractor owns the complete AlphaTear representation.
 | `matching` | Define the algorithm-independent catalog interface. | `CatalogMatcher.match(query, catalog)`. |
 | `matching.alphaphant` | Extract AlphaTear profiles, compare ears, and combine catalog evidence. | `AlphaPhant`, `AlphaTearExtractor`. |
 | `matching.curvrank` | Extract curvature descriptors and score candidates independently. | `CurvRankMatcher`. |
+| `matching.miewid` | Embed ear crops with MiewID and score candidates independently. | `MiewIdMatcher`. |
 | `evaluation` | Own identities, manifests, query folds, scores, and metrics. | `load_benchmark`, `evaluate`, `EvaluationResult`. |
 | `composition` | Construct processing objects and select cache decorators. | `build_standard_alphaphant`. |
 
@@ -38,12 +39,12 @@ src/elephant_id/
   matching/
     protocol.py             # Catalog contract and diagnostic errors.
     alphaphant/
-      matcher.py            # Profile orchestration and catalog scores.
-      profile.py            # Immutable profiles and extraction contract.
-      extraction.py         # Complete AlphaTear representation.
-      similarity.py         # Fixed channels and affine alignment.
+      matcher.py            # Ear analysis, background correction, and candidate scores.
+      extraction.py         # Analyzed-ear values and AlphaTear extraction.
+      similarity.py         # Channels, shared alignment, and overlap.
       cached.py             # Complete profile-record persistence.
-    curvrank.py              # Independent curvature matcher.
+    curvrank.py             # Independent curvature matcher.
+    miewid.py               # Independent embedding baseline.
   evaluation/
   composition.py            # Object construction.
 ```
@@ -103,10 +104,10 @@ Landmark detectors supply the strongest upper/lower result, or `None` if no ordi
 Model variation stays behind these two semantic interfaces.
 CurvRank imports preparation, not AlphaPhant internals.
 
-`TearProfile` contains a read-only one-dimensional depth array.
-`TearProfileExtractor.extract(ear)` returns the complete ordered tuple of profiles.
-`extract_sighting_profiles` adds source labels and pairs left/right outputs by reference order.
-`AlphaPhant.profiles(pair)` reuses the same memoized extraction as matching.
+`TearProfile` contains a read-only one-dimensional depth array for one alpha scale.
+`TearProfileExtractor.extract(ear)` returns one profile per alpha scale, in scale order.
+`AnalyzedEar` holds those profiles with the source Photo, side, and raster box.
+`AlphaPhant.analyze(pair)` returns an `AnalyzedSightingEarPair` and reuses the same memoized extraction as matching.
 There is no list of extractor objects at the caller interface.
 
 The default extractor owns the fixed settings and producer slug.

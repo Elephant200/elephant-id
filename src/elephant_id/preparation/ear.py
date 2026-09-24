@@ -52,21 +52,20 @@ def _chord_area(path: NDArray[np.float64]) -> float:
     return float(cv2.contourArea(path.astype(np.float32)))
 
 
-def _cut_contour(
-    contour: NDArray[np.float64],
-    snapped_landmarks: LandmarkPair,
+def ear_flap_path(
+    boundary: NDArray[np.float64],
+    upper: NDArray[np.float64],
+    lower: NDArray[np.float64],
 ) -> NDArray[np.float64]:
-    """Return the landmark-to-landmark path that encloses the ear flap.
+    """Return the closed-boundary path from upper to lower point around the ear flap.
 
-    The chord between the snapped landmarks divides the mask boundary in two.
-    The ear flap bulges away from that chord, so its path encloses more area.
+    The chord between the two points divides the boundary in two. The ear flap
+    bulges away from that chord, so its path encloses more area.
     """
-    upper = min(snapped_landmarks, key=lambda point: point[1])
-    lower = max(snapped_landmarks, key=lambda point: point[1])
-    upper_index = int(np.argmin(np.sum((contour - np.asarray(upper)) ** 2, axis=1)))
-    lower_index = int(np.argmin(np.sum((contour - np.asarray(lower)) ** 2, axis=1)))
-    forward = _closed_path(contour, upper_index, lower_index)
-    backward = _closed_path(contour, lower_index, upper_index)[::-1]
+    upper_index = int(np.argmin(np.sum((boundary - upper) ** 2, axis=1)))
+    lower_index = int(np.argmin(np.sum((boundary - lower) ** 2, axis=1)))
+    forward = _closed_path(boundary, upper_index, lower_index)
+    backward = _closed_path(boundary, lower_index, upper_index)[::-1]
     return forward if _chord_area(forward) >= _chord_area(backward) else backward
 
 
@@ -117,7 +116,8 @@ def prepare_ear(
     )
     source_contour = _largest_contour(ear_detection.rle_mask)
     snapped = _snap_landmarks(source_contour, original_landmarks)
-    contour = _cut_contour(source_contour, snapped)
+    upper, lower = sorted(snapped, key=lambda point: point[1])
+    contour = ear_flap_path(source_contour, np.asarray(upper), np.asarray(lower))
     contour_anchors: LandmarkPair = (
         (float(contour[0, 0]), float(contour[0, 1])),
         (float(contour[-1, 0]), float(contour[-1, 1])),

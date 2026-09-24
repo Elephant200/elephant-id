@@ -5,11 +5,11 @@ import shapely
 
 from elephant_id.matching.alphaphant.extraction import (
     AlphaTearExtractor,
-    _ear_side_path,
     _polar_directions,
     _reference_crossings,
     _signed_depths,
 )
+from elephant_id.preparation.ear import ear_flap_path
 
 
 def test_standard_extractor_has_three_scales_and_distinct_cache_slug() -> None:
@@ -20,22 +20,13 @@ def test_standard_extractor_has_three_scales_and_distinct_cache_slug() -> None:
     assert extractor.producer_slug == "alpha-tear-v6-area-contour"
 
 
-def test_opened_path_snaps_endpoints_and_wraps_around_exterior() -> None:
-    """An opened polygon keeps its broad arc across the array boundary."""
+def test_opened_path_wraps_around_exterior() -> None:
+    """An opened polygon keeps its ear flap across the array boundary."""
     exterior = np.asarray([(8, 5), (0, 10), (-1, 5), (0, 0)], dtype=float)
 
-    path = _ear_side_path(exterior, np.asarray([0.1, 0.2]), np.asarray([0.1, 9.8]))
+    path = ear_flap_path(exterior, np.asarray([0.1, 0.2]), np.asarray([0.1, 9.8]))
 
     np.testing.assert_array_equal(path, [(0, 0), (8, 5), (0, 10)])
-
-
-def test_opened_path_preserves_backward_choice_on_equal_deviation() -> None:
-    """An opened contour keeps its existing backward deviation tie convention."""
-    exterior = np.asarray([(0, 0), (5, 5), (0, 10), (-5, 5)], dtype=float)
-
-    path = _ear_side_path(exterior, exterior[0], exterior[2])
-
-    np.testing.assert_array_equal(path, [(0, 0), (-5, 5), (0, 10)])
 
 
 def test_reference_crossings_point_inward_for_both_boundary_windings() -> None:

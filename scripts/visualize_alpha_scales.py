@@ -38,16 +38,15 @@ from elephant_id.image.geometry import resample_polyline
 from elephant_id.log import configure_logging
 from elephant_id.matching.alphaphant.extraction import (
     AlphaTearConfig,
+    TearProfile,
     _alpha_shape,
     _densify,
-    _ear_side_path,
     _opened_contour,
     _polar_directions,
     _reference_crossings,
     _signed_depths,
 )
-from elephant_id.matching.alphaphant.profile import TearProfile
-from elephant_id.preparation.ear import EarSide, PreparedEar
+from elephant_id.preparation.ear import EarSide, PreparedEar, ear_flap_path
 from elephant_id.visualize import tear_profile_ymax
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -337,7 +336,7 @@ def _extract_scale_views(
     )
     contour = resample_polyline(ear.contour, config.contour_points)
     radius = float(np.sqrt(2.0 * ear.cleaned_area / np.pi))
-    opened = _opened_contour(contour, config.opening_fraction * radius)
+    opened = _opened_contour(contour, config.morph_opening_fraction * radius)
     angles = np.linspace(0.0, 180.0, config.profile_bins)
     coded = (angles > config.trim_degrees) & (angles < 180.0 - config.trim_degrees)
     upper = np.asarray(ear.original_landmarks[0], dtype=float)
@@ -349,7 +348,7 @@ def _extract_scale_views(
     for scale, role in specs:
         hull = _reference_hull(opened, None if scale is None else scale * radius)
         boundary = np.asarray(hull.exterior.coords)[:-1]
-        reference_path = _densify(_ear_side_path(boundary, opened[0], opened[-1]))
+        reference_path = _densify(ear_flap_path(boundary, opened[0], opened[-1]))
         points, normals = _reference_crossings(midpoint, directions, hull)
         hit = np.isfinite(points).all(axis=1)
         coded_depths = np.zeros(len(points))

@@ -14,8 +14,7 @@ from matplotlib.axes import Axes
 from elephant_id.image import BgrImage
 from elephant_id.image.masks import decode_rle_mask
 from elephant_id.inference import Detection
-from elephant_id.matching.alphaphant.extraction import AlphaTearConfig
-from elephant_id.matching.alphaphant.profile import TearProfile
+from elephant_id.matching.alphaphant.extraction import AlphaTearConfig, TearProfile
 
 _PROFILE_TRIM_DEGREES = AlphaTearConfig().trim_degrees
 

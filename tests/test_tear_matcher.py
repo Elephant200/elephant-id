@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from elephant_id.matching.alphaphant.similarity import TearMatcher
+from elephant_id.matching.alphaphant.similarity import EarProfileSimilarity, _overlaps
 
 
 def make_profile(peaks: list[tuple[int, float]], bins: int = 240) -> np.ndarray:
@@ -24,7 +24,7 @@ def test_identical_stack_has_expected_two_channel_score() -> None:
     """An ordinary profile matches itself perfectly in both channels."""
     profile = make_profile([(120, 0.05)])
 
-    scores = TearMatcher().match_many((profile,), ((profile,),))
+    scores = EarProfileSimilarity().compare_many((profile,), ((profile,),))
 
     np.testing.assert_allclose(scores, [1.0], rtol=0, atol=1e-12)
 
@@ -63,22 +63,22 @@ def test_all_channels_and_scales_share_one_alignment() -> None:
             ]
         ),
     )
-    matcher = TearMatcher()
+    matcher = EarProfileSimilarity()
 
-    score = matcher.match_many(query, (candidate,))[0]
+    score = matcher.compare_many(query, (candidate,))[0]
     channels = []
     for signed, weight in ((False, 0.4), (True, 0.6)):
-        query_rows = matcher._prepare_stack(query, signed=signed)
-        candidate_rows = matcher._prepare_stack(candidate, signed=signed)
-        channel = np.zeros(len(matcher._variant_penalties))
+        query_rows = matcher._channels(query)[signed]
+        candidate_rows = matcher._channels(candidate)[signed]
+        channel = np.zeros(len(matcher._alignment_penalties))
         for source, target in zip(query_rows, candidate_rows, strict=True):
-            channel += matcher._overlap_scores(
-                target[None, :], matcher._build_query_variants(source)
+            channel += _overlaps(
+                target[None, :], matcher._alignments(source)
             )[0] / len(query_rows)
         channels.append(weight * channel)
-    shared_best = np.max(sum(channels) * matcher._variant_penalties)
+    shared_best = np.max(sum(channels) * matcher._alignment_penalties)
     separate_best = sum(
-        np.max(channel * matcher._variant_penalties) for channel in channels
+        np.max(channel * matcher._alignment_penalties) for channel in channels
     )
 
     assert score <= shared_best + 1e-12
@@ -89,15 +89,15 @@ def test_shared_scale_alignment_scores_below_independent_scale_average() -> None
     """One alignment must serve every scale in a profile stack."""
     query = (make_profile([(70, 1.0)]), make_profile([(150, 1.0)]))
     candidate = (make_profile([(94, 1.0)]), make_profile([(126, 1.0)]))
-    matcher = TearMatcher()
+    matcher = EarProfileSimilarity()
 
     independent = np.mean(
         [
-            matcher.match_many((source,), ((target,),))[0]
+            matcher.compare_many((source,), ((target,),))[0]
             for source, target in zip(query, candidate, strict=True)
         ]
     )
-    shared = matcher.match_many(query, (candidate,))[0]
+    shared = matcher.compare_many(query, (candidate,))[0]
 
     assert shared < independent
 
@@ -106,7 +106,7 @@ def test_signed_change_is_taken_before_depth_clipping() -> None:
     """A negative-depth valley still contributes its signed derivatives."""
     profile = np.asarray([-1.0, -0.5, -1.0])
 
-    score = TearMatcher().match_many((profile,), ((profile,),))[0]
+    score = EarProfileSimilarity().compare_many((profile,), ((profile,),))[0]
 
     # Depth is empty after clipping; the signed channel remains a perfect match.
     assert score == pytest.approx(0.60, abs=1e-12)
@@ -119,14 +119,14 @@ def test_ragged_stacks_and_empty_or_zero_candidates() -> None:
         (np.linspace(0.0, 1.0, 3), np.linspace(1.0, 0.0, 73)),
         (np.zeros(11), np.zeros(5)),
     )
-    matcher = TearMatcher()
+    matcher = EarProfileSimilarity()
 
-    scores = matcher.match_many(query, candidates)
+    scores = matcher.compare_many(query, candidates)
 
     assert scores.shape == (2,)
     assert np.isfinite(scores).all()
     assert scores[1] == 0.0
-    assert matcher.match_many(query, ()).shape == (0,)
+    assert matcher.compare_many(query, ()).shape == (0,)
 
 
 def test_shared_scores_match_direct_min_max_overlap() -> None:
@@ -137,16 +137,16 @@ def test_shared_scores_match_direct_min_max_overlap() -> None:
         tuple(rng.uniform(-0.03, 0.1, n) for n in (1, 2, 7)) for _ in range(3)
     )
 
-    matcher = TearMatcher()
-    scores = matcher.match_many(query, candidates)
+    matcher = EarProfileSimilarity()
+    scores = matcher.compare_many(query, candidates)
     expected = []
     for candidate in candidates:
-        combined = np.zeros(len(matcher._variant_penalties))
+        combined = np.zeros(len(matcher._alignment_penalties))
         for signed, weight in ((False, 0.4), (True, 0.6)):
-            query_rows = matcher._prepare_stack(query, signed=signed)
-            candidate_rows = matcher._prepare_stack(candidate, signed=signed)
+            query_rows = matcher._channels(query)[signed]
+            candidate_rows = matcher._channels(candidate)[signed]
             for source, target in zip(query_rows, candidate_rows, strict=True):
-                variants = matcher._build_query_variants(source)
+                variants = matcher._alignments(source)
                 numerator = np.minimum(variants, target).sum(axis=1)
                 denominator = np.maximum(variants, target).sum(axis=1)
                 overlap = np.divide(
@@ -156,7 +156,7 @@ def test_shared_scores_match_direct_min_max_overlap() -> None:
                     where=denominator > 0,
                 )
                 combined += weight * overlap / len(query_rows)
-        expected.append(np.max(combined * matcher._variant_penalties))
+        expected.append(np.max(combined * matcher._alignment_penalties))
 
     np.testing.assert_allclose(
         scores,
@@ -169,12 +169,12 @@ def test_shared_scores_match_direct_min_max_overlap() -> None:
 def test_rejects_empty_or_mismatched_stacks() -> None:
     """A candidate stack must contain one profile for every query scale."""
     profile = np.ones(7)
-    matcher = TearMatcher()
+    matcher = EarProfileSimilarity()
 
     with pytest.raises(ValueError, match="nonempty"):
-        matcher.match_many((), ((profile,),))
+        matcher.compare_many((), ((profile,),))
     with pytest.raises(ValueError, match="one-to-one"):
-        matcher.match_many((profile,), ((),))
+        matcher.compare_many((profile,), ((),))
 
 
 def test_chunking_preserves_scores_and_inputs(
@@ -190,11 +190,11 @@ def test_chunking_preserves_scores_and_inputs(
     candidates_copy = tuple(
         tuple(profile.copy() for profile in stack) for stack in candidates
     )
-    matcher = TearMatcher()
-    expected = matcher.match_many(query, candidates)
+    matcher = EarProfileSimilarity()
+    expected = matcher.compare_many(query, candidates)
 
     monkeypatch.setattr(module, "_OVERLAP_WORKSPACE_BYTES", 1)
-    actual = matcher.match_many(query, candidates)
+    actual = matcher.compare_many(query, candidates)
 
     np.testing.assert_allclose(actual, expected, rtol=0, atol=1e-12)
     for actual_profile, original_profile in zip(query, query_copy, strict=True):

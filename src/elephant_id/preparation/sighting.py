@@ -1,6 +1,7 @@
 """Retrieve and prepare declared sighting ears for independent matchers."""
 
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
 from enum import StrEnum
 
 from elephant_id.dataset import PhotoStore
@@ -23,6 +24,17 @@ class PreparationStage(StrEnum):
     EAR_LANDMARK_DETECTION = "ear landmark detection"
     EAR_CONTOUR_PREPARATION = "ear-contour preparation"
     DECLARED_EAR_RESOLUTION = "declared-ear resolution"
+
+
+@contextmanager
+def _failure_stage(photo: Photo, side: EarSide, stage: PreparationStage) -> Iterator[None]:
+    """Report any failure inside the block as a `MatchingError` for this stage."""
+    try:
+        yield
+    except Exception as error:
+        raise MatchingError(
+            photo=photo, side=side, stage=stage, message=str(error)
+        ) from error
 
 
 class SightingPreparer:
@@ -56,25 +68,19 @@ class SightingPreparer:
         When one Photo supplies both sides, its inference and geometry are
         computed once. This method does not extract tear profiles.
         """
+        shared_photo = pair.left_photo == pair.right_photo
         left_candidates = self._prepare_photo_ears(pair.left_photo, "left")
         left_ear = self._resolve_declared_side(
-            left_candidates,
-            pair.left_photo,
-            "left",
-            shared_photo=pair.left_photo == pair.right_photo,
+            left_candidates, pair.left_photo, "left", shared_photo=shared_photo
         )
-
-        if pair.right_photo == pair.left_photo:
-            right_candidates = left_candidates
-        else:
-            right_candidates = self._prepare_photo_ears(pair.right_photo, "right")
+        right_candidates = (
+            left_candidates
+            if shared_photo
+            else self._prepare_photo_ears(pair.right_photo, "right")
+        )
         right_ear = self._resolve_declared_side(
-            right_candidates,
-            pair.right_photo,
-            "right",
-            shared_photo=pair.left_photo == pair.right_photo,
+            right_candidates, pair.right_photo, "right", shared_photo=shared_photo
         )
-
         return left_ear, right_ear
 
     def _prepare_photo_ears(
@@ -83,65 +89,26 @@ class SightingPreparer:
         side: EarSide,
     ) -> tuple[PreparedEar, ...]:
         """Retrieve, segment, and prepare candidate ears from one Photo once."""
-        try:
+        with _failure_stage(photo, side, PreparationStage.PHOTO_RETRIEVAL):
             encoded = self._photo_store.read(photo)
-        except Exception as error:
-            raise MatchingError(
-                photo=photo,
-                side=side,
-                stage=PreparationStage.PHOTO_RETRIEVAL,
-                message=str(error),
-            ) from error
-        try:
+        with _failure_stage(photo, side, PreparationStage.IMAGE_DECODING):
             image = decode_image(encoded)
-        except Exception as error:
-            raise MatchingError(
-                photo=photo,
-                side=side,
-                stage=PreparationStage.IMAGE_DECODING,
-                message=str(error),
-            ) from error
-        try:
+        with _failure_stage(photo, side, PreparationStage.EAR_SEGMENTATION):
             detections = self._ear_segmenter.segment(photo, image)
-        except Exception as error:
-            raise MatchingError(
-                photo=photo,
-                side=side,
-                stage=PreparationStage.EAR_SEGMENTATION,
-                message=str(error),
-            ) from error
 
         prepared: list[PreparedEar] = []
         for detection in self._area_filtered_ears(detections):
-            try:
+            with _failure_stage(photo, side, PreparationStage.EAR_SEGMENTATION):
                 source_box = BoundingBox.from_float(
                     detection.xyxy,
                     image_width=image.shape[1],
                     image_height=image.shape[0],
                 )
-            except ValueError as error:
-                raise MatchingError(
-                    photo=photo,
-                    side=side,
-                    stage=PreparationStage.EAR_SEGMENTATION,
-                    message=str(error),
-                ) from error
-            try:
-                landmarks = self._landmark_detector.detect(
-                    photo,
-                    image,
-                    source_box,
-                )
-            except Exception as error:
-                raise MatchingError(
-                    photo=photo,
-                    side=side,
-                    stage=PreparationStage.EAR_LANDMARK_DETECTION,
-                    message=str(error),
-                ) from error
+            with _failure_stage(photo, side, PreparationStage.EAR_LANDMARK_DETECTION):
+                landmarks = self._landmark_detector.detect(photo, image, source_box)
             if landmarks is None:
                 continue
-            try:
+            with _failure_stage(photo, side, PreparationStage.EAR_CONTOUR_PREPARATION):
                 prepared.append(
                     prepare_ear(
                         detection,
@@ -150,13 +117,6 @@ class SightingPreparer:
                         source_box=source_box,
                     )
                 )
-            except Exception as error:
-                raise MatchingError(
-                    photo=photo,
-                    side=side,
-                    stage=PreparationStage.EAR_CONTOUR_PREPARATION,
-                    message=str(error),
-                ) from error
         return tuple(prepared)
 
     @staticmethod

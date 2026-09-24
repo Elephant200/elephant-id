@@ -1,7 +1,7 @@
 """Persistence decorator for tear-profile extraction."""
 
 from elephant_id.cache import CacheManager
-from elephant_id.matching.alphaphant.profile import TearProfile, TearProfileExtractor
+from elephant_id.matching.alphaphant.extraction import TearProfile, TearProfileExtractor
 from elephant_id.preparation.ear import PreparedEar
 
 
