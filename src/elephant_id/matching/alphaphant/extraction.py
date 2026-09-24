@@ -279,7 +279,7 @@ class AlphaTearExtractor:
         """Use the fixed standard representation or an uncached research configuration."""
         self.config = configuration or AlphaTearConfig()
         self._producer_slug = (
-            "alpha-tear-v5-direct-edges-opening" if configuration is None else None
+            "alpha-tear-v6-area-contour" if configuration is None else None
         )
 
     @property

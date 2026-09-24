@@ -32,7 +32,7 @@ It describes the active three-scale method. Other reference sets remain experime
 | Alternative matcher | No CurvRank matcher. | CurvRank uses the same prepared ears through the catalog-matcher contract. |
 
 SAM3 segmentation, YOLO landmark detection, immutable photo IDs, and the PhotoStore contract remain.
-The active geometry keeps the original vertex-count contour selection and inferred-side rule.
+The active geometry selects the ear contour by enclosed area and keeps the inferred-side rule, with a single-side fallback.
 The research record separates geometry experiments from the active method.
 
 ## Call sequence
@@ -68,11 +68,17 @@ Cached YOLO records supply landmarks in full-image coordinates.
 Preparation creates an immutable `PreparedEar` for each side.
 A shared source photo requires two separate ears; preparation reads that photo once.
 
-The current side rule selects an ear by inferred image direction, then by cleaned area.
-This rule can fail on profile views.
 Snapped landmarks divide the mask boundary into two paths.
-Preparation selects the path with more vertices and orders it from upper to lower anchor.
-Unequal raster sampling can cause this rule to select the inner path.
+The landmark chord joins the snapped landmarks.
+Preparation keeps the path that encloses more area with that chord and orders it from upper to lower anchor.
+The ear flap bulges away from the head, so its path encloses more area; the head-side path runs close to the chord.
+Vertex count is not used: a ragged head-side edge can have more raster vertices than the flap.
+
+The side rule selects an ear by inferred image direction, then by cleaned area.
+Inferred direction assumes a lateral view: the landmarks lie on the flap's head side.
+Rear and frontal views reverse that direction.
+When a Photo supplies only one declared side and no prepared ear has that inferred side, preparation uses its largest ear.
+A Photo that supplies both sides still requires one ear of each inferred side.
 
 Original detector landmarks define the polar coordinate frame.
 Snapped anchors delimit the contour. These values have different purposes.
@@ -96,7 +102,7 @@ Positive depth represents an inward tear.
 The first and last five degrees are zero.
 Missing reference intersections are zero.
 Gaussian smoothing uses sigma two bins; missing intersections return to zero after smoothing.
-The ordered result uses the immutable producer `alpha-tear-v5-direct-edges-opening`.
+The ordered result uses the immutable producer `alpha-tear-v6-area-contour`.
 Historical cache records remain available.
 
 The coordinate system assumes a mostly star-convex ear relative to the landmark midpoint.

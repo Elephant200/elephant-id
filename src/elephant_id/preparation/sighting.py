@@ -61,6 +61,7 @@ class SightingPreparer:
             left_candidates,
             pair.left_photo,
             "left",
+            shared_photo=pair.left_photo == pair.right_photo,
         )
 
         if pair.right_photo == pair.left_photo:
@@ -71,6 +72,7 @@ class SightingPreparer:
             right_candidates,
             pair.right_photo,
             "right",
+            shared_photo=pair.left_photo == pair.right_photo,
         )
 
         return left_ear, right_ear
@@ -179,11 +181,19 @@ class SightingPreparer:
         candidates: Sequence[PreparedEar],
         photo: Photo,
         side: EarSide,
+        *,
+        shared_photo: bool,
     ) -> PreparedEar:
-        """Resolve one declared side by inferred geometry and cleaned area."""
+        """Resolve one declared side by inferred geometry and cleaned area.
+
+        Inferred side assumes a lateral view. Rear and frontal views reverse it,
+        so a Photo that supplies only one side falls back to its largest ear.
+        """
         matching = tuple(
             candidate for candidate in candidates if candidate.inferred_side == side
         )
+        if not matching and not shared_photo:
+            matching = tuple(candidates)
         if not matching:
             raise MatchingError(
                 photo=photo,

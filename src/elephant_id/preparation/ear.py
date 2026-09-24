@@ -47,18 +47,27 @@ def _snap_landmarks(
     return snapped[0], snapped[1]
 
 
+def _chord_area(path: NDArray[np.float64]) -> float:
+    """Return the area enclosed by one path and the chord joining its ends."""
+    return float(cv2.contourArea(path.astype(np.float32)))
+
+
 def _cut_contour(
     contour: NDArray[np.float64],
     snapped_landmarks: LandmarkPair,
 ) -> NDArray[np.float64]:
-    """Return the longer vertex path from upper to lower snapped landmark."""
+    """Return the landmark-to-landmark path that encloses the ear flap.
+
+    The chord between the snapped landmarks divides the mask boundary in two.
+    The ear flap bulges away from that chord, so its path encloses more area.
+    """
     upper = min(snapped_landmarks, key=lambda point: point[1])
     lower = max(snapped_landmarks, key=lambda point: point[1])
     upper_index = int(np.argmin(np.sum((contour - np.asarray(upper)) ** 2, axis=1)))
     lower_index = int(np.argmin(np.sum((contour - np.asarray(lower)) ** 2, axis=1)))
     forward = _closed_path(contour, upper_index, lower_index)
     backward = _closed_path(contour, lower_index, upper_index)[::-1]
-    return forward if len(forward) >= len(backward) else backward
+    return forward if _chord_area(forward) >= _chord_area(backward) else backward
 
 
 @dataclass(frozen=True, slots=True, eq=False)

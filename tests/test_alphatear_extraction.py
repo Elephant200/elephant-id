@@ -17,7 +17,7 @@ def test_standard_extractor_has_three_scales_and_distinct_cache_slug() -> None:
     extractor = AlphaTearExtractor()
 
     assert extractor.config.alpha_fractions == (0.35, 2.0, 10.0)
-    assert extractor.producer_slug == "alpha-tear-v5-direct-edges-opening"
+    assert extractor.producer_slug == "alpha-tear-v6-area-contour"
 
 
 def test_opened_path_snaps_endpoints_and_wraps_around_exterior() -> None:

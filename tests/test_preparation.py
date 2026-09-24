@@ -196,13 +196,27 @@ def _segmented_rectangle(x1: int, y1: int, x2: int, y2: int) -> Detection:
     )
 
 
-def test_cut_contour_preserves_forward_order_on_equal_vertex_counts() -> None:
-    """A symmetric contour has a deterministic forward vertex-count tie choice."""
+def test_cut_contour_preserves_forward_order_on_equal_areas() -> None:
+    """A symmetric contour has a deterministic forward tie choice."""
     contour = np.asarray([(0, 0), (5, 5), (0, 10), (-5, 5)], dtype=float)
 
     path = _cut_contour(contour, ((0.0, 0.0), (0.0, 10.0)))
 
     np.testing.assert_array_equal(path, contour[:3])
+
+
+@pytest.mark.parametrize("flap_x", [8.0, -8.0])
+def test_cut_contour_keeps_larger_flap_over_jagged_head_edge(flap_x: float) -> None:
+    """A ragged path near the landmark chord loses to a smooth, larger ear flap."""
+    head_side = -np.sign(flap_x)
+    jagged = [(head_side * (0.5 + 0.5 * (i % 2)), float(i)) for i in range(1, 20)]
+    contour = np.asarray(
+        [(0.0, 0.0), (flap_x, 5.0), (flap_x, 15.0), (0.0, 20.0), *jagged[::-1]]
+    )
+
+    path = _cut_contour(contour, ((0.0, 0.0), (0.0, 20.0)))
+
+    np.testing.assert_array_equal(path, contour[:4])
 
 
 def _landmarks(
@@ -424,6 +438,29 @@ def test_distinct_declared_photos_resolve_single_ears_independently_of_orientati
     assert tuple(ear.inferred_side for ear in prepared) == ("left", "right")
     assert prepared[0].contour[:, 0].min() == 2
     assert prepared[1].contour[:, 0].max() == 26
+
+
+def test_single_side_photo_uses_its_largest_ear_when_image_direction_disagrees() -> None:
+    """A rear or frontal view keeps its declared role through the single-side fallback."""
+    left = _segmented_rectangle(2, 3, 12, 20)
+    right = _segmented_rectangle(16, 3, 27, 20)
+    left_box = BoundingBox(2, 3, 12, 20)
+    right_box = BoundingBox(16, 3, 27, 20)
+    preparer = SightingPreparer(
+        photo_store=_PhotoStore(_encoded_image()),
+        ear_segmenter=_Segmenter({PHOTO: (left,), RIGHT_PHOTO: (right,)}),
+        landmark_detector=_LandmarkDetector(
+            {
+                left_box: _landmarks((11.0, 3.0), (11.0, 19.0)),
+                right_box: _landmarks((26.0, 3.0), (26.0, 19.0)),
+            }
+        ),
+    )
+
+    prepared = preparer.prepare(SightingEarPair(PHOTO.sighting_id, PHOTO, RIGHT_PHOTO))
+
+    assert tuple(ear.inferred_side for ear in prepared) == ("right", "right")
+    assert tuple(ear.source_box for ear in prepared) == (left_box, right_box)
 
 
 def test_same_photo_cannot_supply_both_roles_from_one_ear() -> None:
