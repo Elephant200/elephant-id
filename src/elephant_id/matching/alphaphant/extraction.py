@@ -140,48 +140,19 @@ def _alpha_shape(contour: np.ndarray, radius: float) -> shapely.Polygon:
     return hull
 
 
-def _nearest_crossing(
+def _ray_segment_intersections(
     origins: np.ndarray,
-    normals: np.ndarray,
-    contour: np.ndarray,
-) -> np.ndarray:
-    """Return signed nearest contour-crossing distances along local normals."""
-    starts = contour[:-1]
-    vectors = contour[1:] - contour[:-1]
-    relative_starts = starts[None, :, :] - origins[:, None, :]
-    denominator = (
-        normals[:, 0:1] * vectors[None, :, 1] - normals[:, 1:2] * vectors[None, :, 0]
-    )
-    with np.errstate(divide="ignore", invalid="ignore"):
-        ray_distances = (
-            relative_starts[:, :, 0] * vectors[None, :, 1]
-            - relative_starts[:, :, 1] * vectors[None, :, 0]
-        ) / denominator
-        segment_positions = (
-            relative_starts[:, :, 0] * normals[:, 1:2]
-            - relative_starts[:, :, 1] * normals[:, 0:1]
-        ) / denominator
-    valid = (
-        (segment_positions >= 0) & (segment_positions <= 1) & np.isfinite(ray_distances)
-    )
-    candidates = np.where(valid, ray_distances, np.inf)
-    nearest = candidates[
-        np.arange(len(candidates)),
-        np.argmin(np.abs(candidates), axis=1),
-    ]
-    nearest[~np.isfinite(nearest)] = 0.0
-    return nearest
-
-
-def _reference_frames(
-    origin: np.ndarray,
     directions: np.ndarray,
-    shape: shapely.Polygon,
+    starts: np.ndarray,
+    vectors: np.ndarray,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Return the furthest ray crossings and inward normals of their edges."""
-    exterior = np.asarray(shape.exterior.coords)[:-1]
-    vectors = np.roll(exterior, -1, axis=0) - exterior
-    relative_starts = exterior[None, :, :] - origin
+    """Intersect every ray with every segment.
+
+    Returns:
+        Signed distances along each ray and fractional positions along each
+        segment, both shaped `(rays, segments)`. Parallel pairs are not finite.
+    """
+    relative_starts = starts[None, :, :] - origins[:, None, :]
     denominator = (
         directions[:, 0:1] * vectors[None, :, 1]
         - directions[:, 1:2] * vectors[None, :, 0]
@@ -195,26 +166,68 @@ def _reference_frames(
             relative_starts[:, :, 0] * directions[:, 1:2]
             - relative_starts[:, :, 1] * directions[:, 0:1]
         ) / denominator
-    tolerance = 1e-9
-    valid = (
-        np.isfinite(ray_distances)
-        & np.isfinite(segment_positions)
-        & (ray_distances >= 0)
-        & (segment_positions >= -tolerance)
-        & (segment_positions <= 1 + tolerance)
+    return ray_distances, segment_positions
+
+
+def _reference_crossings(
+    origin: np.ndarray,
+    directions: np.ndarray,
+    reference: shapely.Polygon,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return where each ray last leaves the reference and that edge's inward normal.
+
+    The inward normal is the crossed edge rotated a quarter turn toward the
+    polygon interior, so no nearby-point search or inside test is needed.
+    Rays that miss the reference get NaN rows.
+    """
+    exterior = np.asarray(reference.exterior.coords)[:-1]
+    edges = np.roll(exterior, -1, axis=0) - exterior
+    origins = np.broadcast_to(origin, directions.shape)
+    distances, positions = _ray_segment_intersections(
+        origins, directions, exterior, edges
     )
-    distances = np.where(valid, ray_distances, -np.inf)
-    segments = np.argmax(distances, axis=1)
-    furthest = distances[np.arange(len(directions)), segments]
-    crossings = np.full(directions.shape, np.nan, dtype=float)
-    normals = np.full(directions.shape, np.nan, dtype=float)
+    tolerance = 1e-9
+    forward = (
+        np.isfinite(distances)
+        & np.isfinite(positions)
+        & (distances >= 0)
+        & (positions >= -tolerance)
+        & (positions <= 1 + tolerance)
+    )
+    distances = np.where(forward, distances, -np.inf)
+    crossed_edges = np.argmax(distances, axis=1)
+    furthest = distances[np.arange(len(directions)), crossed_edges]
     hit = np.isfinite(furthest)
-    crossings[hit] = origin + furthest[hit, None] * directions[hit]
-    selected = vectors[segments[hit]]
-    inward = np.c_[-selected[:, 1], selected[:, 0]]
-    inward *= 1.0 if shape.exterior.is_ccw else -1.0
+
+    points = np.full(directions.shape, np.nan)
+    points[hit] = origin + furthest[hit, None] * directions[hit]
+    edge = edges[crossed_edges[hit]]
+    inward = np.c_[-edge[:, 1], edge[:, 0]]
+    if not reference.exterior.is_ccw:
+        inward = -inward
+    normals = np.full(directions.shape, np.nan)
     normals[hit] = inward / np.linalg.norm(inward, axis=1, keepdims=True)
-    return crossings, normals
+    return points, normals
+
+
+def _signed_depths(
+    points: np.ndarray,
+    normals: np.ndarray,
+    contour: np.ndarray,
+) -> np.ndarray:
+    """Return the nearest contour crossing along each inward normal, in pixels.
+
+    Positive values lie inside the reference, so a tear gives a positive depth.
+    A normal that never meets the contour gives zero.
+    """
+    distances, positions = _ray_segment_intersections(
+        points, normals, contour[:-1], np.diff(contour, axis=0)
+    )
+    on_contour = (positions >= 0) & (positions <= 1) & np.isfinite(distances)
+    distances = np.where(on_contour, distances, np.inf)
+    nearest = distances[np.arange(len(points)), np.argmin(np.abs(distances), axis=1)]
+    nearest[~np.isfinite(nearest)] = 0.0
+    return nearest
 
 
 def _polar_directions(
@@ -251,19 +264,18 @@ def _profiles(ear: PreparedEar, config: AlphaTearConfig) -> tuple[TearProfile, .
     )
     profiles = []
     for alpha in config.alpha_fractions:
-        reference_hull = _alpha_shape(opened, alpha * radius)
-        origins, normals = _reference_frames(midpoint, directions, reference_hull)
-        valid_origins = np.isfinite(origins).all(axis=1)
-        coded_depths = np.zeros(len(origins))
-        if valid_origins.any():
-            coded_depths[valid_origins] = (
-                _nearest_crossing(origins[valid_origins], normals[valid_origins], contour)
-                / radius
+        reference = _alpha_shape(opened, alpha * radius)
+        points, normals = _reference_crossings(midpoint, directions, reference)
+        hit = np.isfinite(points).all(axis=1)
+        coded_depths = np.zeros(len(points))
+        if hit.any():
+            coded_depths[hit] = (
+                _signed_depths(points[hit], normals[hit], contour) / radius
             )
 
         depths = np.zeros(config.profile_bins)
         smoothed = gaussian_filter1d(coded_depths, sigma=config.smoothing_sigma)
-        smoothed[~valid_origins] = 0.0
+        smoothed[~hit] = 0.0
         depths[coded] = smoothed
         profiles.append(TearProfile(depths))
     return tuple(profiles)

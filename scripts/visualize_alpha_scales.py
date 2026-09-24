@@ -41,11 +41,10 @@ from elephant_id.matching.alphaphant.extraction import (
     _alpha_shape,
     _densify,
     _ear_side_path,
-    _furthest_ray_crossings,
-    _inward_normals,
-    _nearest_crossing,
     _opened_contour,
     _polar_directions,
+    _reference_crossings,
+    _signed_depths,
 )
 from elephant_id.matching.alphaphant.profile import TearProfile
 from elephant_id.preparation.ear import EarSide, PreparedEar
@@ -351,18 +350,16 @@ def _extract_scale_views(
         hull = _reference_hull(opened, None if scale is None else scale * radius)
         boundary = np.asarray(hull.exterior.coords)[:-1]
         reference_path = _densify(_ear_side_path(boundary, opened[0], opened[-1]))
-        origins = _furthest_ray_crossings(midpoint, directions, boundary)
-        valid_origins = np.isfinite(origins).all(axis=1)
-        coded_depths = np.zeros(len(origins))
-        if valid_origins.any():
-            valid = origins[valid_origins]
-            normals = _inward_normals(reference_path, hull, valid)
-            coded_depths[valid_origins] = (
-                _nearest_crossing(valid, normals, contour) / radius
+        points, normals = _reference_crossings(midpoint, directions, hull)
+        hit = np.isfinite(points).all(axis=1)
+        coded_depths = np.zeros(len(points))
+        if hit.any():
+            coded_depths[hit] = (
+                _signed_depths(points[hit], normals[hit], contour) / radius
             )
         depths = np.zeros(config.profile_bins)
         smoothed = gaussian_filter1d(coded_depths, sigma=config.smoothing_sigma)
-        smoothed[~valid_origins] = 0.0
+        smoothed[~hit] = 0.0
         depths[coded] = smoothed
         views.append(
             ScaleView(

@@ -95,7 +95,8 @@ Small radii follow finer contour structure; large radii provide broader referenc
 
 Each reference produces 720 angular depth samples over the relevant semicircle.
 For each ray, extraction finds the furthest forward reference-boundary crossing.
-The intersected reference edge supplies its inward normal directly.
+The intersected reference edge, turned a quarter turn toward the reference interior, gives the inward direction.
+The reference polygon's winding decides which quarter turn points inward, so no nearest-point search or inside probe is needed.
 The nearest original-contour crossing along that normal supplies signed depth, divided by `R`.
 Positive depth represents an inward tear.
 

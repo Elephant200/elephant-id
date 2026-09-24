@@ -6,9 +6,9 @@ import shapely
 from elephant_id.matching.alphaphant.extraction import (
     AlphaTearExtractor,
     _ear_side_path,
-    _nearest_crossing,
     _polar_directions,
-    _reference_frames,
+    _reference_crossings,
+    _signed_depths,
 )
 
 
@@ -38,7 +38,7 @@ def test_opened_path_preserves_backward_choice_on_equal_deviation() -> None:
     np.testing.assert_array_equal(path, [(0, 0), (-5, 5), (0, 10)])
 
 
-def test_reference_frames_point_inward_for_both_boundary_windings() -> None:
+def test_reference_crossings_point_inward_for_both_boundary_windings() -> None:
     """An intersected edge gives the same inward normal in either winding."""
     boundary = np.asarray([(-2, -1), (2, -1), (2, 1), (-2, 1)])
     directions = np.asarray([(1, 0), (0, 1), (-1, 0), (0, -1)])
@@ -46,7 +46,7 @@ def test_reference_frames_point_inward_for_both_boundary_windings() -> None:
     expected_normals = np.asarray([(-1, 0), (0, -1), (1, 0), (0, 1)])
 
     for exterior in (boundary, boundary[::-1]):
-        origins, normals = _reference_frames(
+        origins, normals = _reference_crossings(
             np.zeros(2), directions, shapely.Polygon(exterior)
         )
         np.testing.assert_allclose(origins, expected_origins, atol=1e-12)
@@ -59,7 +59,7 @@ def test_contour_crossing_keeps_the_nearest_signed_distance() -> None:
     origins = np.zeros((2, 2))
     normals = np.asarray([(1.0, 0.0), (-1.0, 0.0)])
 
-    distances = _nearest_crossing(origins, normals, contour)
+    distances = _signed_depths(origins, normals, contour)
 
     np.testing.assert_array_equal(distances, [-1.0, 1.0])
 
