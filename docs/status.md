@@ -4,7 +4,7 @@ The active three-scale AlphaPhant method uses scales `0.35, 2, 10`, one shared
 alignment, square-root value compression, and the full search. It keeps contour
 opening and derives inward directions from reference edges. The code uses one
 extractor and one profile cache record per ear.
-The latest code checks passed 232 tests and Ruff. No commit was made.
+The ear contour is the landmark-to-landmark path that encloses more area with the landmark chord.
 
 ## Current work
 

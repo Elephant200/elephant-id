@@ -6,7 +6,7 @@ The caller sorts these scores to obtain a ranking. AlphaPhant does not assign an
 
 ## Changes from main
 
-This comparison uses `main` at `6b522d5` and the current uncommitted source on `optimized`.
+This comparison uses `main` at `6b522d5` and the current source on `optimized`.
 It describes the active three-scale method. Other reference sets remain experiments.
 
 | Stage | `main` | Current method |
