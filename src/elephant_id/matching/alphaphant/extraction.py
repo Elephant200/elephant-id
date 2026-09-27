@@ -372,7 +372,7 @@ class AlphaTearExtractor:
     def extract(self, ear: PreparedEar) -> TearProfile:
         """
         Return a signed, normalized tear profile for the prepared ear.
-        
+
         Args:
             ear: The prepared ear to extract a tear profile from.
 
