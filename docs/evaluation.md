@@ -16,7 +16,7 @@ The private retrieval benchmark set at `dataset/elephants-alive/benchmark/` cont
 
 Evaluation code never derives names, dates, labels, or grouping from paths or filenames. The manifest and Dataset metadata supply those facts directly. The private benchmark set is gitignored, so no identity data enters version control.
 
-The benchmark is a sample used to estimate expected closed-set retrieval performance beyond the benchmark itself, not merely a fixed collection whose descriptive statistics are the scientific endpoint. An unseen elephant is unseen during system development but represented by prior catalog evidence when queried. Detailed population and deployment claims belong in scientific reporting rather than this package contract.
+The benchmark is a sample used to estimate expected closed-set retrieval performance beyond the benchmark itself, not merely a fixed collection whose descriptive statistics are the scientific endpoint. Every benchmark sighting is unseen during system development but its elephant is represented by prior catalog evidence when queried. A few well-photographed elephants also appear in the tuning set through different sightings; see [ADR 0011](adr/0011-allow-limited-elephant-overlap-between-tuning-and-benchmark.md). Detailed population and deployment claims belong in scientific reporting rather than this package contract.
 
 Primary metric point estimates treat every eligible query equally for compatibility and clarity. Elephants are the independent sampling unit for uncertainty; sightings and eligible queries are repeated observations nested within elephants.
 
@@ -59,7 +59,7 @@ Initial metrics are:
 - median rank;
 - eligible query count.
 
-Primary metric point estimates are unweighted over eligible queries. Two-sided 95% percentile intervals use 100,000 bootstrap resamples with seed `42`: sample eligible elephants with replacement, retain all eligible queries nested within each sampled elephant, and recompute the ordinary unweighted query metrics over the resampled observations. Bootstrap calculation uses completed query scores and never reruns matching. Paired system comparisons reuse the same sampled elephant indices. Extraction parameters are set qualitatively from the alpha shapes; matching parameters are tuned on a separate parameter-tuning set. Neither uses the benchmark, so its numbers carry no tuning leakage.
+Primary metric point estimates are unweighted over eligible queries. Two-sided 95% percentile intervals use 100,000 bootstrap resamples with seed `42`: sample eligible elephants with replacement, retain all eligible queries nested within each sampled elephant, and recompute the ordinary unweighted query metrics over the resampled observations. Bootstrap calculation uses completed query scores and never reruns matching. Paired system comparisons reuse the same sampled elephant indices. Extraction parameters are set qualitatively from the alpha shapes; matching parameters are tuned on a separate parameter-tuning set. Neither uses benchmark sightings, so tuning leakage is limited to the few elephants shared with the tuning set.
 
 ## Reproducibility
 

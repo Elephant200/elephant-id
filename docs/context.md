@@ -109,7 +109,7 @@ The fixed sample of real sighting ear pairs used to evaluate algorithm performan
 _Avoid_: Evaluation suite, test set
 
 **Parameter-tuning set**:
-The image set on which AlphaPhant's matching parameters, such as the profile stretch exponent, are tuned. Disjoint from the retrieval benchmark set. Shorten to tuning set in running writing.
+The image set on which AlphaPhant's matching parameters, such as the profile stretch exponent, are tuned. It shares no sighting or photo with the retrieval benchmark set; a few well-photographed elephants may appear in both. Shorten to tuning set in running writing.
 _Avoid_: Validation set, training set
 
 **AI-model training datasets**:
