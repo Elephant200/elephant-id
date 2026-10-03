@@ -26,6 +26,7 @@ Run Python from the repository root with `uv`. After Python changes, run `uv run
 - Preserve existing user changes. Check `git status --short` before editing.
 - You must receive explicit confirmation before writing a commit.
 - Never touch `legacy`.
+- `.scratch/` holds only specs, tickets, and private regression tests. It is not a scratchpad. Put throwaway scripts, logs, figures, and data in your session scratchpad or a temporary directory.
 
 ## Active Architecture
 
