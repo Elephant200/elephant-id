@@ -446,10 +446,7 @@ class ReviewSession:
         screen = self.screen()
         if screen.status != "review":
             raise ValueError("Review is complete")
-        key = str(screen.sighting_id)
-        if key in self._state["accepted"]:
-            self._state.setdefault("superseded", {}).setdefault(key, []).append(self._state["accepted"].pop(key))
-        self._state["rejected"][key] = {"sighting_id": key, "elephant": screen.elephant}
+        self._record_rejection(screen.sighting_id)
         self._advance_after_decision()
         try:
             self._persist(project=True)
@@ -457,6 +454,71 @@ class ReviewSession:
             self._rollback(snapshot, project=True)
             raise
         return self.screen()
+
+    def _record_rejection(self, sighting_id: UUID) -> None:
+        """Reject a sighting, retaining any approved pair as superseded evidence."""
+        key = str(sighting_id)
+        if key in self._state["accepted"]:
+            self._state.setdefault("superseded", {}).setdefault(key, []).append(self._state["accepted"].pop(key))
+        self._state["rejected"][key] = {"sighting_id": key, "elephant": self._elephant(sighting_id)}
+
+    def candidates(self, sighting_id: UUID, side: Side) -> tuple[Candidate, ...]:
+        """Return a queued sighting's visible candidates for one side, best first."""
+        if sighting_id not in self._tiers:
+            raise KeyError(f"Sighting is not in the review queue: {sighting_id}")
+        return self._by_sighting[sighting_id][side]
+
+    def approved_pair(self, sighting_id: UUID) -> dict[str, str] | None:
+        """Return a sighting's approved pair record, or `None` when it has none."""
+        record = self._state["accepted"].get(str(sighting_id))
+        return dict(record) if record else None
+
+    def replace_pair(self, sighting_id: UUID, left_crop_key: str, right_crop_key: str) -> None:
+        """Approve a new pair for a queued sighting outside the picker history.
+
+        A different earlier pair is kept as superseded evidence, and an earlier
+        rejection is withdrawn.
+        """
+        snapshot = copy.deepcopy(self._state)
+        left = self._by_key.get(left_crop_key)
+        right = self._by_key.get(right_crop_key)
+        for candidate, side in ((left, "left"), (right, "right")):
+            if candidate is None or candidate.sighting_id != sighting_id or candidate.side != side:
+                raise ValueError(f"The {side} crop is not a {side} ear from this sighting")
+            if candidate.score < 5 or not candidate.available:
+                raise ValueError(f"The {side} crop is not selectable")
+        key = str(sighting_id)
+        existing = self._state["accepted"].get(key)
+        if existing is None and self._approved_counts().get(left.elephant, 0) >= self._SIGHTING_CAP:
+            raise ValueError(f"This elephant already has {self._SIGHTING_CAP} approved pairs; reopen an approval first")
+        record = {
+            "sighting_id": key,
+            "elephant": left.elephant,
+            "left_crop_key": left_crop_key,
+            "right_crop_key": right_crop_key,
+        }
+        if existing is not None and existing != record:
+            self._state.setdefault("superseded", {}).setdefault(key, []).append(existing)
+        self._state["accepted"][key] = record
+        self._state["rejected"].pop(key, None)
+        self._state["drafts"].pop(key, None)
+        try:
+            self._persist(project=True)
+        except Exception:
+            self._rollback(snapshot, project=True)
+            raise
+
+    def reject_sighting(self, sighting_id: UUID) -> None:
+        """Reject a queued sighting outside the picker history."""
+        if sighting_id not in self._tiers:
+            raise KeyError(f"Sighting is not in the review queue: {sighting_id}")
+        snapshot = copy.deepcopy(self._state)
+        self._record_rejection(sighting_id)
+        try:
+            self._persist(project=True)
+        except Exception:
+            self._rollback(snapshot, project=True)
+            raise
 
     def _open_right_side(self, sighting_id: UUID) -> None:
         """Move to the sighting's right screen, inserting it when it is not next."""
@@ -526,15 +588,14 @@ class ReviewSession:
                 self._rollback(snapshot, project=False)
                 raise
 
-    def read_original(self, crop_key: str) -> bytes:
-        """Read original photo bytes for a candidate on the current screen."""
+    def candidate(self, crop_key: str) -> Candidate | None:
+        """Return the inventory candidate for a crop key, if any."""
+        return self._by_key.get(crop_key)
+
+    def read_original(self, candidate: Candidate) -> bytes:
+        """Read a candidate's original photo bytes."""
         if self._photo_store is None:
             raise FileNotFoundError("Original photo access is unavailable")
-        candidate = next(
-            (item for item in self.screen().candidates if item.crop_key == crop_key), None
-        )
-        if candidate is None:
-            raise KeyError("Candidate is not on the current review screen")
         return self._photo_store.read(
             Photo(photo_id=candidate.photo_id, sighting_id=candidate.sighting_id)
         )
@@ -546,15 +607,20 @@ class ReviewSession:
                 return self._by_key[crop_key]
         return None
 
+    def approved_pairs(self) -> list[dict[str, object]]:
+        """Return every approved pair with crop provenance, in manifest order."""
+        pairs = [self._pair_export(record) for record in self._state["accepted"].values()]
+        return sorted(pairs, key=lambda pair: (pair["elephant"], pair["sighting_id"]))
+
     def export(self) -> dict[str, object]:
         """Return portable decisions, provenance, and protected elephant photos."""
-        pairs = [self._pair_export(record) for record in self._state["accepted"].values()]
+        pairs = self.approved_pairs()
         selected = sorted({pair["elephant"] for pair in pairs})
         return {
             "schema_version": self._SCHEMA_VERSION,
             "inventory_fingerprint": self.inventory_fingerprint,
             "revision": self._state["revision"],
-            "approved_pairs": sorted(pairs, key=lambda pair: (pair["elephant"], pair["sighting_id"])),
+            "approved_pairs": pairs,
             "retrieval_selected_elephants": selected,
             "training_excluded_photo_ids": sorted(
                 str(photo_id) for elephant in selected for photo_id in self._photos_by_elephant.get(elephant, ())
