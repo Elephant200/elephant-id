@@ -40,3 +40,7 @@ class MatchingError(RuntimeError):
         super().__init__(
             f"{stage.capitalize()} failed for {side} ear in photo {photo.photo_id}: {message}"
         )
+
+    def __reduce__(self) -> tuple[object, ...]:
+        """Rebuild from the message and attributes, so the error can cross process boundaries."""
+        return type(self).__new__, (type(self), *self.args), self.__dict__

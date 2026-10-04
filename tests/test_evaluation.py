@@ -125,7 +125,7 @@ def test_evaluate_uses_neutral_leave_one_sighting_out_queries(tmp_path: Path) ->
     """Only eligible queries run, while all non-query evidence stays in the catalog."""
     matcher = RecordingMatcher()
 
-    result = evaluate(_benchmark(tmp_path), matcher)
+    result = evaluate(_benchmark(tmp_path), lambda: matcher)
 
     assert set(result.scores) == {"Ada", "Bea"}
     assert set(result.scores["Ada"][_uuid(101)]) == {"Ada", "Bea", "Cia"}
@@ -170,7 +170,7 @@ class RankedMatcher:
 
 def test_result_has_query_weighted_metrics_and_elephant_bootstrap_intervals(tmp_path: Path) -> None:
     """Point metrics weight queries; bootstrap resampling keeps all queries of each elephant."""
-    result = evaluate(_benchmark(tmp_path), RankedMatcher())
+    result = evaluate(_benchmark(tmp_path), RankedMatcher)
 
     assert result.metrics == {
         "eligible_queries": 4,
@@ -194,7 +194,7 @@ def test_median_rank_averages_the_two_middle_ranks(tmp_path: Path) -> None:
     class SplitMatcher(RankedMatcher):
         ranks: ClassVar = {_uuid(101): 1, _uuid(102): 1, _uuid(103): 2, _uuid(104): 3}
 
-    assert evaluate(_benchmark(tmp_path), SplitMatcher()).metrics["median_rank"] == pytest.approx(1.5)
+    assert evaluate(_benchmark(tmp_path), SplitMatcher).metrics["median_rank"] == pytest.approx(1.5)
 
 
 @dataclass(frozen=True)
@@ -220,7 +220,7 @@ class FixedMatcher:
 def test_evaluate_rejects_invalid_matcher_scores(tmp_path: Path, matcher: FixedMatcher) -> None:
     """Scores must be finite and cover exactly the candidate keys."""
     with pytest.raises(ValueError, match="one finite score") as caught:
-        evaluate(_benchmark(tmp_path), matcher)
+        evaluate(_benchmark(tmp_path), lambda: matcher)
 
     assert caught.value.__notes__ == [f"Query sighting {_uuid(101)}"]
 
@@ -241,7 +241,7 @@ class FailingMatcher:
 def test_evaluate_reraises_matcher_failures_with_the_query(tmp_path: Path) -> None:
     """A matcher failure keeps its photo and side and gains the query sighting ID."""
     with pytest.raises(MatchingError) as caught:
-        evaluate(_benchmark(tmp_path), FailingMatcher())
+        evaluate(_benchmark(tmp_path), FailingMatcher)
 
     assert caught.value.photo_id == _uuid(3)
     assert caught.value.side == "left"
@@ -251,4 +251,20 @@ def test_evaluate_reraises_matcher_failures_with_the_query(tmp_path: Path) -> No
 def test_evaluate_rejects_a_benchmark_without_eligible_queries(tmp_path: Path) -> None:
     """Metrics need at least one elephant with another sighting in the catalog."""
     with pytest.raises(ValueError, match="no eligible queries"):
-        evaluate(_benchmark(tmp_path, (_valid_rows()[0], _valid_rows()[-1])), RecordingMatcher())
+        evaluate(_benchmark(tmp_path, (_valid_rows()[0], _valid_rows()[-1])), RecordingMatcher)
+
+
+def test_worker_processes_match_a_single_process(tmp_path: Path) -> None:
+    """Worker processes give the same scores, metrics, and intervals as one process."""
+    benchmark = _benchmark(tmp_path)
+
+    assert evaluate(benchmark, RankedMatcher, workers=2) == evaluate(benchmark, RankedMatcher)
+
+
+def test_worker_failures_keep_their_type_and_query(tmp_path: Path) -> None:
+    """A matcher failure in a worker process reaches the caller unchanged."""
+    with pytest.raises(MatchingError) as caught:
+        evaluate(_benchmark(tmp_path), FailingMatcher, workers=2)
+
+    assert caught.value.photo_id == _uuid(3)
+    assert caught.value.__notes__ == [f"Query sighting {_uuid(101)}"]

@@ -5,7 +5,7 @@ Retrieval evaluation measures complete catalog matchers. It does not depend on o
 ## Interface
 
 - `load_benchmark(path, dataset) -> Benchmark` reads a benchmark file. It returns the sighting ear pairs grouped by known elephant.
-- `evaluate(benchmark, matcher) -> EvaluationResult` runs the protocol.
+- `evaluate(benchmark, build_matcher, workers=1) -> EvaluationResult` runs the protocol. Each worker process builds its own matcher and runs a share of the queries. The result does not depend on the number of workers.
 
 Only the evaluator sees the known-elephant names. The catalog matcher does not see them.
 
@@ -77,6 +77,6 @@ The intervals are two-sided 95% percentile bootstrap intervals. The bootstrap us
 
 ## Entry Point
 
-`uv run eval [path]` builds standard AlphaPhant and evaluates `benchmark_final.csv` or the given file. It prints the metrics and intervals.
+`uv run eval [path] [--workers N]` builds standard AlphaPhant and evaluates `benchmark_final.csv` or the given file. By default, it uses one worker for each CPU core. It prints the metrics and intervals.
 
 Related decisions: [ADR 0005](adr/0005-separate-retrieval-evaluation-from-implementation.md), [ADR 0007](adr/0007-pin-evaluation-by-git-commit.md), [ADR 0008](adr/0008-use-permanent-opaque-photo-identity.md), [ADR 0010](adr/0010-cache-reusable-processing-through-composition.md).
