@@ -41,7 +41,7 @@ The reference evidence grouped by known elephant and ear side for matching.
 _Avoid_: Gallery when naming the domain concept
 
 **Candidate key**:
-An ephemeral opaque UUID assigned to one matching candidate for one call to `evaluate`. It is stable across that evaluation's query folds and carries no known-elephant identity.
+An opaque identifier that stands in for one known elephant during one retrieval evaluation. It does not carry known-elephant identity.
 _Avoid_: Known-elephant name, photo ID, sighting ID
 
 **Matching candidate**:
@@ -105,11 +105,11 @@ _Avoid_: Identity decision, prediction
 ## Evaluation
 
 **Retrieval benchmark set**:
-The fixed sample of real sighting ear pairs used to evaluate algorithm performance. It contains one pair per sampled sighting, and the data is stored in a benchmark manifest, which contains one row per selected sighting ear pair and lists the elephant identity, sighting ID, left photo ID, and right photo ID. Shorten to benchmark set in running writing.
+The fixed sample of real sighting ear pairs used to evaluate algorithm performance. It contains one pair per sampled sighting. Shorten to benchmark set in running writing.
 _Avoid_: Evaluation suite, test set
 
 **Parameter-tuning set**:
-The image set on which AlphaPhant's matching parameters, such as the profile stretch exponent, are tuned. It shares no sighting or photo with the retrieval benchmark set; a few well-photographed elephants may appear in both. Shorten to tuning set in running writing.
+The image set on which AlphaPhant's matching parameters, such as the profile stretch exponent, are tuned. It shares no elephant, sighting, or photo with the retrieval benchmark set. Shorten to tuning set in running writing.
 _Avoid_: Validation set, training set
 
 **AI-model training datasets**:
