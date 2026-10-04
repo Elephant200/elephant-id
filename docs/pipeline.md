@@ -19,13 +19,13 @@ Query ears and reference ears go through the same steps:
 1. **Photo retrieval and decoding:** Read the original encoded bytes from the photo store. Decode them to a BGR image.
 2. **Ear localization and ear segmentation:** Find the ears. Make a mask and a box for each ear.
 3. **Ear landmark detection:** Find the two anatomical endpoints of the relevant contour.
-4. **Ear-contour preparation:** Extract the contour from the mask. Snap the landmarks to the contour. The snapped landmarks divide the contour into two paths. Select one path from the enclosed ear area. Then calculate the contour geometry.
+4. **Ear-contour preparation:** Extract the contour from the mask. Snap the landmarks to the contour. The snapped landmarks divide the contour into two paths. Keep the ear-flap path: the path that encloses the larger area with the chord between the snapped landmarks. Then calculate the contour geometry.
 5. **Declared-side resolution:** Select the prepared ear for each declared side. Resolve both sides before extraction starts.
 6. **Tear-profile extraction:** Run AlphaTear. AlphaTear builds an alpha shape and makes the one-dimensional tear profile. AlphaPhant then attaches the source data and the original sighting ID.
 
-The pipeline treats the declared side as correct. If the pipeline cannot make a valid ear for that side, analysis fails with an error. Research uses the selected ear pair. It has no fallback selection.
+The pipeline treats the declared side as correct. If the pipeline cannot make a valid ear for that side, analysis fails with an error. Research uses the selected ear pair.
 
-The pipeline detects landmarks and prepares the contour for each segmented ear. It determines every ear's side. For each side (left and right), it selects the prepared ear with the largest area so that there is always a maximum of one left ear and one right ear for each elephant image.
+The pipeline detects landmarks and prepares the contour for each segmented ear. It determines every ear's side. For each declared side, it selects the largest prepared ear with that inferred side. Each photo supplies at most one left ear and one right ear.
 
 SAM3 does ear localization and segmentation. A YOLO keypoint model does ear landmark detection. To replace a model, use the semantic inference interfaces in [architecture.md](architecture.md).
 

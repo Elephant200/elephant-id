@@ -13,7 +13,7 @@ from scipy.spatial import Delaunay
 
 from elephant_id.domain import Photo
 from elephant_id.image.boxes import BoundingBox
-from elephant_id.preparation.ear import EarSide, PreparedEar
+from elephant_id.preparation import EarSide, PreparedEar, ear_side_path
 
 
 @dataclass(frozen=True, slots=True, eq=False)
@@ -106,7 +106,7 @@ class AlphaTearVersion:
 
 
 DEFAULT_VERSION = AlphaTearVersion(
-    slug="alpha-tear-v3",
+    slug="alpha-tear-v1",
     config=AlphaTearConfig(),
 )
 
@@ -135,36 +135,6 @@ def _densify(path: np.ndarray, max_spacing: float = 2.0) -> np.ndarray:
     return np.vstack(pieces)
 
 
-def _ear_side_path(
-    exterior: np.ndarray,
-    upper_anchor: np.ndarray,
-    lower_anchor: np.ndarray,
-) -> np.ndarray:
-    """Return the anchor path deviating farther from the anchor chord."""
-    upper_index = int(np.argmin(np.linalg.norm(exterior - upper_anchor, axis=1)))
-    exterior = np.roll(exterior, -upper_index, axis=0)
-    lower_index = int(np.argmin(np.linalg.norm(exterior - lower_anchor, axis=1)))
-    forward = exterior[: lower_index + 1]
-    backward = np.vstack([exterior[lower_index:], exterior[:1]])[::-1]
-    chord_direction = (lower_anchor - upper_anchor) / np.linalg.norm(
-        lower_anchor - upper_anchor
-    )
-
-    def deviation(path: np.ndarray) -> float:
-        """Return maximum absolute distance from the anchor chord."""
-        if len(path) < 2:
-            return -np.inf
-        offsets = path - upper_anchor
-        return float(
-            np.abs(
-                offsets[:, 0] * chord_direction[1]
-                - offsets[:, 1] * chord_direction[0]
-            ).max()
-        )
-
-    return forward if deviation(forward) > deviation(backward) else backward
-
-
 def _opened_contour(contour: np.ndarray, radius: float) -> np.ndarray:
     """Morphologically open a contour and restore its original anchors."""
     polygon = shapely.Polygon(contour)
@@ -178,7 +148,7 @@ def _opened_contour(contour: np.ndarray, radius: float) -> np.ndarray:
     if opened.geom_type == "MultiPolygon":
         opened = max(opened.geoms, key=lambda geometry: geometry.area)
     exterior = np.asarray(opened.exterior.coords)[:-1]
-    path = _densify(_ear_side_path(exterior, contour[0], contour[-1]))
+    path = _densify(ear_side_path(exterior, contour[0], contour[-1]))
     path[0] = contour[0]
     path[-1] = contour[-1]
     return path
@@ -384,7 +354,7 @@ class AlphaTearExtractor:
         shape_building_contour = _opened_contour(measured_contour, self._config.morph_opening_fraction * radius)
         reference_shape = _alpha_shape(shape_building_contour, self._config.alpha_fraction * radius)
         reference_boundary = np.asarray(reference_shape.exterior.coords)[:-1]
-        reference_path = _densify(_ear_side_path(reference_boundary, shape_building_contour[0], shape_building_contour[-1]))
+        reference_path = _densify(ear_side_path(reference_boundary, shape_building_contour[0], shape_building_contour[-1]))
 
         angles = np.linspace(0.0, 180.0, self._config.profile_bins)
         sampled_bins = (angles > self._config.trim_degrees) & (angles < 180.0 - self._config.trim_degrees)

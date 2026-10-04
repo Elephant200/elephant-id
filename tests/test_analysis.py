@@ -33,6 +33,7 @@ from elephant_id.preparation import (
     PreparationStage,
     PreparedEar,
     SightingPreparer,
+    ear_side_path,
     prepare_ear,
 )
 
@@ -77,7 +78,7 @@ class _ProfileExtractor:
     """Record prepared-ear extraction."""
 
     profile: TearProfile = field(default_factory=lambda: TearProfile(np.asarray([0.0, 0.1, 0.0])))
-    producer_slug: str | None = "alpha-tear-v3"
+    producer_slug: str | None = "alpha-tear-v1"
     calls: list[PreparedEar] = field(default_factory=list)
 
     def extract(self, ear: PreparedEar) -> TearProfile:
@@ -109,7 +110,7 @@ def test_cached_profile_uses_prepared_ear_lineage(tmp_path: Path) -> None:
         f"{PHOTO.photo_id}__seg_sam3-features__landmarks_"
         "yolo26n-keypoints-v1__side_left__crop_2_3_13_16"
     )
-    assert cache.exists("alpha-tear-v3", key)
+    assert cache.exists("alpha-tear-v1", key)
 
 
 def test_cached_profile_rejects_unversioned_extractor(tmp_path: Path) -> None:
@@ -192,6 +193,70 @@ def test_ear_preparation_preserves_detected_and_snapped_landmarks() -> None:
     assert prepared.contour_anchors != original
     np.testing.assert_array_equal(prepared.contour[0], prepared.contour_anchors[0])
     np.testing.assert_array_equal(prepared.contour[-1], prepared.contour_anchors[1])
+
+
+def _comb_and_flap_mask(mirrored: bool) -> np.ndarray:
+    """Return an ear mask whose jagged head side has more contour points than its flap.
+
+    Args:
+        mirrored: Whether the flap is on the left of the landmark chord.
+
+    Returns:
+        A 50-by-50 boolean mask with the landmark chord at column 20, or 29 if mirrored.
+    """
+    rows, columns = np.mgrid[0:50, 0:50]
+    flap = (columns >= 20) & ((columns - 20) ** 2 + (rows - 25) ** 2 <= 400)
+    head = (columns >= 16) & (columns < 20) & (rows >= 5) & (rows <= 45)
+    teeth = (columns >= 10) & (columns < 16) & (rows >= 5) & (rows <= 45) & (rows % 4 < 2)
+    mask = flap | head | teeth
+    return mask[:, ::-1] if mirrored else mask
+
+
+@pytest.mark.parametrize(("mirrored", "side"), [(False, "left"), (True, "right")])
+def test_ear_preparation_keeps_flap_over_jagged_head_side(mirrored: bool, side: EarSide) -> None:
+    """Preparation keeps the larger flap when the head side has more contour points."""
+    mask = _comb_and_flap_mask(mirrored)
+    chord_x = 29.0 if mirrored else 20.0
+    detection = Detection(
+        xyxy=(0.0, 0.0, 50.0, 50.0),
+        class_name="ear",
+        class_id=2,
+        confidence=0.9,
+        rle_mask=_rle(mask),
+    )
+    source_contours, _ = cv2.findContours(
+        mask.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE
+    )
+
+    prepared = prepare_ear(
+        detection,
+        _landmarks((chord_x, 5.0), (chord_x, 45.0)),
+        source_photo=PHOTO,
+        source_box=BoundingBox(0, 0, 50, 50),
+    )
+
+    kept_points = len(prepared.contour)
+    discarded_points = len(source_contours[0]) - kept_points + 2
+    assert discarded_points > kept_points
+    offsets = (prepared.contour[:, 0] - chord_x) * (-1.0 if mirrored else 1.0)
+    assert offsets.min() >= 0.0
+    assert offsets.max() >= 19.0
+    assert prepared.inferred_side == side
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+@pytest.mark.parametrize("start", [0, 2, 5])
+def test_ear_side_path_keeps_larger_area_over_farther_spike(reverse: bool, start: int) -> None:
+    """The flap path encloses more area with the chord, not the farthest point."""
+    flap = np.asarray([[0.0, 0.0], [5.0, 0.0], [5.0, 10.0], [0.0, 10.0]])
+    spike = np.asarray([[0.0, 6.0], [-8.0, 5.0], [0.0, 4.0]])
+    boundary = np.roll(np.vstack([flap, spike]), -start, axis=0)
+    if reverse:
+        boundary = boundary[::-1]
+
+    path = ear_side_path(boundary, np.asarray([0.0, 0.0]), np.asarray([0.0, 10.0]))
+
+    np.testing.assert_array_equal(path, flap)
 
 
 @dataclass
@@ -314,6 +379,82 @@ def test_alphaphant_analysis_prepares_one_photo_once_for_both_sides() -> None:
     assert result.right.source_box == right_box
     assert segmenter.calls == [PHOTO]
     assert detector.calls == [(PHOTO, left_box), (PHOTO, right_box)]
+
+
+@pytest.mark.parametrize("shared_photo", [False, True])
+@pytest.mark.parametrize("smaller_side", ["left", "right"])
+def test_preparation_resolves_ears_with_unequal_mask_areas(
+    shared_photo: bool,
+    smaller_side: EarSide,
+) -> None:
+    """A declared ear remains available when the other ear is over twice its area."""
+    left_x2 = 7 if smaller_side == "left" else 13
+    right_x1 = 22 if smaller_side == "right" else 16
+    left = _segmented_rectangle(2, 3, left_x2, 20)
+    right = _segmented_rectangle(right_x1, 3, 27, 20)
+    left_box = BoundingBox(2, 3, left_x2, 20)
+    right_box = BoundingBox(right_x1, 3, 27, 20)
+    detections = (right, left) if smaller_side == "left" else (left, right)
+    right_photo = PHOTO if shared_photo else RIGHT_PHOTO
+    segmenter = _Segmenter({PHOTO: detections, right_photo: detections})
+    preparer = SightingPreparer(
+        photo_store=_PhotoStore(_encoded_image()),
+        ear_segmenter=segmenter,
+        landmark_detector=_LandmarkDetector(
+            {
+                left_box: _landmarks((2.0, 3.0), (2.0, 19.0)),
+                right_box: _landmarks((26.0, 3.0), (26.0, 19.0)),
+            }
+        ),
+    )
+
+    prepared_left, prepared_right = preparer.prepare(
+        SightingEarPair(PHOTO.sighting_id, PHOTO, right_photo)
+    )
+
+    assert prepared_left.source_box == left_box
+    assert prepared_right.source_box == right_box
+    assert prepared_right.source_photo == right_photo
+    assert segmenter.calls == ([PHOTO] if shared_photo else [PHOTO, RIGHT_PHOTO])
+
+
+@pytest.mark.parametrize("shared_photo", [False, True])
+def test_preparation_resolves_opposite_side_beyond_two_largest_masks(
+    shared_photo: bool,
+) -> None:
+    """Two larger left-ear candidates do not exclude a smaller right ear."""
+    largest_left = _segmented_rectangle(2, 3, 12, 20)
+    second_left = _segmented_rectangle(13, 3, 21, 20)
+    right = _segmented_rectangle(22, 3, 27, 20)
+    left_box = BoundingBox(2, 3, 12, 20)
+    second_left_box = BoundingBox(13, 3, 21, 20)
+    right_box = BoundingBox(22, 3, 27, 20)
+    detections = (second_left, right, largest_left)
+    right_photo = PHOTO if shared_photo else RIGHT_PHOTO
+    detector = _LandmarkDetector(
+        {
+            left_box: _landmarks((2.0, 3.0), (2.0, 19.0)),
+            second_left_box: _landmarks((13.0, 3.0), (13.0, 19.0)),
+            right_box: _landmarks((26.0, 3.0), (26.0, 19.0)),
+        }
+    )
+    preparer = SightingPreparer(
+        photo_store=_PhotoStore(_encoded_image()),
+        ear_segmenter=_Segmenter({PHOTO: detections, right_photo: detections}),
+        landmark_detector=detector,
+    )
+
+    prepared_left, prepared_right = preparer.prepare(
+        SightingEarPair(PHOTO.sighting_id, PHOTO, right_photo)
+    )
+
+    assert prepared_left.source_box == left_box
+    assert prepared_right.source_box == right_box
+    every_ear = [second_left_box, right_box, left_box]
+    expected_calls = [(PHOTO, box) for box in every_ear]
+    if not shared_photo:
+        expected_calls += [(RIGHT_PHOTO, box) for box in every_ear]
+    assert detector.calls == expected_calls
 
 
 def test_alphaphant_analysis_preserves_input_order_for_equal_matching_ears() -> None:

@@ -57,7 +57,7 @@ def _contour_area(path: NDArray[np.float64]) -> float:
     return float(cv2.contourArea(path.astype(np.float32)))
 
 
-def _ear_side_path(
+def ear_side_path(
     boundary: NDArray[np.float64],
     upper: NDArray[np.float64],
     lower: NDArray[np.float64],
@@ -127,7 +127,7 @@ def prepare_ear(
     source_contour = _largest_contour(ear_detection.rle_mask)
     snapped = _snap_landmarks(source_contour, original_landmarks)
     upper, lower = sorted(snapped, key=lambda point: point[1])
-    contour = _ear_side_path(source_contour, np.asarray(upper), np.asarray(lower))
+    contour = ear_side_path(source_contour, np.asarray(upper), np.asarray(lower))
     contour_anchors: LandmarkPair = (
         (float(contour[0, 0]), float(contour[0, 1])),
         (float(contour[-1, 0]), float(contour[-1, 1])),

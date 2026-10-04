@@ -162,7 +162,11 @@ class SightingPreparer:
         photo: Photo,
         side: EarSide,
     ) -> PreparedEar:
-        """Resolve one declared side by inferred geometry and cleaned area."""
+        """Return the largest prepared ear whose inferred side is the declared side.
+
+        Raises:
+            MatchingError: If no prepared ear has the declared side.
+        """
         matching = tuple(
             candidate for candidate in candidates if candidate.inferred_side == side
         )
