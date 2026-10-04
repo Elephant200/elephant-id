@@ -10,7 +10,7 @@ from elephant_id.log import configure_logging
 
 from . import evaluate, load_benchmark
 
-_MANIFEST = Path("dataset/elephants-alive/benchmark/manifest.csv")
+_MANIFEST = Path("dataset/elephants-alive/benchmark/benchmark_final.csv")
 _DATASET_ROOT = Path("dataset/elephants-alive/coded")
 _METADATA = Path("dataset/elephants-alive/images.csv")
 
