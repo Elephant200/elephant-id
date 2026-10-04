@@ -20,6 +20,8 @@ AlphaPhant is a fully automated catalog-matching algorithm for elephant re-ident
 
 Run Python from the repository root with `uv`. After Python changes, run `uv run ruff check .` and relevant tests. 
 
+Change files with your harness's file tools: Edit/Write in Claude Code, `apply_patch` in Codex. This is critical for user review. Use the shell to run programs: tests, ruff, git, and scripts.
+
 ## Scope and Safety
 
 - Root `dataset/` is private user data. Do not edit or delete it unless explicitly asked.
@@ -46,9 +48,9 @@ Keep interfaces narrow and justified by current variation. Research supplies a s
 
 - State what the code does. Do not state what it does not do, what it used to do, or what another branch does.
 - Write a constraint as a positive rule ("Preparation fails when no ear has the declared side"), not as an absence ("There is no fallback"). Only write negative rules if a careful reader would make the wrong assumption; this is rare.
-- Report removals, history, and rejected alternatives to the user in chat, not in permanent files.
+- Report removals, history, and rejected alternatives to the user in chat.
 - Test behavior the code has. Do not add tests that guard against code that never existed.
-- To check, consider deleting the sentence. If a reader wouldn't form a wrong belief, it's not necessary.
+- To check, consider deleting the sentence. If a reader wouldn't form a wrong belief, delete it.
 
 ## Images and Geometry
 
