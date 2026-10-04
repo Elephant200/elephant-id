@@ -25,7 +25,6 @@ The catalog matcher returns one finite similarity score for each candidate key. 
 | `all_approved_sighting_ear_pairs.csv` | All approved sighting ear pairs. |
 | `tuning_final.csv` | The tuning set. |
 | `benchmark_final.csv` | The benchmark set. `uv run eval` uses this file by default. |
-| `tuning_v2.csv`, `benchmark_v3.csv` | Earlier versions of the two sets. |
 
 Each file has exactly these columns: `known_elephant_name,sighting_id,left_photo_id,right_photo_id`. Each row is one sighting ear pair. One photo can supply both ears.
 
