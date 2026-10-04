@@ -7,11 +7,9 @@ from elephant_id.dataset import PhotoStore
 from elephant_id.domain import Photo, SightingEarPair
 from elephant_id.image import decode_image
 from elephant_id.image.boxes import BoundingBox
-from elephant_id.inference import Detection, EarLandmarkDetector, EarSegmenter
+from elephant_id.inference import EarLandmarkDetector, EarSegmenter
 from elephant_id.matching.protocol import MatchingError
 from elephant_id.preparation.ear import EarSide, PreparedEar, prepare_ear
-
-_MULTIPLE_EAR_AREA_RATIO = 2.0
 
 
 class PreparationStage(StrEnum):
@@ -111,7 +109,7 @@ class SightingPreparer:
             ) from error
 
         prepared: list[PreparedEar] = []
-        for detection in self._area_filtered_ears(detections):
+        for detection in detections:
             try:
                 source_box = BoundingBox.from_float(
                     detection.xyxy,
@@ -157,23 +155,6 @@ class SightingPreparer:
                     message=str(error),
                 ) from error
         return tuple(prepared)
-
-    @staticmethod
-    def _area_filtered_ears(
-        detections: tuple[Detection, ...],
-    ) -> tuple[Detection, ...]:
-        """An ear-area heuristic to limit the number of candidate ears."""
-        if len(detections) > 2:
-            detections = tuple(sorted(detections, key=Detection.area, reverse=True)[:2])
-        if len(detections) != 2:
-            return detections
-        first_area = detections[0].area()
-        second_area = detections[1].area()
-        if first_area / second_area > _MULTIPLE_EAR_AREA_RATIO:
-            return (detections[0],)
-        if second_area / first_area > _MULTIPLE_EAR_AREA_RATIO:
-            return (detections[1],)
-        return detections
 
     @staticmethod
     def _resolve_declared_side(

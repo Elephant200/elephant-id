@@ -25,10 +25,7 @@ Query ears and reference ears go through the same steps:
 
 The pipeline treats the declared side as correct. If the pipeline cannot make a valid ear for that side, analysis fails with an error. Research uses the selected ear pair. It has no fallback selection.
 
-Two steps remove extra ear candidates, and each uses a different area measure:
-
-- Before landmark detection, a preliminary heuristic compares the segmentation-mask pixel area.
-- After preparation, declared-side resolution compares the filled area of the cleaned contour. If two areas are exactly equal, it keeps the first ear in input order.
+The pipeline detects landmarks and prepares the contour for each segmented ear. It determines every ear's side. For each side (left and right), it selects the prepared ear with the largest area so that there is always a maximum of one left ear and one right ear for each elephant image.
 
 SAM3 does ear localization and segmentation. A YOLO keypoint model does ear landmark detection. To replace a model, use the semantic inference interfaces in [architecture.md](architecture.md).
 

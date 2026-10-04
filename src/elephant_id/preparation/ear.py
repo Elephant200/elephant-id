@@ -45,22 +45,38 @@ def _snap_landmarks(
     return snapped[0], snapped[1]
 
 
-def _cut_contour(
-    contour: NDArray[np.float64],
-    snapped_landmarks: LandmarkPair,
+def _contour_area(path: NDArray[np.float64]) -> float:
+    """Return the area that a path encloses with the chord between its ends.
+
+    Args:
+        path: Ordered path points.
+
+    Returns:
+        The enclosed area.
+    """
+    return float(cv2.contourArea(path.astype(np.float32)))
+
+
+def _ear_side_path(
+    boundary: NDArray[np.float64],
+    upper: NDArray[np.float64],
+    lower: NDArray[np.float64],
 ) -> NDArray[np.float64]:
-    """Return the longer vertex path from upper to lower snapped landmark."""
-    upper = min(snapped_landmarks, key=lambda point: point[1])
-    lower = max(snapped_landmarks, key=lambda point: point[1])
-    upper_index = int(
-        np.argmin(np.sum((contour - np.asarray(upper)) ** 2, axis=1))
-    )
-    lower_index = int(
-        np.argmin(np.sum((contour - np.asarray(lower)) ** 2, axis=1))
-    )
-    forward = _closed_path(contour, upper_index, lower_index)
-    backward = _closed_path(contour, lower_index, upper_index)[::-1]
-    return forward if len(forward) >= len(backward) else backward
+    """Return the ear-flap path of a closed boundary, from upper to lower point.
+
+    Args:
+        boundary: Ordered points of a closed ear boundary.
+        upper: Point nearest the start of the path.
+        lower: Point nearest the end of the path.
+
+    Returns:
+        The boundary path that encloses more area with the chord between its ends.
+    """
+    upper_index = int(np.argmin(np.sum((boundary - upper) ** 2, axis=1)))
+    lower_index = int(np.argmin(np.sum((boundary - lower) ** 2, axis=1)))
+    forward = _closed_path(boundary, upper_index, lower_index)
+    backward = _closed_path(boundary, lower_index, upper_index)[::-1]
+    return forward if _contour_area(forward) >= _contour_area(backward) else backward
 
 
 @dataclass(frozen=True, slots=True, eq=False)
@@ -110,7 +126,8 @@ def prepare_ear(
     )
     source_contour = _largest_contour(ear_detection.rle_mask)
     snapped = _snap_landmarks(source_contour, original_landmarks)
-    contour = _cut_contour(source_contour, snapped)
+    upper, lower = sorted(snapped, key=lambda point: point[1])
+    contour = _ear_side_path(source_contour, np.asarray(upper), np.asarray(lower))
     contour_anchors: LandmarkPair = (
         (float(contour[0, 0]), float(contour[0, 1])),
         (float(contour[-1, 0]), float(contour[-1, 1])),
