@@ -4,10 +4,10 @@ Retrieval evaluation measures complete catalog matchers. It does not depend on o
 
 ## Interface
 
-- `load_benchmark(path) -> RetrievalBenchmark` reads a benchmark file.
-- `evaluate(benchmark, dataset, matcher) -> EvaluationResult` runs the protocol.
+- `load_benchmark(path, dataset) -> Benchmark` reads a benchmark file. It returns the sighting ear pairs grouped by known elephant.
+- `evaluate(benchmark, matcher) -> EvaluationResult` runs the protocol.
 
-The evaluator has the Dataset and the known-elephant labels. The catalog matcher does not see them.
+Only the evaluator sees the known-elephant names. The catalog matcher does not see them.
 
 For each query, the evaluator gives the catalog matcher:
 
@@ -33,7 +33,7 @@ The split uses only elephants with three or more approved sightings. Each elepha
 
 ## Validation
 
-`load_benchmark` checks the file format. Before the first matcher call, `evaluate` checks each row against the Dataset. Each check reports all its errors in one `BenchmarkValidationError`.
+`load_benchmark` checks the columns. It checks each row against the Dataset and rejects a repeated sighting. It stops at the first bad row, and the error gives the file and row number.
 
 ## Leave-One-Sighting-Out Protocol
 
@@ -49,7 +49,7 @@ A query is ineligible if no other sighting of its elephant is in the set. Inelig
 
 ## Failures
 
-A failure stops evaluation with an `EvaluationError`. Evaluation does not return a partial result.
+A failure stops evaluation. The error gives the query sighting ID. Evaluation does not return a partial result.
 
 Curation makes sure that each selected photo gives a valid extraction for both ears. Thus, an extraction failure is a curation error, not a retrieval result.
 

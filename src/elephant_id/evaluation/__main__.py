@@ -24,7 +24,7 @@ def main() -> None:
     configure_logging()
     dataset = Dataset(_DATASET_ROOT, _METADATA)
     matcher = build_standard_alphaphant(dataset.photo_store)
-    result = evaluate(load_benchmark(args.manifest), dataset, matcher)
+    result = evaluate(load_benchmark(args.manifest, dataset), matcher)
     print(json.dumps({"metrics": result.metrics, "intervals": result.intervals}, indent=2))
 
 

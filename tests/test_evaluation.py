@@ -12,13 +12,7 @@ import pytest
 
 from elephant_id.dataset import Dataset
 from elephant_id.domain import SightingEarPair
-from elephant_id.evaluation import (
-    BenchmarkValidationError,
-    EvaluationError,
-    EvaluationStage,
-    evaluate,
-    load_benchmark,
-)
+from elephant_id.evaluation import Benchmark, evaluate, load_benchmark
 from elephant_id.matching import CandidateKey, CandidateScores
 from elephant_id.matching.protocol import MatchingError
 
@@ -41,25 +35,15 @@ def _dataset(tmp_path: Path) -> Dataset:
             sighting_id = _uuid(100 + sighting_offset)
             for side_offset, side in enumerate(("left", "right")):
                 photo_id = _uuid(2 * sighting_offset - 1 + side_offset)
-                writer.writerow(
-                    (
-                        photo_id,
-                        sighting_id,
-                        "2020-01-01",
-                        name,
-                        f"{name}/{sighting_id}-{side}.jpg",
-                    )
-                )
+                writer.writerow((photo_id, sighting_id, "2020-01-01", name, f"{name}/{sighting_id}-{side}.jpg"))
     return Dataset(root, metadata)
 
 
-def _write_manifest(path: Path, rows: tuple[tuple[object, ...], ...]) -> None:
-    """Write a benchmark manifest."""
+def _write_benchmark(path: Path, rows: tuple[tuple[object, ...], ...]) -> None:
+    """Write a benchmark file."""
     with path.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.writer(handle)
-        writer.writerow(
-            ("known_elephant_name", "sighting_id", "left_photo_id", "right_photo_id")
-        )
+        writer.writerow(("known_elephant_name", "sighting_id", "left_photo_id", "right_photo_id"))
         writer.writerows(rows)
 
 
@@ -74,50 +58,58 @@ def _valid_rows() -> tuple[tuple[object, ...], ...]:
     )
 
 
-def test_load_benchmark_returns_only_manifest_ids(tmp_path: Path) -> None:
-    """Loading does not resolve or retain Dataset objects or paths."""
-    manifest = tmp_path / "manifest.csv"
-    _write_manifest(manifest, _valid_rows())
-
-    benchmark = load_benchmark(manifest)
-
-    assert benchmark.sightings["Ada"][_uuid(101)] == (_uuid(1), _uuid(2))
+def _benchmark(tmp_path: Path, rows: tuple[tuple[object, ...], ...] = _valid_rows()) -> Benchmark:
+    """Write and load a benchmark against the small Dataset."""
+    path = tmp_path / "benchmark.csv"
+    _write_benchmark(path, rows)
+    return load_benchmark(path, _dataset(tmp_path))
 
 
-def test_load_benchmark_collects_manifest_errors(tmp_path: Path) -> None:
-    """Malformed cells and duplicate declarations are reported together."""
-    manifest = tmp_path / "manifest.csv"
-    _write_manifest(
-        manifest,
-        (
-            (
-                "Ada",
-                _uuid(101),
-                "AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA",
-                "not-a-uuid",
-                "extra",
-            ),
-            ("", _uuid(101), "", _uuid(2)),
-        ),
+def test_load_benchmark_groups_resolved_pairs_by_elephant(tmp_path: Path) -> None:
+    """Each row becomes a sighting ear pair under its known elephant."""
+    benchmark = _benchmark(tmp_path)
+
+    assert list(benchmark) == ["Ada", "Bea", "Cia"]
+    first = benchmark["Ada"][0]
+    assert (first.sighting_id, first.left_photo.photo_id, first.right_photo.photo_id) == (
+        _uuid(101),
+        _uuid(1),
+        _uuid(2),
     )
 
-    with pytest.raises(BenchmarkValidationError) as caught:
-        load_benchmark(manifest)
 
-    assert len(caught.value.errors) == 6
-    assert any("expected 4 values" in error for error in caught.value.errors)
-    assert any("canonical UUIDv4" in error for error in caught.value.errors)
-    assert any("duplicate sighting_id" in error for error in caught.value.errors)
-    assert any("missing known_elephant_name" in error for error in caught.value.errors)
+@pytest.mark.parametrize(
+    ("row", "error", "message"),
+    [
+        (("Bea", _uuid(101), _uuid(1), _uuid(2)), ValueError, "belongs to 'Ada'"),
+        (("Ada", _uuid(101), _uuid(999), _uuid(2)), KeyError, "Unknown photo_id"),
+        (("Ada", _uuid(101), _uuid(5), _uuid(2)), ValueError, "does not belong to Sighting"),
+        (("Ada", _uuid(999), _uuid(1), _uuid(2)), KeyError, "Unknown sighting_id"),
+    ],
+)
+def test_load_benchmark_rejects_rows_that_disagree_with_the_dataset(
+    tmp_path: Path, row: tuple[object, ...], error: type[Exception], message: str
+) -> None:
+    """A bad row fails with its row number."""
+    with pytest.raises(error, match=message) as caught:
+        _benchmark(tmp_path, (row,))
+
+    assert caught.value.__notes__ == [f"{tmp_path / 'benchmark.csv'}, row 2"]
+
+
+def test_load_benchmark_rejects_duplicate_sightings(tmp_path: Path) -> None:
+    """A sighting appears at most once."""
+    with pytest.raises(ValueError, match="Duplicate sighting_id"):
+        _benchmark(tmp_path, (_valid_rows()[0], _valid_rows()[0]))
 
 
 @dataclass
 class RecordingMatcher:
-    """Record folds and return complete deterministic scores."""
+    """Record queries and return complete deterministic scores."""
 
-    calls: list[
-        tuple[SightingEarPair, Mapping[CandidateKey, tuple[SightingEarPair, ...]]]
-    ] = field(default_factory=list)
+    calls: list[tuple[SightingEarPair, Mapping[CandidateKey, tuple[SightingEarPair, ...]]]] = field(
+        default_factory=list
+    )
 
     def match(
         self,
@@ -126,47 +118,18 @@ class RecordingMatcher:
     ) -> CandidateScores:
         """Record one catalog and score every candidate."""
         self.calls.append((query, catalog))
-        return {
-            key: 1.0 if query.sighting_id < evidence[0].sighting_id else 0.0
-            for key, evidence in catalog.items()
-        }
+        return {key: 1.0 if query.sighting_id < evidence[0].sighting_id else 0.0 for key, evidence in catalog.items()}
 
 
-def test_evaluate_preflights_every_dataset_reference(tmp_path: Path) -> None:
-    """All Dataset disagreements are found before the matcher is called."""
-    manifest = tmp_path / "manifest.csv"
-    _write_manifest(
-        manifest,
-        (
-            ("Ada", _uuid(101), _uuid(999), _uuid(5)),
-            ("Wrong", _uuid(999), _uuid(1), _uuid(2)),
-        ),
-    )
+def test_evaluate_uses_neutral_leave_one_sighting_out_queries(tmp_path: Path) -> None:
+    """Only eligible queries run, while all non-query evidence stays in the catalog."""
     matcher = RecordingMatcher()
 
-    with pytest.raises(BenchmarkValidationError) as caught:
-        evaluate(load_benchmark(manifest), _dataset(tmp_path), matcher)
-
-    assert len(caught.value.errors) == 5
-    assert matcher.calls == []
-
-
-def test_evaluate_uses_neutral_leakage_free_folds(tmp_path: Path) -> None:
-    """Only eligible queries run, while all non-query evidence remains cataloged."""
-    manifest = tmp_path / "manifest.csv"
-    _write_manifest(manifest, _valid_rows())
-    matcher = RecordingMatcher()
-
-    result = evaluate(load_benchmark(manifest), _dataset(tmp_path), matcher)
+    result = evaluate(_benchmark(tmp_path), matcher)
 
     assert set(result.scores) == {"Ada", "Bea"}
     assert set(result.scores["Ada"][_uuid(101)]) == {"Ada", "Bea", "Cia"}
-    assert [query.sighting_id for query, _ in matcher.calls] == [
-        _uuid(101),
-        _uuid(102),
-        _uuid(103),
-        _uuid(104),
-    ]
+    assert [query.sighting_id for query, _ in matcher.calls] == [_uuid(101), _uuid(102), _uuid(103), _uuid(104)]
     issued_keys = tuple(matcher.calls[0][1])
     assert all(tuple(catalog) == issued_keys for _, catalog in matcher.calls)
     assert all(type(key) is UUID and key.version == 4 for key in issued_keys)
@@ -174,8 +137,6 @@ def test_evaluate_uses_neutral_leakage_free_folds(tmp_path: Path) -> None:
         pairs = tuple(pair for evidence in catalog.values() for pair in evidence)
         assert all(pair.sighting_id != query.sighting_id for pair in pairs)
         assert _uuid(105) in {pair.sighting_id for pair in pairs}
-    assert not hasattr(result, "queries")
-    assert not hasattr(result, "ineligible_queries")
 
 
 @dataclass(frozen=True)
@@ -197,9 +158,7 @@ class RankedMatcher:
     ) -> CandidateScores:
         """Place the true candidate at the configured competition rank."""
         target = next(
-            key
-            for key, evidence in catalog.items()
-            if evidence[0].sighting_id in self.sightings[query.sighting_id]
+            key for key, evidence in catalog.items() if evidence[0].sighting_id in self.sightings[query.sighting_id]
         )
         scores = dict.fromkeys(catalog, 0.4)
         scores[target] = 0.5
@@ -209,14 +168,9 @@ class RankedMatcher:
         return scores
 
 
-def test_result_derives_query_metrics_and_elephant_cluster_intervals(
-    tmp_path: Path,
-) -> None:
-    """Point metrics weight queries; bootstrap resampling keeps elephant clusters."""
-    manifest = tmp_path / "manifest.csv"
-    _write_manifest(manifest, _valid_rows())
-
-    result = evaluate(load_benchmark(manifest), _dataset(tmp_path), RankedMatcher())
+def test_result_has_query_weighted_metrics_and_elephant_bootstrap_intervals(tmp_path: Path) -> None:
+    """Point metrics weight queries; bootstrap resampling keeps all queries of each elephant."""
+    result = evaluate(_benchmark(tmp_path), RankedMatcher())
 
     assert result.metrics == {
         "eligible_queries": 4,
@@ -231,70 +185,48 @@ def test_result_derives_query_metrics_and_elephant_cluster_intervals(
     assert result.intervals["top_1"] == pytest.approx((0.0, 0.5))
     assert result.intervals["mrr"] == pytest.approx((0.5, 2 / 3))
     assert result.intervals["median_rank"] == pytest.approx((2.0, 2.0))
-    assert result.intervals == result.intervals
+
+
+def test_median_rank_averages_the_two_middle_ranks(tmp_path: Path) -> None:
+    """An even query count takes the mean of the two middle ranks."""
+
+    @dataclass(frozen=True)
+    class SplitMatcher(RankedMatcher):
+        ranks: ClassVar = {_uuid(101): 1, _uuid(102): 1, _uuid(103): 2, _uuid(104): 3}
+
+    assert evaluate(_benchmark(tmp_path), SplitMatcher()).metrics["median_rank"] == pytest.approx(1.5)
 
 
 @dataclass(frozen=True)
-class InvalidMatcher:
-    """Return a selected invalid matcher result."""
+class FixedMatcher:
+    """Return a fixed score for each candidate, plus any extra scores."""
 
-    result: object
+    score: float
+    extra: Mapping[CandidateKey, float] = field(default_factory=dict)
 
     def match(
         self,
         query: SightingEarPair,
         catalog: Mapping[CandidateKey, tuple[SightingEarPair, ...]],
     ) -> CandidateScores:
-        """Return the invalid value without adjustment."""
-        return self.result  # type: ignore[return-value]
+        """Score every candidate with the fixed score."""
+        return dict.fromkeys(catalog, self.score) | dict(self.extra)
 
 
-@dataclass(frozen=True)
-class InvalidScoreMatcher:
-    """Return one invalid score for every valid candidate key."""
+@pytest.mark.parametrize(
+    "matcher",
+    [FixedMatcher(math.nan), FixedMatcher(math.inf), FixedMatcher(0.5, {CandidateKey(_uuid(999)): 0.5})],
+)
+def test_evaluate_rejects_invalid_matcher_scores(tmp_path: Path, matcher: FixedMatcher) -> None:
+    """Scores must be finite and cover exactly the candidate keys."""
+    with pytest.raises(ValueError, match="one finite score") as caught:
+        evaluate(_benchmark(tmp_path), matcher)
 
-    score: object
-
-    def match(
-        self,
-        query: SightingEarPair,
-        catalog: Mapping[CandidateKey, tuple[SightingEarPair, ...]],
-    ) -> CandidateScores:
-        """Return a complete mapping containing the invalid score."""
-        return dict.fromkeys(catalog, self.score)  # type: ignore[arg-type,return-value]
-
-
-@pytest.mark.parametrize("result", [None, {}, {CandidateKey(_uuid(999)): math.nan}])
-def test_evaluate_structures_matcher_result_errors(
-    tmp_path: Path,
-    result: object,
-) -> None:
-    """Malformed matcher output fails at the result-validation stage."""
-    manifest = tmp_path / "manifest.csv"
-    _write_manifest(manifest, _valid_rows())
-
-    with pytest.raises(EvaluationError) as caught:
-        evaluate(load_benchmark(manifest), _dataset(tmp_path), InvalidMatcher(result))
-
-    assert caught.value.stage is EvaluationStage.MATCHER_RESULT_VALIDATION
-    assert caught.value.query_sighting_id == _uuid(101)
-    assert isinstance(caught.value.__cause__, (TypeError, ValueError))
-
-
-@pytest.mark.parametrize("score", [math.nan, math.inf, True])
-def test_evaluate_requires_finite_real_scores(tmp_path: Path, score: object) -> None:
-    """Complete matcher results still require usable similarity floats."""
-    manifest = tmp_path / "manifest.csv"
-    _write_manifest(manifest, _valid_rows())
-
-    with pytest.raises(EvaluationError) as caught:
-        evaluate(load_benchmark(manifest), _dataset(tmp_path), InvalidScoreMatcher(score))
-
-    assert caught.value.stage is EvaluationStage.MATCHER_RESULT_VALIDATION
+    assert caught.value.__notes__ == [f"Query sighting {_uuid(101)}"]
 
 
 class FailingMatcher:
-    """Raise a structured analysis failure for catalog evidence."""
+    """Raise an analysis failure for catalog evidence."""
 
     def match(
         self,
@@ -303,37 +235,20 @@ class FailingMatcher:
     ) -> CandidateScores:
         """Fail on the first catalog pair."""
         pair = next(iter(catalog.values()))[0]
-        raise MatchingError(
-            photo=pair.left_photo,
-            side="left",
-            stage="tear-profile extraction",
-            message="controlled failure",
-        )
+        raise MatchingError(photo=pair.left_photo, side="left", stage="tear-profile extraction", message="failure")
 
 
-def test_evaluate_preserves_matching_failure_and_evidence_context(
-    tmp_path: Path,
-) -> None:
-    """Matcher failures retain their cause and recoverable catalog location."""
-    manifest = tmp_path / "manifest.csv"
-    _write_manifest(manifest, _valid_rows())
+def test_evaluate_reraises_matcher_failures_with_the_query(tmp_path: Path) -> None:
+    """A matcher failure keeps its photo and side and gains the query sighting ID."""
+    with pytest.raises(MatchingError) as caught:
+        evaluate(_benchmark(tmp_path), FailingMatcher())
 
-    with pytest.raises(EvaluationError) as caught:
-        evaluate(load_benchmark(manifest), _dataset(tmp_path), FailingMatcher())
-
-    error = caught.value
-    assert error.stage is EvaluationStage.CATALOG_MATCHING
-    assert error.query_sighting_id == _uuid(101)
-    assert error.role == "catalog"
-    assert error.photo_id == _uuid(3)
-    assert error.side == "left"
-    assert isinstance(error.__cause__, MatchingError)
+    assert caught.value.photo_id == _uuid(3)
+    assert caught.value.side == "left"
+    assert caught.value.__notes__ == [f"Query sighting {_uuid(101)}"]
 
 
 def test_evaluate_rejects_a_benchmark_without_eligible_queries(tmp_path: Path) -> None:
-    """Metrics require at least one elephant with held-out catalog evidence."""
-    manifest = tmp_path / "manifest.csv"
-    _write_manifest(manifest, ((_valid_rows()[0]), (_valid_rows()[-1])))
-
-    with pytest.raises(BenchmarkValidationError, match="no eligible queries"):
-        evaluate(load_benchmark(manifest), _dataset(tmp_path), RecordingMatcher())
+    """Metrics need at least one elephant with another sighting in the catalog."""
+    with pytest.raises(ValueError, match="no eligible queries"):
+        evaluate(_benchmark(tmp_path, (_valid_rows()[0], _valid_rows()[-1])), RecordingMatcher())
