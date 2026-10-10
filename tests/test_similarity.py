@@ -12,6 +12,7 @@ from elephant_id.matching.alphaphant.similarity import (
     EarComparator,
     EarComparatorConfig,
     EarSimilarity,
+    weighted_real_valued_jaccard,
 )
 
 _PHOTO = Photo(
@@ -89,13 +90,19 @@ def test_square_root_halves_a_fourfold_depth_mismatch() -> None:
 
 
 def test_default_config_values() -> None:
-    """The default grid has 240 bins and 17 stretches from 0.8 to 1.2, and the channels weigh the same."""
+    """The defaults are the settings of the method.
+
+    The grid has 240 bins and 17 stretches from 0.8 to 1.2. The channels have
+    the same weight. The angle weight has center 120° and width 35°.
+    """
     config = EarComparatorConfig()
     assert config.resampled_bins == 240
     assert len(config.stretches) == 17
     assert config.stretches[0] == 0.8
     assert config.stretches[-1] == 1.2
     assert config.gradient_weight == 0.5
+    assert config.angle_weight_center_degrees == 120.0
+    assert config.angle_weight_width_degrees == 35.0
 
 
 def test_broad_query_stretches_onto_narrow_reference() -> None:
@@ -109,9 +116,9 @@ def test_broad_query_stretches_onto_narrow_reference() -> None:
 
     similarity = _compare_one(_ear(broad), _ear(narrow), EarComparatorConfig(gradient_weight=0.0))
 
-    assert similarity.score == pytest.approx(0.5130298508958523)
+    assert similarity.score == pytest.approx(0.5548302531348012)
     assert similarity.stretch == pytest.approx(0.8)
-    assert similarity.shift_bins == 0
+    assert similarity.shift_bins == -3
 
 
 def _measured_ramp(slope: float, bins: int = 720) -> np.ndarray:
@@ -206,8 +213,17 @@ def _aligned(row: np.ndarray, stretch: float, shift: int) -> np.ndarray:
     return shifted
 
 
-def _jaccard(query: np.ndarray, reference: np.ndarray) -> float:
-    """Return the shared magnitude of the positive and negative parts over their combined magnitude.
+def _angle_weights(config: EarComparatorConfig) -> np.ndarray:
+    """Return the Gaussian angle weight at each angle of the comparison grid."""
+    angles = np.linspace(0.0, 180.0, config.resampled_bins)
+    return np.exp(
+        -0.5
+        * ((angles - config.angle_weight_center_degrees) / config.angle_weight_width_degrees) ** 2
+    )
+
+
+def _jaccard(query: np.ndarray, reference: np.ndarray, weights: np.ndarray) -> float:
+    """Return the weighted real-valued Jaccard of two rows from their positive and negative parts.
 
     The value is zero for two empty rows.
     """
@@ -217,7 +233,8 @@ def _jaccard(query: np.ndarray, reference: np.ndarray) -> float:
     combined = np.maximum(np.maximum(query, 0), np.maximum(reference, 0)) + np.maximum(
         np.maximum(-query, 0), np.maximum(-reference, 0)
     )
-    return float(shared.sum() / combined.sum()) if combined.sum() else 0.0
+    weighted_combined = float(weights @ combined)
+    return float(weights @ shared) / weighted_combined if weighted_combined else 0.0
 
 
 def _brute_force_similarity(
@@ -225,19 +242,23 @@ def _brute_force_similarity(
     reference: tuple[np.ndarray, ...],
     config: EarComparatorConfig,
 ) -> tuple[float, float, int]:
-    """Search every alignment; combine the channel means over scales, then apply the penalty."""
+    """Search every alignment; combine the channel means of the weighted Jaccards, then apply the penalty."""
     max_shift = round(config.max_shift_fraction * config.resampled_bins)
+    weights = _angle_weights(config)
     best = (0.0, 1.0, 0)
     for stretch in config.stretches:
         for shift in range(-max_shift, max_shift + 1):
             depth_jaccards = [
-                _jaccard(_aligned(_depth_row(q, config), stretch, shift), _depth_row(r, config))
+                _jaccard(
+                    _aligned(_depth_row(q, config), stretch, shift), _depth_row(r, config), weights
+                )
                 for q, r in zip(query, reference, strict=True)
             ]
             gradient_jaccards = [
                 _jaccard(
                     stretch**-0.5 * _aligned(_gradient_row(q, config), stretch, shift),
                     _gradient_row(r, config),
+                    weights,
                 )
                 for q, r in zip(query, reference, strict=True)
             ]
@@ -326,7 +347,7 @@ def test_alpha_scales_share_the_alignment_that_maximizes_their_average() -> None
 
     result = _compare_one(_ear(*query), _ear(*reference), config)
 
-    assert (small_scale_best[2], large_scale_best[2]) == (2, 0)
+    assert (small_scale_best[2], large_scale_best[2]) == (2, -1)
     assert (result.stretch, result.shift_bins) == (1.0, 2)
     assert result.score == pytest.approx(
         _brute_force_similarity(query, reference, config)[0], abs=2e-15
@@ -382,6 +403,102 @@ def test_ears_with_different_alpha_scale_counts_are_rejected(
     """Every ear needs one tear profile for each alpha scale."""
     with pytest.raises(ValueError, match="each alpha scale"):
         EarComparator().compare_ears(query, references)
+
+
+_UNEVEN_WEIGHTS = np.linspace(0.2, 1.0, 12)
+
+
+def test_weighted_jaccard_is_one_for_identical_rows_and_zero_for_rows_that_share_nothing() -> None:
+    """Identical nonzero rows give 1. Rows with no common nonzero bin of the same sign give 0."""
+    row = np.array([0.0, 0.3, -0.2, 0.5, 0.0, 0.0, 0.1, 0.0, 0.0, -0.4, 0.0, 0.0])
+    disjoint = np.zeros(12)
+    disjoint[[0, 4, 5]] = [0.2, 0.7, -0.1]
+
+    values = weighted_real_valued_jaccard(
+        row[None, :], np.array([row, disjoint, -row]), _UNEVEN_WEIGHTS
+    )
+
+    np.testing.assert_allclose(values, [[1.0, 0.0, 0.0]], atol=1e-15)
+
+
+def test_weighted_jaccard_is_unchanged_when_both_rows_are_scaled_by_one_constant() -> None:
+    """The weighted real-valued Jaccard depends on the shape of the rows, not on their size."""
+    rng = np.random.default_rng(7)
+    row_a, row_b = rng.uniform(-0.1, 0.1, (2, 12))
+
+    original = weighted_real_valued_jaccard(row_a[None, :], row_b[None, :], _UNEVEN_WEIGHTS)
+    scaled = weighted_real_valued_jaccard(3.7 * row_a[None, :], 3.7 * row_b[None, :], _UNEVEN_WEIGHTS)
+
+    assert 0.0 < original[0, 0] < 1.0
+    assert scaled[0, 0] == pytest.approx(original[0, 0], rel=1e-12)
+
+
+def test_a_rise_against_a_fall_shares_nothing_and_counts_both_magnitudes() -> None:
+    """A bin with opposite signs adds both magnitudes to the denominator and nothing to the numerator."""
+    rise = np.zeros(12)
+    rise[3] = 0.4
+    fall = np.zeros(12)
+    fall[3] = -0.1
+    rise_and_shared, fall_and_shared = rise.copy(), fall.copy()
+    rise_and_shared[8] = fall_and_shared[8] = 0.2
+    weights = _UNEVEN_WEIGHTS
+
+    values = weighted_real_valued_jaccard(
+        np.array([fall, fall_and_shared]), np.array([rise, rise_and_shared]), weights
+    )
+
+    assert values[0, 0] == 0.0
+    expected = weights[8] * 0.2 / (weights[8] * 0.2 + weights[3] * (0.4 + 0.1))
+    assert values[1, 1] == pytest.approx(expected, rel=1e-12)
+
+
+def test_angle_weight_stays_at_fixed_angles_when_the_query_shifts() -> None:
+    """The angle weight applies after alignment, at the angles of the comparison grid.
+
+    The reference has the query tear 15 bins later, and an extra tear at
+    about 150°. The score at shift 15 uses the weight at the grid angles. A weight
+    that moved with the query would give a clearly different score.
+    """
+    config = EarComparatorConfig(
+        stretches=(1.0,), max_shift_fraction=0.1, shift_penalty_scale=1.0, gradient_weight=0.0
+    )
+    comparator = EarComparator(config)
+    shift_bins = 15
+    query = (TearProfile(_make_profile([(100, 0.05)], bins=240), 5.0, 175.0),)
+    reference = (TearProfile(_make_profile([(100 + shift_bins, 0.05), (200, 0.05)], bins=240), 5.0, 175.0),)
+    query_depth_rows = comparator._build_depth_rows(query)
+    reference_depth_rows = comparator._build_depth_rows(reference)
+
+    scores = comparator._score_alignments(
+        query_depth_rows,
+        comparator._build_gradient_rows(query),
+        reference_depth_rows[None],
+        comparator._build_gradient_rows(reference)[None],
+    )
+
+    score = scores[0, comparator._alignments.index((1.0, shift_bins))]
+    aligned_query_row = _aligned(query_depth_rows[0], 1.0, shift_bins)
+    penalty = comparator._compute_shift_penalty(shift_bins)
+    weights = _angle_weights(config)
+    fixed = penalty * _jaccard(aligned_query_row, reference_depth_rows[0], weights)
+    moved = penalty * _jaccard(
+        aligned_query_row, reference_depth_rows[0], _aligned(weights, 1.0, shift_bins)
+    )
+    assert score == pytest.approx(fixed, rel=1e-12)
+    assert abs(fixed - moved) > 0.1
+
+
+def test_a_disagreement_near_120_degrees_costs_more_than_at_a_low_weight_angle() -> None:
+    """An extra query tear at 120° lowers the ear similarity more than the same tear at 30°."""
+    config = EarComparatorConfig(stretches=(1.0,), max_shift_fraction=0)
+    shared = _make_profile([(300, 0.05), (600, 0.03)])
+    extra_near_120 = shared + _make_profile([(480, 0.04)])
+    extra_near_30 = shared + _make_profile([(120, 0.04)])
+
+    near_120 = _compare_one(_ear(extra_near_120), _ear(shared), config)
+    near_30 = _compare_one(_ear(extra_near_30), _ear(shared), config)
+
+    assert near_120.score < near_30.score - 0.05
 
 
 def test_positive_alignment_ties_preserve_configured_search_order() -> None:

@@ -137,12 +137,15 @@ _Avoid_: Offset, rotation
 **Shift penalty**:
 A factor from 0 to 1 that decreases as the shift increases. It makes the comparator prefer small shifts.
 
-**Real-valued Jaccard**:
-A similarity of two rows from 0 to 1: the magnitude that the two rows share divided by their combined magnitude. In a bin where both values are positive, or both are negative, the rows share the smaller magnitude. In a bin with opposite signs, the rows share nothing. Equal rows give 1. Rows with no common nonzero bin of the same sign give 0.
+**Angle weight**:
+The importance of each bin of the comparison grid: a Gaussian of the angle with tuned center and width. It is largest on the lower part of the ear contour. The angle weight stays at the same angles when the comparator aligns the query.
+
+**Weighted real-valued Jaccard**:
+A similarity of two rows from 0 to 1: the magnitude that the two rows share divided by their combined magnitude, with each bin multiplied by its angle weight. In a bin where both values are positive, or both are negative, the rows share the smaller magnitude. In a bin with opposite signs, the rows share nothing, and both magnitudes count in the combined magnitude. Equal nonzero rows give 1. Rows with no common nonzero bin of the same sign give 0.
 _Avoid_: Overlap, overlap score
 
 **Alignment score**:
-The match quality of a query ear at one alignment against one reference ear: the sum of the channel means, each multiplied by its channel weight, multiplied by the shift penalty. A channel mean is the mean of the real-valued Jaccard similarities of each of the channel's rows.
+The match quality of a query ear at one alignment against one reference ear: the sum of the channel means, each multiplied by its channel weight, multiplied by the shift penalty. A channel mean is the mean of the weighted real-valued Jaccard similarities of each of the channel's rows.
 
 **Ear similarity**:
 The highest alignment score of a query ear against one reference ear of the same side, from 0 to 1. The comparator moves only the query, so the similarity is asymmetric. 

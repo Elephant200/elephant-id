@@ -11,14 +11,18 @@ from elephant_id.matching.alphaphant.extraction import AnalyzedEar, TearProfile
 
 @dataclass(frozen=True, slots=True)
 class EarComparatorConfig:
-    """Settings for the comparison grid, the alignments, the shift penalty, and the channel weights.
+    """Settings for the comparison grid, the alignments, the shift penalty, the channel weights, and the angle weight.
 
     The gradient channel has the weight `gradient_weight`. The depth channel
-    has the weight `1 - gradient_weight`.
+    has the weight `1 - gradient_weight`. The angle weight is a Gaussian of
+    the grid angle, with its center and its width (standard deviation) in
+    degrees.
     """
 
     resampled_bins: int = 240
     gradient_weight: float = 0.5
+    angle_weight_center_degrees: float = 120.0
+    angle_weight_width_degrees: float = 35.0
     max_shift_fraction: float = 0.15
     shift_penalty_scale: float = 0.08
     shift_penalty_power: float = 4.0
@@ -57,6 +61,12 @@ class EarComparator:
         )
         # A stretch by t divides the gradient by t, and the square root turns 1/t into t ** -0.5.
         self._gradient_stretch_factors = np.array([stretch**-0.5 for stretch, _ in self._alignments])
+        grid_angles = np.linspace(0.0, 180.0, self._config.resampled_bins)
+        self._angle_weights = np.exp(
+            -0.5
+            * ((grid_angles - self._config.angle_weight_center_degrees) / self._config.angle_weight_width_degrees)
+            ** 2
+        )
 
     def compare_ears(
         self,
@@ -67,8 +77,8 @@ class EarComparator:
 
         For each alignment, the comparator does these steps:
 
-        1. Calculate the mean real-valued Jaccard of the depth rows, and the
-           mean real-valued Jaccard of the gradient rows.
+        1. Calculate the mean weighted real-valued Jaccard of the depth rows,
+           and the mean weighted real-valued Jaccard of the gradient rows.
         2. Add the two means, each multiplied by its channel weight.
         3. Multiply the sum by the shift penalty.
 
@@ -157,7 +167,8 @@ class EarComparator:
         For each alignment, this method does these steps:
 
         1. Multiply each aligned query gradient row by `stretch ** -0.5`.
-        2. Calculate the real-valued Jaccard of each row.
+        2. Calculate the weighted real-valued Jaccard of each row. The angle
+           weight stays at the grid angles.
         3. For each channel, calculate the mean over the alpha scales.
         4. Add the two channel means, each multiplied by its channel weight.
         5. Multiply the sum by the shift penalty.
@@ -177,9 +188,10 @@ class EarComparator:
         """
         depth_score = np.mean(
             [
-                _real_valued_jaccard(
+                weighted_real_valued_jaccard(
                     reference_depth_rows[:, scale_index],
                     self._align_row(query_row),
+                    self._angle_weights,
                 )
                 for scale_index, query_row in enumerate(query_depth_rows)
             ],
@@ -187,9 +199,10 @@ class EarComparator:
         )
         gradient_score = np.mean(
             [
-                _real_valued_jaccard(
+                weighted_real_valued_jaccard(
                     reference_gradient_rows[:, scale_index],
                     self._align_row(query_row) * self._gradient_stretch_factors[:, None],
+                    self._angle_weights,
                 )
                 for scale_index, query_row in enumerate(query_gradient_rows)
             ],
@@ -252,20 +265,31 @@ def _shift(row: np.ndarray, shift_bins: int) -> np.ndarray:
     return shifted
 
 
-def _real_valued_jaccard(reference_rows: np.ndarray, aligned_query_rows: np.ndarray) -> np.ndarray:
-    """Return the real-valued Jaccard of every reference row and aligned query row.
+def weighted_real_valued_jaccard(
+    rows_a: np.ndarray,
+    rows_b: np.ndarray,
+    weights: np.ndarray,
+) -> np.ndarray:
+    """Return the weighted real-valued Jaccard of every row in `rows_a` with every row in `rows_b`.
 
     Rows can contain negative values. The value is zero when both rows
     contain only zeros.
 
+    Args:
+        rows_a: Rows with shape `(count_a, bins)`.
+        rows_b: Rows with shape `(count_b, bins)`.
+        weights: One nonnegative weight for each bin.
+
     Returns:
-        Values with shape `(reference_count, alignment_count)`.
+        Values with shape `(count_a, count_b)`.
     """
-    # With L1 norms, (|x| + |y| - |x - y|) / (|x| + |y| + |x - y|) is the shared
-    # magnitude of the positive and negative parts divided by their combined
-    # magnitude. Values of opposite sign share nothing.
-    norm_sum = np.abs(reference_rows).sum(axis=1)[:, None] + np.abs(aligned_query_rows).sum(axis=1)[None, :]
-    distance = scipy_distance.cdist(reference_rows, aligned_query_rows, metric="cityblock")
+    # With weighted L1 norms, (|x| + |y| - |x - y|) / (|x| + |y| + |x - y|)
+    # is the weighted shared magnitude of the positive and negative parts divided
+    # by their weighted combined magnitude. Values of opposite sign share nothing.
+    norms_a = np.abs(rows_a) @ weights
+    norms_b = np.abs(rows_b) @ weights
+    norm_sum = norms_a[:, None] + norms_b[None, :]
+    distance = scipy_distance.cdist(rows_a, rows_b, metric="cityblock", w=weights)
     numerator = norm_sum - distance
     denominator = norm_sum + distance
     return np.divide(numerator, denominator, out=np.zeros_like(denominator), where=denominator > 0)
