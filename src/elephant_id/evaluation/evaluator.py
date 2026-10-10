@@ -20,7 +20,7 @@ _BOOTSTRAP_SEED = 42
 _CUTOFFS = (1, 3, 5, 10, 15)
 
 Scores = dict[str, dict[UUID, dict[str, float]]]
-"""True known elephant to query sighting ID to matching candidate to similarity score."""
+"""True known elephant to query sighting ID to matching candidate to candidate score."""
 
 Catalog = dict[CandidateKey, tuple[SightingEarPair, ...]]
 

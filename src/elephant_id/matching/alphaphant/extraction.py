@@ -18,9 +18,11 @@ from elephant_id.preparation import EarSide, PreparedEar, ear_side_path
 
 @dataclass(frozen=True, slots=True, eq=False)
 class TearProfile:
-    """Read-only signed depths at one alpha scale.
+    """Read-only depths of one ear at one alpha scale.
 
-    Depths are sampled at uniform angles from 0° to 180°, both ends included.
+    Each depth is a fraction of the ear radius. A positive depth shows a tear:
+    the contour is inside the alpha shape. The depths are at uniform angles
+    from 0° to 180°, including both ends.
 
     Raises:
         ValueError: If depths are empty, non-finite, or not one-dimensional.
@@ -46,7 +48,7 @@ class AnalyzedEar:
     source_photo: Photo
     side: EarSide
     source_box: BoundingBox
-    tear_profiles: tuple[TearProfile, ...]
+    profiles_by_scale: tuple[TearProfile, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,7 +69,7 @@ class TearProfileExtractor(Protocol):
         ...
 
     @property
-    def alpha_fractions(self) -> tuple[float, ...]:
+    def alpha_scales(self) -> tuple[float, ...]:
         """Return the alpha scale of each extracted tear profile."""
         ...
 
@@ -89,7 +91,7 @@ class AlphaTearConfig:
     contour_points: int = 1024
     profile_bins: int = 720
     trim_degrees: float = 5.0
-    alpha_fractions: tuple[float, ...] = (0.35,)
+    alpha_scales: tuple[float, ...] = (0.35,)
     morph_opening_fraction: float = 0.020
     smoothing_sigma: float = 2.0
 
@@ -99,8 +101,8 @@ class AlphaTearConfig:
             raise ValueError("AlphaTear sampling counts must be greater than one")
         if not 0 <= self.trim_degrees < 90:
             raise ValueError("trim_degrees must be in [0, 90)")
-        if not self.alpha_fractions or min(self.alpha_fractions) <= 0:
-            raise ValueError("alpha_fractions must contain at least one alpha scale, and each must be positive")
+        if not self.alpha_scales or min(self.alpha_scales) <= 0:
+            raise ValueError("alpha_scales must contain at least one alpha scale, and each must be positive")
         if self.morph_opening_fraction < 0 or self.smoothing_sigma < 0:
             raise ValueError("AlphaTear smoothing parameters must be non-negative")
 
@@ -348,9 +350,9 @@ class AlphaTearExtractor:
         return self._producer_slug
 
     @property
-    def alpha_fractions(self) -> tuple[float, ...]:
+    def alpha_scales(self) -> tuple[float, ...]:
         """Return the configured alpha scales, as fractions of the ear radius."""
-        return self._config.alpha_fractions
+        return self._config.alpha_scales
 
     def extract(self, ear: PreparedEar) -> tuple[TearProfile, ...]:
         """Return signed, normalized tear profiles for each alpha scale.
@@ -362,16 +364,16 @@ class AlphaTearExtractor:
             One tear profile for each configured alpha scale.
         """
         return tuple(
-            self._extract_at_scale(ear, alpha_fraction)
-            for alpha_fraction in self._config.alpha_fractions
+            self._extract_tear_profile(ear, alpha_scale)
+            for alpha_scale in self._config.alpha_scales
         )
 
-    def _extract_at_scale(self, ear: PreparedEar, alpha_fraction: float) -> TearProfile:
+    def _extract_tear_profile(self, ear: PreparedEar, alpha_scale: float) -> TearProfile:
         """Return the tear profile for one alpha scale, as a fraction of the ear radius."""
         measured_contour = _resample(ear.contour, self._config.contour_points)
         radius = float(np.sqrt(2.0 * ear.cleaned_area / np.pi))
         shape_building_contour = _opened_contour(measured_contour, self._config.morph_opening_fraction * radius)
-        reference_shape = _alpha_shape(shape_building_contour, alpha_fraction * radius)
+        reference_shape = _alpha_shape(shape_building_contour, alpha_scale * radius)
         reference_boundary = np.asarray(reference_shape.exterior.coords)[:-1]
         reference_path = _densify(ear_side_path(reference_boundary, shape_building_contour[0], shape_building_contour[-1]))
 

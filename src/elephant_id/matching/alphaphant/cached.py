@@ -35,9 +35,9 @@ class CachedTearProfileExtractor:
         return self._producer_slug
 
     @property
-    def alpha_fractions(self) -> tuple[float, ...]:
+    def alpha_scales(self) -> tuple[float, ...]:
         """Return the wrapped extractor's alpha scales."""
-        return self._inner.alpha_fractions
+        return self._inner.alpha_scales
 
     def extract(self, ear: PreparedEar) -> tuple[TearProfile, ...]:
         """Return cached tear profiles, or extract and store new ones.
@@ -55,22 +55,22 @@ class CachedTearProfileExtractor:
             f"__landmarks_{self._landmark_producer_slug}"
             f"__side_{ear.inferred_side}__crop_{crop}"
         )
-        alpha_fractions = list(self.alpha_fractions)
+        alpha_scales = list(self.alpha_scales)
         record = self._cache.get_or_compute(
             self.producer_slug,
             key,
             lambda: {
-                "alpha_fractions": alpha_fractions,
+                "alpha_scales": alpha_scales,
                 "profiles": [profile.depths.tolist() for profile in self._inner.extract(ear)],
             },
         )
-        if record.get("alpha_fractions") != alpha_fractions:
+        if record.get("alpha_scales") != alpha_scales:
             raise ValueError(
-                f"Cached tear profiles use alpha scales {record.get('alpha_fractions')}; "
-                f"the extractor uses {alpha_fractions}"
+                f"Cached tear profiles use alpha scales {record.get('alpha_scales')}; "
+                f"the extractor uses {alpha_scales}"
             )
         profiles = record.get("profiles")
-        if not isinstance(profiles, list) or len(profiles) != len(alpha_fractions):
+        if not isinstance(profiles, list) or len(profiles) != len(alpha_scales):
             raise ValueError("Tear-profile cache record must hold one profile for each alpha scale")
         try:
             return tuple(TearProfile(depths) for depths in profiles)

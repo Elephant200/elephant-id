@@ -40,6 +40,10 @@ _Avoid_: Sighting, folder
 The reference evidence grouped by known elephant and ear side for matching.
 _Avoid_: Gallery when naming the domain concept
 
+**Reference sighting**:
+A sighting ear pair of a known elephant in the catalog. Matching compares the query with the reference sightings of each candidate.
+_Avoid_: Catalog evidence
+
 **Candidate key**:
 An opaque identifier that stands in for one known elephant during one retrieval evaluation. It does not carry known-elephant identity.
 _Avoid_: Known-elephant name, photo ID, sighting ID
@@ -49,7 +53,7 @@ A known elephant for which a catalog matcher returns a candidate score.
 _Avoid_: Identity decision, automatic identification
 
 **Catalog matcher**:
-A complete retrieval algorithm that compares one sighting ear pair with a candidate catalog and returns one comparable similarity score for every matching candidate. AlphaPhant, CurvRank, and MiewID are catalog matchers.
+A complete retrieval algorithm that compares one sighting ear pair with a candidate catalog and returns one comparable candidate score for every matching candidate. AlphaPhant, CurvRank, and MiewID are catalog matchers.
 _Avoid_: Candidate scorer
 
 ## AlphaPhant Algorithm
@@ -83,20 +87,62 @@ The current tear-profile extraction algorithm. It uses an alpha shape as a geome
 _Avoid_: AlphaPhant (when referring only to extraction)
 
 **AlphaPhant**:
-The project's complete catalog-matching algorithm, which extracts analyzed ears from a sighting ear pair, compares its tear profiles with catalog evidence, and returns candidate scores.
+The project's complete catalog-matching algorithm, which extracts analyzed ears from a sighting ear pair, compares its tear profiles with those of the reference sightings, and returns candidate scores.
 _Avoid_: AlphaTear (when referring to matching), AlphaPhant matcher
 
 **Tear profile**:
-A one-dimensional, alpha-shape-derived representation of an ear contour used for matching. Generated with a single alpha-scale.
+The depths of one ear at one alpha scale, at uniform angles from 0° to 180°.
 _Avoid_: Tear signature, embedding when referring to the current algorithm
+
+**Depth**:
+The distance from the alpha-shape boundary to the ear contour, divided by the ear radius. AlphaTear measures the distance inward. A positive depth shows a tear: the contour is inside the alpha shape. A negative depth shows that the contour is outside the alpha shape.
+
+**Ear radius**:
+The radius of a half-disc that has the same area as the ear. Depths are fractions of the ear radius. Thus, ears of different image sizes have comparable depths.
 
 **Tear-profile extraction**:
 The transformation of a prepared ear contour into one tear profile for each alpha scale. AlphaTear is the current extraction algorithm.
 _Avoid_: Tear-signature extraction
 
-**Similarity score**:
-A numeric measure of how similar two ears, or a sighting and known elephant, are.
-_Avoid_: Probability, confidence
+**Comparison grid**:
+The uniform angles from 0° to 180° that the comparator uses. Each angle is one bin. Each row has one value in each bin.
+
+**Depth row**:
+A tear profile that is ready for comparison after steps such as resampling and negative-depth clipping.
+_Avoid_: Comparison row
+
+**Alignment**:
+One stretch and one shift. The comparator applies the same alignment to all rows of the query ear. The comparator moves only the query ear.
+_Avoid_: Variant, transform
+
+**Stretch**:
+A scale factor for a query row. The comparator stretches the row about the center of the comparison grid. A stretch above 1 makes the row wider. A stretch below 1 makes the row narrower.
+
+**Shift**:
+A movement of a query row along the comparison grid, in whole bins. A positive shift moves the row to larger angles. A negative shift moves the row to smaller angles.
+_Avoid_: Offset, rotation
+
+**Shift penalty**:
+A factor from 0 to 1 that decreases as the shift increases. It makes the comparator prefer small shifts.
+
+**Real-valued Jaccard**:
+A similarity of two rows from 0 to 1: the sum of the bin-wise minimums divided by the sum of the bin-wise maximums. Equal rows give 1. Rows with no common nonzero bin give 0.
+_Avoid_: Overlap, overlap score
+
+**Alignment score**:
+The match quality of a query ear at one alignment against one reference ear: the mean real-valued Jaccard of their rows, multiplied by the shift penalty.
+
+**Ear similarity**:
+The highest alignment score of a query ear against one reference ear of the same side, from 0 to 1. The comparator moves only the query, so the similarity is asymmetric. 
+_Avoid_: Similarity score, ear comparison, profile similarity
+
+**Left score**, **right score**:
+The score of one candidate on one side. The matcher calculates it from the ear similarities of the candidate's reference ears on that side.
+_Avoid_: Side winner
+
+**Candidate score**:
+The mean of a candidate's left score and right score. A larger candidate score is stronger evidence.
+_Avoid_: Probability, confidence, similarity score
 
 **Candidate ranking**:
 The descending _view_ of candidate scores.
@@ -124,7 +170,7 @@ The scientific outcome of evaluating one catalog matcher against one retrieval b
 _Avoid_: Evaluation run, evaluation report
 
 **Eligible query**:
-A benchmark-set or tuning-set sighting ear pair used as a query because its elephant still has catalog evidence after that sighting is held out.
+A benchmark-set or tuning-set sighting ear pair used as a query because its elephant still has reference sightings after that sighting is held out.
 _Avoid_: Protocol-eligible query
 
 **Ineligible query**:

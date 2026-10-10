@@ -14,7 +14,7 @@ For each query, the evaluator gives the catalog matcher:
 - the query sighting ear pair;
 - the catalog, as sighting ear pairs grouped by candidate key.
 
-The catalog matcher returns one finite similarity score for each candidate key. It must not add or omit a key. A larger score is a stronger match.
+The catalog matcher returns one finite candidate score for each candidate key. It must not add or omit a key. A larger score is a stronger match.
 
 ## Benchmark Files
 
@@ -42,7 +42,7 @@ For each eligible query:
 2. Remove the query sighting from the catalog. Keep all other sightings in the catalog, including ineligible queries.
 3. Replace each known elephant in the catalog with a candidate key.
 4. Match the query against all matching candidates.
-5. Find the rank of the true known elephant from the similarity scores.
+5. Find the rank of the true known elephant from the candidate scores.
 
 A query is ineligible if no other sighting of its elephant is in the set. Ineligible queries stay in the catalog as distractors.
 
@@ -71,7 +71,7 @@ The intervals are two-sided 95% percentile bootstrap intervals. The bootstrap us
 
 `EvaluationResult` has three mappings:
 
-- `scores`: true known elephant → query sighting ID → matching candidate → similarity score.
+- `scores`: true known elephant → query sighting ID → matching candidate → candidate score.
 - `metrics` and `intervals`: calculated from `scores`.
 
 ## Entry Point

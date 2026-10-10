@@ -26,7 +26,7 @@ from elephant_id.matching.alphaphant.extraction import (
     AnalyzedSightingEarPair,
     TearProfile,
 )
-from elephant_id.matching.alphaphant.similarity import EarProfileSimilarity
+from elephant_id.matching.alphaphant.similarity import EarComparator
 from elephant_id.matching.protocol import MatchingError
 from elephant_id.preparation import (
     EarSide,
@@ -95,22 +95,22 @@ def test_alpha_tear_returns_one_profile_per_alpha_scale_in_order() -> None:
     """Each tear profile equals the extraction that uses only its alpha scale."""
     ear = _notched_ear()
 
-    small, large = AlphaTearExtractor(AlphaTearConfig(alpha_fractions=(0.35, 2.0))).extract(ear)
+    small, large = AlphaTearExtractor(AlphaTearConfig(alpha_scales=(0.35, 2.0))).extract(ear)
 
-    (small_only,) = AlphaTearExtractor(AlphaTearConfig(alpha_fractions=(0.35,))).extract(ear)
-    (large_only,) = AlphaTearExtractor(AlphaTearConfig(alpha_fractions=(2.0,))).extract(ear)
+    (small_only,) = AlphaTearExtractor(AlphaTearConfig(alpha_scales=(0.35,))).extract(ear)
+    (large_only,) = AlphaTearExtractor(AlphaTearConfig(alpha_scales=(2.0,))).extract(ear)
     np.testing.assert_array_equal(small.depths, small_only.depths)
     np.testing.assert_array_equal(large.depths, large_only.depths)
     assert not np.array_equal(small.depths, large.depths)
 
 
-@pytest.mark.parametrize("alpha_fractions", [(), (0.35, 0.0), (-1.0,)])
+@pytest.mark.parametrize("alpha_scales", [(), (0.35, 0.0), (-1.0,)])
 def test_alpha_tear_config_rejects_missing_or_nonpositive_alpha_scales(
-    alpha_fractions: tuple[float, ...],
+    alpha_scales: tuple[float, ...],
 ) -> None:
     """Extraction needs at least one positive alpha scale."""
-    with pytest.raises(ValueError, match="alpha_fractions"):
-        AlphaTearConfig(alpha_fractions=alpha_fractions)
+    with pytest.raises(ValueError, match="alpha_scales"):
+        AlphaTearConfig(alpha_scales=alpha_scales)
 
 
 @dataclass
@@ -121,7 +121,7 @@ class _ProfileExtractor:
         TearProfile(np.asarray([0.0, 0.1, 0.0])),
         TearProfile(np.asarray([0.0, 0.3, -0.1])),
     )
-    alpha_fractions: tuple[float, ...] = (0.35, 2.0)
+    alpha_scales: tuple[float, ...] = (0.35, 2.0)
     producer_slug: str | None = "alpha-tear-v1"
     calls: list[PreparedEar] = field(default_factory=list)
 
@@ -163,18 +163,18 @@ def test_cached_profile_uses_prepared_ear_lineage(tmp_path: Path) -> None:
         np.testing.assert_array_equal(profiles[1].depths, [0.0, 0.3, -0.1])
     assert inner.calls == [ear]
     assert extractor.producer_slug == inner.producer_slug
-    assert extractor.alpha_fractions == (0.35, 2.0)
+    assert extractor.alpha_scales == (0.35, 2.0)
     assert cache.exists("alpha-tear-v1", _CACHE_KEY)
 
 
-@pytest.mark.parametrize("alpha_fractions", [(2.0, 0.35), (0.35,), (0.35, 2.0, 10.0)])
+@pytest.mark.parametrize("alpha_scales", [(2.0, 0.35), (0.35,), (0.35, 2.0, 10.0)])
 def test_cached_profiles_reject_other_alpha_scales(
-    tmp_path: Path, alpha_fractions: tuple[float, ...]
+    tmp_path: Path, alpha_scales: tuple[float, ...]
 ) -> None:
     """A stored record must have the extractor's alpha scales in the same order."""
     cache = CacheManager(cache_root=tmp_path)
     _cached(_ProfileExtractor(), cache).extract(_prepared_ear())
-    reader = _ProfileExtractor(alpha_fractions=alpha_fractions)
+    reader = _ProfileExtractor(alpha_scales=alpha_scales)
 
     with pytest.raises(ValueError, match="alpha scales"):
         _cached(reader, cache).extract(_prepared_ear())
@@ -185,8 +185,8 @@ def test_cached_profiles_reject_other_alpha_scales(
     "record",
     [
         {"depths": [0.0, 0.1, 0.0]},
-        {"alpha_fractions": [0.35, 2.0], "profiles": [[0.0, 0.1, 0.0]]},
-        {"alpha_fractions": [0.35, 2.0], "profiles": [[0.0, 0.1], "invalid"]},
+        {"alpha_scales": [0.35, 2.0], "profiles": [[0.0, 0.1, 0.0]]},
+        {"alpha_scales": [0.35, 2.0], "profiles": [[0.0, 0.1], "invalid"]},
     ],
 )
 def test_cached_profiles_reject_invalid_records(
@@ -218,7 +218,7 @@ def test_composition_caches_only_settled_profile_extraction(tmp_path: Path) -> N
     standard = build_standard_alphaphant(store, cache_root=tmp_path / "standard")
     tuning = build_profile_tuning_alphaphant(
         store,
-        AlphaTearConfig(alpha_fractions=(0.4,)),
+        AlphaTearConfig(alpha_scales=(0.4,)),
         cache_root=tmp_path / "tuning",
     )
 
@@ -419,7 +419,7 @@ def test_alphaphant_analysis_returns_two_source_labelled_profiles() -> None:
             photo_store=store, ear_segmenter=segmenter, landmark_detector=detector
         ).prepare,
         profile_extractor=extractor,
-        ear_similarity=EarProfileSimilarity(),
+        ear_comparator=EarComparator(),
     )
     pair = SightingEarPair(PHOTO.sighting_id, PHOTO, RIGHT_PHOTO)
 
@@ -427,12 +427,12 @@ def test_alphaphant_analysis_returns_two_source_labelled_profiles() -> None:
 
     assert result == AnalyzedSightingEarPair(
         sighting_id=pair.sighting_id,
-        left=AnalyzedEar(PHOTO, "left", left_box, result.left.tear_profiles),
+        left=AnalyzedEar(PHOTO, "left", left_box, result.left.profiles_by_scale),
         right=AnalyzedEar(
             RIGHT_PHOTO,
             "right",
             right_box,
-            result.right.tear_profiles,
+            result.right.profiles_by_scale,
         ),
     )
     assert [ear.inferred_side for ear in extractor.calls] == ["left", "right"]
@@ -457,7 +457,7 @@ def test_alphaphant_analysis_prepares_one_photo_once_for_both_sides() -> None:
             photo_store=store, ear_segmenter=segmenter, landmark_detector=detector
         ).prepare,
         profile_extractor=_ProfileExtractor(),
-        ear_similarity=EarProfileSimilarity(),
+        ear_comparator=EarComparator(),
     )
 
     result = analyzer.analyze(SightingEarPair(PHOTO.sighting_id, PHOTO, PHOTO))
@@ -565,7 +565,7 @@ def test_alphaphant_analysis_preserves_input_order_for_equal_matching_ears() -> 
             ),
         ).prepare,
         profile_extractor=_ProfileExtractor(),
-        ear_similarity=EarProfileSimilarity(),
+        ear_comparator=EarComparator(),
     )
 
     result = analyzer.analyze(SightingEarPair(PHOTO.sighting_id, PHOTO, RIGHT_PHOTO))
@@ -582,7 +582,7 @@ def test_alphaphant_analysis_reports_declared_side_and_domain_stage() -> None:
             landmark_detector=_LandmarkDetector({}),
         ).prepare,
         profile_extractor=_ProfileExtractor(),
-        ear_similarity=EarProfileSimilarity(),
+        ear_comparator=EarComparator(),
     )
     pair = SightingEarPair(PHOTO.sighting_id, PHOTO, RIGHT_PHOTO)
 
@@ -603,7 +603,7 @@ def test_alphaphant_analysis_wraps_extraction_failure_with_its_cause() -> None:
         """Raise one representative extraction failure."""
 
         producer_slug = None
-        alpha_fractions = (0.35,)
+        alpha_scales = (0.35,)
 
         def extract(self, ear: PreparedEar) -> tuple[TearProfile, ...]:
             """Fail during profile extraction."""
@@ -621,7 +621,7 @@ def test_alphaphant_analysis_wraps_extraction_failure_with_its_cause() -> None:
             ),
         ).prepare,
         profile_extractor=_FailingExtractor(),
-        ear_similarity=EarProfileSimilarity(),
+        ear_comparator=EarComparator(),
     )
 
     with pytest.raises(MatchingError) as caught:

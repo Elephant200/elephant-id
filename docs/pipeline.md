@@ -6,11 +6,11 @@ This document defines the current research algorithm. [architecture.md](architec
 
 The input is a sighting ear pair: one left-ear photo and one right-ear photo from the same sighting. One photo can supply both ears.
 
-`AlphaPhant.match` returns one finite similarity score for each candidate. Each side comparison keeps its reference ear and its query alignment. For each side, the matcher selects the strongest reference. It then calculates the mean of the two side scores.
+`AlphaPhant.match` returns one finite candidate score for each candidate. The candidate score is the mean of the candidate's left score and right score.
 
 `AlphaPhant.analyze` returns the data that matching uses: an immutable `AnalyzedSightingEarPair`. It contains the sighting ID and the left and right `AnalyzedEar` values. Each `AnalyzedEar` contains one signed `TearProfile` for each alpha scale, its source photo, its anatomical side, and its raster box.
 
-A candidate ranking is the scores in descending order. AlphaPhant does not make an identity decision. It does not add evidence to the catalog.
+A candidate ranking is the list of candidate scores in descending order. AlphaPhant does not make an identity decision. It does not add evidence to the catalog.
 
 ## Automated Preprocessing
 
@@ -49,41 +49,33 @@ AlphaTear makes one tear profile for each configured alpha scale. Each alpha sca
 
 ## Tear-Profile Matching
 
-AlphaPhant compares only ears of the same side. It moves only the query profile. Each reference profile stays fixed.
+AlphaPhant calculates the ear similarity between a query ear and each reference ear for each side, left and right.
 
 Every compared ear has one tear profile for each alpha scale. All compared tear profiles must have the same length.
 
-The comparator sets negative depths to zero, compresses the depths, and resamples each profile to a common grid. It then applies each configured stretch and shift to the query.
+The comparator calculates the ear similarity in these steps:
 
-For each alignment and alpha scale, `q` is the query depths and `r` is the reference depths. The overlap score is `sum(min(q, r)) / sum(max(q, r))`. The code uses this equivalent L1 formula:
+1. **Depth rows.** Set negative depths to zero, take the square root, and resample each tear profile to the comparison grid.
+2. **Alignment.** Apply each configured stretch and shift to the query's depth rows. All alpha scales share one stretch and one shift.
+3. **Real-valued Jaccard.** For each alpha scale, compare the aligned query row `q` with the reference row `r`. For nonnegative rows, the real-valued Jaccard is `sum(min(q, r)) / sum(max(q, r))`. The code uses the equivalent L1 form `(|q| + |r| - |q - r|) / (|q| + |r| + |q - r|)`. When the denominator is zero, the real-valued Jaccard is zero.
+4. **Alignment score.** Calculate the mean real-valued Jaccard across the alpha scales. Multiply the mean by the shift penalty of the alignment.
+5. **Best alignment.** Select the highest alignment score and its alignment. This score is the ear similarity.
 
-```text
-total        = sum(q) + sum(r)
-distance     = sum(abs(q - r))
-intersection = (total - distance) / 2
-union        = total - intersection
-overlap      = intersection / union
-```
-
-If `union` is zero, the overlap score is zero. At each alignment, the comparator calculates the mean overlap score across the alpha scales. It multiplies this mean by the shift penalty of the alignment. All alpha scales thus share one stretch and one shift. The comparator returns the highest score and its alignment. If the highest score is zero, it returns stretch 1 and shift 0. Candidate scoring uses this score without change.
-
-SciPy calculates the L1 distances without a large temporary array of per-bin minimums. This uses less memory and time. Subtraction can lose precision when `total` and `distance` are almost equal. In that case, the comparator calculates `sum(min(q, r))` directly. Thus, zero overlap stays zero, and small positive overlaps stay correct.
-
-AlphaPhant compares all left profiles in one call and all right profiles in a second call. The comparator builds the query alignments once for each side and compares all references in one pass. A comparison with one reference uses the same code.
+When the highest alignment score is at or below 1e-12, the comparator sets the ear similarity to zero. A zero ear similarity has no useful alignment. Thus, the comparator reports stretch 1 and shift 0.
 
 ## Catalog Matching
 
-Catalog sightings are not matching units. In the catalog, tear profiles are grouped by known elephant and ear side.
+The matcher compares the query with known elephants. The catalog groups tear profiles by known elephant and ear side.
 
-The matcher first analyzes the query and the references. It keeps each reference in its candidate and in its supplied order. Then, for each known elephant:
+The matcher first analyzes the query and the references. Then, for each known elephant, the matcher:
 
-1. Compare the query left profile with each left catalog profile. Keep the highest similarity score.
-2. Compare the query right profile with each right catalog profile. Keep the highest similarity score.
-3. Calculate the mean of the two kept scores.
+1. calculates the ear similarity of the query left ear and each left reference ear of the candidate. The left score is the highest of these ear similarities;
+2. calculates the right score in the same way;
+3. calculates the candidate score as the mean of the left score and the right score.
 
-The best left and right profiles can come from different catalog sightings. Each comparison keeps its source photo and sighting ID. If two scores are equal, the matcher selects the first reference in input order.
+The left score and the right score can come from different catalog sightings.
 
-Each sighting must have both ears. The matcher scores a candidate only if it can analyze all supplied reference sightings of that candidate.
+Each sighting must have both ears. If the matcher cannot analyze a reference sighting, `match` raises `MatchingError`.
 
 ## Caching
 

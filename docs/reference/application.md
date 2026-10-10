@@ -30,7 +30,7 @@ Given the ear pair, AlphaPhant is fully automated: sighting analysis, tear-profi
 4. Review the analysis package and correct evidence as needed.
 5. Approve a SightingEarPair: one usable left-ear reference Photo and one usable right-ear reference Photo. One Photo may serve both sides.
 6. Run AlphaPhant on the approved ear pair using the application's PhotoStore.
-7. Compare ranked matching candidates and inspect the independently selected left- and right-ear catalog evidence behind each similarity score.
+7. Compare ranked matching candidates and inspect the independently selected left- and right-ear catalog evidence behind each candidate score.
 8. Record an identity decision.
 
 Candidate ranking and identity decision are distinct. AlphaPhant scores known elephants; the application may present those scores as a descending ranking, but it does not decide whether the sighting belongs to an existing individual, should create a new known elephant, or remains unresolved.

@@ -18,7 +18,7 @@ class CatalogMatcher(Protocol):
         query: SightingEarPair,
         catalog: Mapping[CandidateKey, tuple[SightingEarPair, ...]],
     ) -> CandidateScores:
-        """Return one similarity score per catalog candidate."""
+        """Return one candidate score per catalog candidate."""
         ...
 
 

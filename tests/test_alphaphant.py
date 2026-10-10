@@ -18,10 +18,7 @@ from elephant_id.matching.alphaphant.extraction import (
     AnalyzedSightingEarPair,
     TearProfile,
 )
-from elephant_id.matching.alphaphant.similarity import (
-    EarComparison,
-    EarProfileSimilarity,
-)
+from elephant_id.matching.alphaphant.similarity import EarComparator
 from elephant_id.preparation import EarSide, PreparedEar
 
 
@@ -49,7 +46,7 @@ def _ear(value: int, side: EarSide, depths: list[float]) -> AnalyzedEar:
         ),
         side=side,
         source_box=BoundingBox(0, 0, 4, 4),
-        tear_profiles=(TearProfile(np.asarray(depths)),),
+        profiles_by_scale=(TearProfile(np.asarray(depths)),),
     )
 
 
@@ -66,7 +63,7 @@ class RecordingPreparation:
     """Supply prepared ears and controlled extraction through the real analysis path."""
 
     producer_slug = None
-    alpha_fractions = (0.35,)
+    alpha_scales = (0.35,)
 
     def __init__(
         self, analyses: Mapping[SightingEarPair, AnalyzedSightingEarPair]
@@ -85,7 +82,7 @@ class RecordingPreparation:
             (pair.left_photo, analysis.left, "left"),
             (pair.right_photo, analysis.right, "right"),
         ):
-            self._profiles[photo, side] = analyzed.tear_profiles
+            self._profiles[photo, side] = analyzed.profiles_by_scale
             ears.append(
                 PreparedEar(
                     source_photo=photo,
@@ -113,7 +110,7 @@ def _alphaphant(
         AlphaPhant(
             prepare_ears=preparation.prepare,
             profile_extractor=preparation,
-            ear_similarity=EarProfileSimilarity(),
+            ear_comparator=EarComparator(),
         ),
         preparation,
     )
@@ -262,7 +259,7 @@ def test_alphaphant_rejects_empty_candidate_evidence() -> None:
 
     with pytest.raises(
         RuntimeError,
-        match=f"{candidate_key} has no catalog evidence",
+        match=f"{candidate_key} has no reference sightings",
     ):
         alphaphant.match(query, {candidate_key: ()})
 
@@ -321,33 +318,19 @@ def test_matching_package_exports_only_public_catalog_interface() -> None:
     ]
 
 
-def test_alphaphant_batches_all_candidates_by_side(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Catalog size changes batch length, never the number of matching calls."""
+def test_alphaphant_scores_each_candidate_from_its_own_references() -> None:
+    """Each candidate score uses only the query and that candidate's references."""
     query, first, second = _pair(10), _pair(20), _pair(30)
-    query_analysis = _analysis(100, [0, 0.1, 0], [0, 0.2, 0])
-    first_analysis = _analysis(200, [0, 0.1, 0], [0, 0, 0])
-    second_analysis = _analysis(300, [0, 0, 0], [0, 0.2, 0])
-    alphaphant, _ = _alphaphant({query: query_analysis, first: first_analysis, second: second_analysis})
-    calls: list[tuple[tuple[np.ndarray, ...], tuple[tuple[np.ndarray, ...], ...]]] = []
-    original = EarProfileSimilarity.compare_many
-
-    def record(
-        self: EarProfileSimilarity,
-        profiles: tuple[np.ndarray, ...],
-        candidates: tuple[tuple[np.ndarray, ...], ...],
-    ) -> tuple[EarComparison, ...]:
-        """Record each bulk call while executing the real matcher."""
-        calls.append((profiles, candidates))
-        return original(self, profiles, candidates)
-
-    monkeypatch.setattr(EarProfileSimilarity, "compare_many", record)
+    alphaphant, _ = _alphaphant(
+        {
+            query: _analysis(100, [0, 0.1, 0], [0, 0.2, 0]),
+            first: _analysis(200, [0, 0.1, 0], [0, 0, 0]),
+            second: _analysis(300, [0, 0, 0], [0, 0.2, 0]),
+        }
+    )
     first_key, second_key = CandidateKey(_uuid(500)), CandidateKey(_uuid(501))
+
     scores = alphaphant.match(query, {first_key: (first,), second_key: (second,)})
-    assert len(calls) == 2
-    assert calls[0][0][0] is query_analysis.left.tear_profiles[0].depths
-    assert calls[1][0][0] is query_analysis.right.tear_profiles[0].depths
-    assert all(len(candidates) == 2 for _, candidates in calls)
+
     assert scores == pytest.approx({first_key: 0.5, second_key: 0.5})
-    assert (alphaphant.match(query, {second_key: (second,), first_key: (first,)}) == scores)
+    assert alphaphant.match(query, {second_key: (second,), first_key: (first,)}) == scores

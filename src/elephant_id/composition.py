@@ -12,7 +12,7 @@ from elephant_id.matching.alphaphant.extraction import (
     AlphaTearConfig,
     AlphaTearExtractor,
 )
-from elephant_id.matching.alphaphant.similarity import EarProfileSimilarity
+from elephant_id.matching.alphaphant.similarity import EarComparator
 from elephant_id.preparation import SightingPreparer
 
 
@@ -59,7 +59,7 @@ def build_standard_alphaphant(
     return AlphaPhant(
         prepare_ears=preparer.prepare,
         profile_extractor=profiles,
-        ear_similarity=EarProfileSimilarity(),
+        ear_comparator=EarComparator(),
     )
 
 
@@ -76,5 +76,5 @@ def build_profile_tuning_alphaphant(
     return AlphaPhant(
         prepare_ears=preparer.prepare,
         profile_extractor=AlphaTearExtractor(profile_config),
-        ear_similarity=EarProfileSimilarity(),
+        ear_comparator=EarComparator(),
     )

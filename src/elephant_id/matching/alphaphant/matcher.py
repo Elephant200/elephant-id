@@ -1,11 +1,7 @@
-"""AlphaPhant analysis and corresponding-side catalog matching."""
+"""AlphaPhant analysis and same-side catalog matching."""
 
 from collections.abc import Callable, Iterable, Mapping
-from dataclasses import dataclass
 from functools import cache
-from itertools import islice
-
-import numpy as np
 
 from elephant_id.domain import SightingEarPair
 from elephant_id.matching.alphaphant.extraction import (
@@ -13,50 +9,38 @@ from elephant_id.matching.alphaphant.extraction import (
     AnalyzedSightingEarPair,
     TearProfileExtractor,
 )
-from elephant_id.matching.alphaphant.similarity import (
-    EarComparison,
-    EarProfileSimilarity,
-)
+from elephant_id.matching.alphaphant.similarity import EarComparator, EarSimilarity
 from elephant_id.matching.protocol import CandidateKey, CandidateScores, MatchingError
 from elephant_id.preparation import EarSide, PreparedEar
 
 
-@dataclass(frozen=True, slots=True)
-class _ReferenceComparison:
-    """A reference ear and the directional comparison it supports."""
-
-    reference_ear: AnalyzedEar
-    comparison: EarComparison
-
-    @property
-    def score(self) -> float:
-        """Return the comparison's similarity score."""
-        return self.comparison.score
-
-
-def _profile_depths(ear: AnalyzedEar) -> tuple[np.ndarray, ...]:
-    """Return an analyzed ear's tear-profile depths for each alpha scale."""
-    return tuple(profile.depths for profile in ear.tear_profiles)
-
-
 class AlphaPhant:
-    """Analyze sighting ears and score candidates using corresponding sides."""
+    """Analyze sighting ear pairs and calculate a candidate score for each candidate."""
 
     def __init__(
         self,
         *,
         prepare_ears: Callable[[SightingEarPair], tuple[PreparedEar, PreparedEar]],
         profile_extractor: TearProfileExtractor,
-        ear_similarity: EarProfileSimilarity,
+        ear_comparator: EarComparator,
     ) -> None:
-        """Compose left/right preparation, profile extraction, and comparison."""
+        """Compose left/right preparation, profile extraction, and comparison.
+
+        Args:
+            prepare_ears: Returns the left and right prepared ears of a sighting
+                ear pair. Raises `MatchingError` when preparation fails.
+            profile_extractor: Extracts one tear profile for each alpha scale.
+            ear_comparator: Computes ear similarities.
+        """
         self._prepare_ears = prepare_ears
         self._profile_extractor = profile_extractor
-        self._ear_similarity = ear_similarity
+        self._ear_comparator = ear_comparator
         self._analysis_for = cache(self._analyze_pair)
 
     def analyze(self, pair: SightingEarPair) -> AnalyzedSightingEarPair:
-        """Return source-labelled profiles for both ears. Reuse completed results.
+        """Return the analyzed left ear and right ear of the pair.
+
+        This instance stores the analysis and returns it for the same pair.
 
         Raises:
             MatchingError: If preparation or extraction fails.
@@ -90,12 +74,10 @@ class AlphaPhant:
         query: SightingEarPair,
         catalog: Mapping[CandidateKey, tuple[SightingEarPair, ...]],
     ) -> CandidateScores:
-        """Average each candidate's strongest left and right reference scores.
-
-        The two winning references may come from different sightings.
+        """Return the candidate score of each candidate by aggregating the ear similarities for each side.
 
         Returns:
-            One finite similarity per supplied candidate; larger is stronger.
+            One finite candidate score per supplied candidate; larger is stronger.
 
         Raises:
             RuntimeError: If a candidate has no reference sightings.
@@ -103,21 +85,21 @@ class AlphaPhant:
         """
         query_analysis = self.analyze(query)
         reference_analyses = self._analyze_catalog(catalog)
-        left_comparisons = self._compare_side(query_analysis.left, reference_analyses)
-        right_comparisons = self._compare_side(query_analysis.right, reference_analyses)
+        left_similarities = self._compare_side(query_analysis.left, reference_analyses)
+        right_similarities = self._compare_side(query_analysis.right, reference_analyses)
 
         scores: dict[CandidateKey, float] = {}
         for candidate_key in catalog:
-            best_left = self._select_best_comparison(left_comparisons[candidate_key])
-            best_right = self._select_best_comparison(right_comparisons[candidate_key])
-            scores[candidate_key] = (best_left.score + best_right.score) / 2.0
+            left_score = _aggregate_ear_similarities(left_similarities[candidate_key])
+            right_score = _aggregate_ear_similarities(right_similarities[candidate_key])
+            scores[candidate_key] = (left_score + right_score) / 2.0
         return scores
 
     def _analyze_catalog(
         self,
         catalog: Mapping[CandidateKey, tuple[SightingEarPair, ...]],
     ) -> dict[CandidateKey, tuple[AnalyzedSightingEarPair, ...]]:
-        """Analyze references in supplied candidate and sighting order.
+        """Return the analyzed reference sightings of each candidate.
 
         Raises:
             RuntimeError: If a candidate has no reference sightings.
@@ -125,7 +107,7 @@ class AlphaPhant:
         analyses = {}
         for candidate_key, reference_pairs in catalog.items():
             if not reference_pairs:
-                raise RuntimeError(f"{candidate_key} has no catalog evidence")
+                raise RuntimeError(f"{candidate_key} has no reference sightings")
             analyses[candidate_key] = tuple(self.analyze(pair) for pair in reference_pairs)
         return analyses
 
@@ -133,32 +115,20 @@ class AlphaPhant:
         self,
         query_ear: AnalyzedEar,
         catalog: Mapping[CandidateKey, tuple[AnalyzedSightingEarPair, ...]],
-    ) -> dict[CandidateKey, tuple[_ReferenceComparison, ...]]:
-        """Return same-side comparisons grouped by candidate.
+    ) -> dict[CandidateKey, tuple[EarSimilarity, ...]]:
+        """Return the ear similarities of the query ear with each candidate's same-side ears.
 
-        Keep reference order and repeated references.
+        The ear similarities of each candidate are in the order of its reference sightings.
         """
-        reference_ears = tuple(
-            analysis.left if query_ear.side == "left" else analysis.right
-            for references in catalog.values()
-            for analysis in references
-        )
-        comparisons = self._ear_similarity.compare_many(
-            _profile_depths(query_ear),
-            tuple(_profile_depths(ear) for ear in reference_ears),
-        )
-        labelled = (
-            _ReferenceComparison(ear, comparison)
-            for ear, comparison in zip(reference_ears, comparisons, strict=True)
-        )
         return {
-            key: tuple(islice(labelled, len(references)))
-            for key, references in catalog.items()
+            candidate_key: self._ear_comparator.compare_ears(
+                query_ear,
+                [analysis.left if query_ear.side == "left" else analysis.right for analysis in references],
+            )
+            for candidate_key, references in catalog.items()
         }
 
-    @staticmethod
-    def _select_best_comparison(
-        comparisons: Iterable[_ReferenceComparison],
-    ) -> _ReferenceComparison:
-        """Select the strongest reference, retaining its source and alignment."""
-        return max(comparisons, key=lambda comparison: comparison.score)
+
+def _aggregate_ear_similarities(ear_similarities: Iterable[EarSimilarity]) -> float:
+    """Return the left score or right score: the highest of a candidate's ear similarities on that side."""
+    return max(similarity.score for similarity in ear_similarities)

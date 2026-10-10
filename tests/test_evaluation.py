@@ -226,7 +226,7 @@ def test_evaluate_rejects_invalid_matcher_scores(tmp_path: Path, matcher: FixedM
 
 
 class FailingMatcher:
-    """Raise an analysis failure for catalog evidence."""
+    """Raise an analysis failure for a reference sighting."""
 
     def match(
         self,

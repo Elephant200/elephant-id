@@ -1,6 +1,6 @@
 # Architecture
 
-AlphaPhant accepts a sighting ear pair and a candidate catalog. It returns one finite similarity score per candidate. Ranking sorts these scores in descending order.
+AlphaPhant accepts a sighting ear pair and a candidate catalog. It returns one finite candidate score per candidate. Ranking sorts these scores in descending order.
 
 ## Ownership
 
@@ -26,7 +26,7 @@ matching/
   protocol.py        CatalogMatcher and MatchingError
   alphaphant/
     extraction.py    TearProfile, analyzed values, protocol, and AlphaTear
-    similarity.py    EarProfileSimilarity and EarComparison
+    similarity.py    EarComparator and EarSimilarity
     cached.py        Profile persistence
     matcher.py       AlphaPhant.analyze and AlphaPhant.match
 composition.py       Construct preparation and AlphaPhant
@@ -40,7 +40,7 @@ composition.py       Construct preparation and AlphaPhant
 
 `AlphaPhant.analyze` returns an immutable `AnalyzedSightingEarPair`. It retains the input sighting ID and two `AnalyzedEar` values. Each ear contains its Photo, side, raster box, and one signed `TearProfile` for each alpha scale. Profile depths are finite, one-dimensional, and read-only.
 
-`AlphaPhant.match` analyzes the query and references before comparison. It preserves candidate membership and reference order through batching. It compares corresponding sides, selects each candidate's strongest reference for each side, and averages the two scores. Each comparison retains its reference source and query alignment. See [pipeline.md](pipeline.md) for more.
+`AlphaPhant.match` analyzes the query and references before comparison. For each candidate, it computes the ear similarities of corresponding sides, makes the left score and the right score, and averages them into the candidate score. See [pipeline.md](pipeline.md) for more.
 
 The catalog is a mapping from opaque `CandidateKey` values to tuples of `SightingEarPair` evidence. Each candidate requires at least one pair. `CandidateScores` has exactly the catalog's keys and finite values. Larger scores indicate stronger matches. Errors stop scoring; no partial result is returned.
 
