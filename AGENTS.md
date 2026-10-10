@@ -20,7 +20,7 @@ AlphaPhant is a fully automated catalog-matching algorithm for elephant re-ident
 
 Run Python from the repository root with `uv`. After Python changes, run `uv run ruff check .` and relevant tests. 
 
-Change files with your harness's file tools: Edit/Write in Claude Code, `apply_patch` in Codex. This is critical for user review. Use the shell to run programs: tests, ruff, git, and scripts.
+Change files with your harness's file tools: Edit/Write in Claude Code, `apply_patch` in Codex. Do not use heredocs, python -, or sed -i to write or edit files, even for batches of small edits. This is critical for transparency. Use the shell to run programs: tests, ruff, git, and quick python scripts. 
 
 ## Scope and Safety
 
