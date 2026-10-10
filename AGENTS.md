@@ -2,23 +2,22 @@
 
 ## Project
 
-AlphaPhant is a fully automated catalog-matching algorithm for elephant re-identification. Given one high-quality image of each ear from the same sighting, it localizes and segments the ears, detects anatomical landmarks, extracts alpha-shape-derived tear profiles, and returns one similarity score per known elephant.
+AlphaPhant matches one sighting ear pair against a known-elephant catalog and returns one similarity score per known elephant.
 
 ## Start Here
 
-- Current state or cleanup scope: read [docs/status.md](docs/status.md).
-- General pipeline flow: read [docs/pipeline.md](docs/pipeline.md).
-- Retrieval evaluation, splits, failures, or metrics: read [docs/evaluation.md](docs/evaluation.md).
-- Module placement, domain/storage boundaries, or caching: read [docs/architecture.md](docs/architecture.md).
-- Naming, domain or technical terms: read [docs/context.md](docs/context.md).
-    - Read [docs/context.md](docs/context.md) before editing any documentation or docstrings.
+- Current state: read [docs/status.md](docs/status.md).
+- Algorithm flow: read [docs/pipeline.md](docs/pipeline.md).
+- Evaluation, splits, failures, or metrics: read [docs/evaluation.md](docs/evaluation.md).
+- Module placement, coordinates, caching, or photo identity: read [docs/architecture.md](docs/architecture.md).
+- Terms, or before editing docs and docstrings: read [docs/context.md](docs/context.md).
 - Future application work: read [docs/reference/application.md](docs/reference/application.md).
-- Later research ideas: read [docs/future.md](docs/future.md).
+- Later research: read [docs/future.md](docs/future.md).
 - Surprising decisions: read [docs/adr/](docs/adr/).
 
 ## Commands
 
-Run Python from the repository root with `uv`. After Python changes, run `uv run ruff check .` and relevant tests. 
+Run Python from the repository root with `uv`. After Python changes, run `uv run ruff check .` and relevant tests.
 
 Change files with your harness's file tools: Edit/Write in Claude Code, `apply_patch` in Codex. Do not use heredocs, python -, or sed -i to write or edit files, even for batches of small edits. This is critical for transparency. Use the shell to run programs: tests, ruff, git, and quick python scripts. 
 
@@ -36,32 +35,22 @@ Keep interfaces narrow and justified by current variation. Research supplies a s
 
 ## Python Style
 
-- Use types for all function / method signatures.
-- Give every package, module, class, function, and method a concise, accurate Google-style docstring. Code in docstrings uses single backticks. Docstrings should clearly state the contract, not the weeds of implementation.
-- Prefer clear names and structure over comments. Comment only non-trivial reasoning.
-- Keep code and research tooling as simple as possible. Add an abstraction, defensive guard, hash, or provenance record only when current work strictly requires it; this is rare.
+- Use types for all function and method signatures.
+- Give every package, module, class, function, and method a concise Google-style docstring. Code in docstrings uses single backticks. State the contract, not implementation weeds.
+- Prefer clear names over comments. Comment only non-trivial reasoning.
+- Keep code and tooling as simple as possible. Add an abstraction, defensive guard, hash, or provenance record only when current work requires it; this is rare.
 
 ## Documentation
 
-- Write docs and docstrings in ASD-STE100 style: active voice, plain direct verbs, and lists for rules with several parts.
-- Use the terms in [docs/context.md](docs/context.md).
-
-- State what the code does. Do not state what it does not do, what it used to do, or what another branch does.
-- Write a constraint as a positive rule ("Preparation fails when no ear has the declared side"), not as an absence ("There is no fallback"). Only write negative rules if a careful reader would make the wrong assumption; this is rare.
+- Write docs and docstrings in ASD-STE100 style: active voice, plain verbs, and lists for rules with several parts.
+- State what the code does. Write a constraint as a positive rule, not as an absense. Write a negative rule only when a careful reader would otherwise form the wrong belief.
 - Report removals, history, and rejected alternatives to the user in chat.
-- Test behavior the code has. Do not add tests that guard against code that never existed.
-- To check, consider deleting the sentence. If a reader wouldn't form a wrong belief, delete it.
+- Test behavior the code actually implements.
+- Deletion test: Delete a sentence when a reader would not form a wrong belief without it.
 
-## Images and Geometry
+## Images
 
-- Float boxes use half-open `xyxy` coordinates. Convert to integer pixels at raster boundaries through the image geometry helpers.
-- Public color and background arguments in code are human-facing RGB; convert to BGR at the write boundary.
-
-## Caching
-
-- One cache stores model outputs and tear profiles.
-- Use photo UUIDs for photo-level source identity. Add dependent inputs such as crop coordinates as needed. No hashes.
-- A `producer_slug` carries model, weight, prompt, preprocessing, threshold, configuration, and algorithm identity.
+Public color and background arguments are human-facing RGB. Convert to BGR at the write boundary.
 
 ## Issue Tracker
 
