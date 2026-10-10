@@ -21,6 +21,7 @@ from elephant_id.inference import Detection
 from elephant_id.matching.alphaphant import AlphaPhant
 from elephant_id.matching.alphaphant.cached import CachedTearProfileExtractor
 from elephant_id.matching.alphaphant.extraction import (
+    DEFAULT_VERSION,
     AlphaTearConfig,
     AlphaTearExtractor,
     AnalyzedEar,
@@ -160,6 +161,11 @@ def test_alpha_shape_crossings_are_nan_for_a_ray_that_does_not_cross() -> None:
     assert np.isnan(crossings[0]).all() and np.isnan(normals[0]).all()
     np.testing.assert_allclose(crossings[1], (3.0, 0.0), atol=1e-12)
     np.testing.assert_allclose(normals[1], (-1.0, 0.0), atol=1e-12)
+
+
+def test_settled_alpha_tear_uses_three_alpha_scales() -> None:
+    """The settled extraction measures small, medium, and large tears."""
+    assert DEFAULT_VERSION.config.alpha_scales == (0.35, 2.0, 10.0)
 
 
 @pytest.mark.parametrize("alpha_scales", [(), (0.35, 0.0), (-1.0,)])

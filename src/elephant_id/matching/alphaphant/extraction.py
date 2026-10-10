@@ -125,7 +125,7 @@ class AlphaTearConfig:
     contour_points: int = 1024
     profile_bins: int = 720
     trim_degrees: float = 5.0
-    alpha_scales: tuple[float, ...] = (0.35,)
+    alpha_scales: tuple[float, ...] = (0.35, 2.0, 10.0)
     morph_opening_fraction: float = 0.020
     smoothing_sigma: float = 2.0
 
