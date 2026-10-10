@@ -91,8 +91,11 @@ The project's complete catalog-matching algorithm, which extracts analyzed ears 
 _Avoid_: AlphaTear (when referring to matching), AlphaPhant matcher
 
 **Tear profile**:
-The depths of one ear at one alpha scale, at uniform angles from 0° to 180°.
+The depths of one ear at one alpha scale, at uniform angles from 0° to 180°. Each tear profile also contains its measured interval.
 _Avoid_: Tear signature, embedding when referring to the current algorithm
+
+**Measured interval**:
+The angles at which AlphaTear measures depths: 5° to 175°, both ends excluded. The measured interval excludes the angles near the landmarks to reduce noise. The depths outside the measured interval are zero.
 
 **Depth**:
 The distance from the alpha-shape boundary to the ear contour, divided by the ear radius. AlphaTear measures the distance inward. A positive depth shows a tear: the contour is inside the alpha shape. A negative depth shows that the contour is outside the alpha shape.

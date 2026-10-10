@@ -22,7 +22,12 @@ _PHOTO = Photo(
 
 def _ear(*depths: np.ndarray) -> AnalyzedEar:
     """Return one left ear with a tear profile for each depth array."""
-    return AnalyzedEar(_PHOTO, "left", BoundingBox(0, 0, 4, 4), tuple(TearProfile(row) for row in depths))
+    return AnalyzedEar(
+        _PHOTO,
+        "left",
+        BoundingBox(0, 0, 4, 4),
+        tuple(TearProfile(row, start_degrees=5.0, end_degrees=175.0) for row in depths),
+    )
 
 
 def _compare_one(

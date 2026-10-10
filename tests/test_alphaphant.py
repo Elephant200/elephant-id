@@ -46,7 +46,7 @@ def _ear(value: int, side: EarSide, depths: list[float]) -> AnalyzedEar:
         ),
         side=side,
         source_box=BoundingBox(0, 0, 4, 4),
-        profiles_by_scale=(TearProfile(np.asarray(depths)),),
+        profiles_by_scale=(TearProfile(np.asarray(depths), start_degrees=5.0, end_degrees=175.0),),
     )
 
 

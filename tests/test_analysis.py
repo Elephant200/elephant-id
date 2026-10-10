@@ -51,12 +51,24 @@ def test_tear_profile_owns_immutable_one_dimensional_depths() -> None:
     """A profile copies mutable caller data and exposes normalized depths only."""
     source = np.asarray([0.0, 0.1, -0.02])
 
-    profile = TearProfile(source)
+    profile = TearProfile(source, start_degrees=5.0, end_degrees=175.0)
     source[1] = 0.9
 
     np.testing.assert_array_equal(profile.depths, [0.0, 0.1, -0.02])
     with pytest.raises(ValueError, match="read-only"):
         profile.depths[0] = 1.0
+
+
+@pytest.mark.parametrize(
+    ("start_degrees", "end_degrees"),
+    [(-1.0, 175.0), (5.0, 181.0), (90.0, 90.0), (100.0, 80.0)],
+)
+def test_tear_profile_rejects_measured_interval_outside_0_to_180(
+    start_degrees: float, end_degrees: float
+) -> None:
+    """The measured interval is a nonempty part of 0° to 180°."""
+    with pytest.raises(ValueError, match="measured interval"):
+        TearProfile(np.zeros(3), start_degrees=start_degrees, end_degrees=end_degrees)
 
 
 def _prepared_ear(side: EarSide = "left") -> PreparedEar:
@@ -104,6 +116,19 @@ def test_alpha_tear_returns_one_profile_per_alpha_scale_in_order() -> None:
     assert not np.array_equal(small.depths, large.depths)
 
 
+def test_alpha_tear_profiles_state_their_measured_interval() -> None:
+    """Each tear profile is measured inside 5° to 175° and is zero outside."""
+    profiles = AlphaTearExtractor(AlphaTearConfig(alpha_scales=(0.35, 2.0))).extract(_notched_ear())
+
+    for profile in profiles:
+        angles = np.linspace(0.0, 180.0, len(profile.depths))
+        outside = (angles <= profile.start_degrees) | (angles >= profile.end_degrees)
+        assert (profile.start_degrees, profile.end_degrees) == (5.0, 175.0)
+        assert len(profile.depths) == 720
+        assert np.all(profile.depths[outside] == 0.0)
+        assert np.any(profile.depths[~outside] != 0.0)
+
+
 @pytest.mark.parametrize("alpha_scales", [(), (0.35, 0.0), (-1.0,)])
 def test_alpha_tear_config_rejects_missing_or_nonpositive_alpha_scales(
     alpha_scales: tuple[float, ...],
@@ -118,8 +143,8 @@ class _ProfileExtractor:
     """Record prepared-ear extraction."""
 
     profiles: tuple[TearProfile, ...] = (
-        TearProfile(np.asarray([0.0, 0.1, 0.0])),
-        TearProfile(np.asarray([0.0, 0.3, -0.1])),
+        TearProfile(np.asarray([0.0, 0.1, 0.0]), start_degrees=5.0, end_degrees=175.0),
+        TearProfile(np.asarray([0.0, 0.3, -0.1]), start_degrees=10.0, end_degrees=170.0),
     )
     alpha_scales: tuple[float, ...] = (0.35, 2.0)
     producer_slug: str | None = "alpha-tear-v1"
@@ -161,6 +186,8 @@ def test_cached_profile_uses_prepared_ear_lineage(tmp_path: Path) -> None:
         assert len(profiles) == 2
         np.testing.assert_array_equal(profiles[0].depths, [0.0, 0.1, 0.0])
         np.testing.assert_array_equal(profiles[1].depths, [0.0, 0.3, -0.1])
+        assert (profiles[0].start_degrees, profiles[0].end_degrees) == (5.0, 175.0)
+        assert (profiles[1].start_degrees, profiles[1].end_degrees) == (10.0, 170.0)
     assert inner.calls == [ear]
     assert extractor.producer_slug == inner.producer_slug
     assert extractor.alpha_scales == (0.35, 2.0)
@@ -185,8 +212,25 @@ def test_cached_profiles_reject_other_alpha_scales(
     "record",
     [
         {"depths": [0.0, 0.1, 0.0]},
-        {"alpha_scales": [0.35, 2.0], "profiles": [[0.0, 0.1, 0.0]]},
-        {"alpha_scales": [0.35, 2.0], "profiles": [[0.0, 0.1], "invalid"]},
+        {
+            "alpha_scales": [0.35, 2.0],
+            "profiles": [{"start_degrees": 5.0, "end_degrees": 175.0, "depths": [0.0, 0.1, 0.0]}],
+        },
+        {
+            "alpha_scales": [0.35, 2.0],
+            "profiles": [
+                {"start_degrees": 5.0, "end_degrees": 175.0, "depths": [0.0, 0.1]},
+                "invalid",
+            ],
+        },
+        {"alpha_scales": [0.35, 2.0], "profiles": [[0.0, 0.1, 0.0], [0.0, 0.3, -0.1]]},
+        {
+            "alpha_scales": [0.35, 2.0],
+            "profiles": [
+                {"depths": [0.0, 0.1, 0.0]},
+                {"start_degrees": 5.0, "end_degrees": 175.0, "depths": [0.0, 0.3, -0.1]},
+            ],
+        },
     ],
 )
 def test_cached_profiles_reject_invalid_records(

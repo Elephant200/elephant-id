@@ -31,21 +31,34 @@ SAM3 does ear localization and segmentation. A YOLO keypoint model does ear land
 
 ## Tear-Profile Extraction
 
-AlphaTear resamples the prepared contour. It calculates a radius from the cleaned ear area.
+AlphaTear makes one tear profile for each configured alpha scale. Each alpha scale is a fraction of the ear radius. The default configuration has one alpha scale, 0.35.
 
-Morphological opening makes a second contour. AlphaTear builds the alpha-shape reference from this opened contour. The opened contour and the alpha-shape boundary are closed shapes. AlphaTear cuts each one between the anchors with the same ear-flap rule that preparation uses. AlphaTear measures the resampled contour, not the opened contour.
+AlphaTear makes the shared geometry one time for each ear:
 
-The original detector landmarks define the polar frame. The snapped contour anchors only mark the ends of the prepared contour. They do not replace the detector landmarks in the polar frame.
+1. Resample the prepared contour to equal arc-length spacing. AlphaTear measures the depths to this resampled contour.
+2. Calculate the ear radius from the cleaned ear area.
+3. Open the resampled contour morphologically. Cut the opened contour between the anchors with the ear-flap rule of preparation.
+4. Make one polar ray for each angle in the measured interval, 5° to 175°. Start each ray at the midpoint of the original detector landmarks.
 
-For each kept profile angle:
+The polar frame uses the detector landmarks. The snapped contour anchors only mark the ends of the prepared contour.
 
-1. A ray at that angle finds an origin on the reference boundary.
-2. The local inward normal at the origin gives the direction to measure.
-3. AlphaTear measures the signed distance from the origin to the nearest crossing of the measured contour.
+AlphaTear then does these steps for each alpha scale:
 
-AlphaTear divides each distance by the radius, smooths the distances, and puts them on the full angular grid. The grid has uniform angles from 0° to 180°, both ends included. Trimmed bins and bins with no origin stay zero.
+5. Build the alpha shape of the opened contour.
+6. Find the point where each ray last leaves the alpha shape. This point is the crossing.
+7. Calculate the inward normal of the alpha shape at each crossing:
+   1. Cut the alpha-shape boundary with the ear-flap rule.
+   2. Find the boundary point that is nearest to the crossing.
+   3. Calculate the boundary tangent at that point.
+   4. Turn the tangent by 90° toward the inside of the alpha shape.
+8. Measure the signed distance from each crossing to the resampled contour, along the normal. Use the contour intersection that is nearest to the crossing.
+9. Divide each distance by the ear radius. The result is the depth.
+10. Smooth the depths along the angles.
 
-AlphaTear makes one tear profile for each configured alpha scale. Each alpha scale is a fraction of the radius. The default configuration has one alpha scale, 0.35.
+The tear profile contains the depths at 720 uniform angles from 0° to 180°, both ends included. The tear profile also contains its measured interval. These depths are zero:
+
+- the depths outside the measured interval;
+- the depths of rays that do not cross the alpha shape.
 
 ## Tear-Profile Matching
 
@@ -89,7 +102,7 @@ The cache has one tear-profile record for each prepared ear. The record key cont
 - the segmentation producer slug;
 - the landmark producer slug.
 
-The record stores the alpha scales next to the tear profiles. Loading a record fails when its alpha scales differ from the extractor's alpha scales in value or order.
+The record contains the alpha scales and the tear profiles. Each stored tear profile contains its measured interval and its depths. Loading a record fails when its alpha scales differ from the extractor's alpha scales in value or order.
 
 The bounding box keeps the key stable if the candidate order changes. [architecture.md](architecture.md) defines cache identity and producer versions.
 

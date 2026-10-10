@@ -42,7 +42,8 @@ class CachedTearProfileExtractor:
     def extract(self, ear: PreparedEar) -> tuple[TearProfile, ...]:
         """Return cached tear profiles, or extract and store new ones.
 
-        Each record stores its alpha scales next to its tear profiles.
+        Each record contains the alpha scales and the tear profiles. Each
+        stored tear profile contains its measured interval and its depths.
 
         Raises:
             ValueError: If a stored record has other alpha scales, in value or
@@ -61,7 +62,14 @@ class CachedTearProfileExtractor:
             key,
             lambda: {
                 "alpha_scales": alpha_scales,
-                "profiles": [profile.depths.tolist() for profile in self._inner.extract(ear)],
+                "profiles": [
+                    {
+                        "start_degrees": profile.start_degrees,
+                        "end_degrees": profile.end_degrees,
+                        "depths": profile.depths.tolist(),
+                    }
+                    for profile in self._inner.extract(ear)
+                ],
             },
         )
         if record.get("alpha_scales") != alpha_scales:
@@ -73,6 +81,9 @@ class CachedTearProfileExtractor:
         if not isinstance(profiles, list) or len(profiles) != len(alpha_scales):
             raise ValueError("Tear-profile cache record must hold one profile for each alpha scale")
         try:
-            return tuple(TearProfile(depths) for depths in profiles)
-        except (TypeError, ValueError) as error:
-            raise ValueError("Cached tear-profile depths are invalid") from error
+            return tuple(
+                TearProfile(profile["depths"], profile["start_degrees"], profile["end_degrees"])
+                for profile in profiles
+            )
+        except (KeyError, TypeError, ValueError) as error:
+            raise ValueError("Cached tear profiles are invalid") from error

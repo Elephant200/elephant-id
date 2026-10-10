@@ -1,4 +1,25 @@
-"""AlphaTear profile extraction."""
+"""AlphaTear tear-profile extraction.
+
+AlphaTear makes one tear profile for each alpha scale.
+
+AlphaTear makes the shared geometry one time for each ear:
+
+1. Resample the ear contour to equal arc-length spacing.
+2. Calculate the ear radius from the cleaned ear area.
+3. Open the resampled contour morphologically.
+4. Make one polar ray for each angle in the measured interval.
+
+AlphaTear then does these steps for each alpha scale:
+
+5. Build the alpha shape of the opened contour.
+6. Find the point where each polar ray last leaves the alpha shape. This
+   point is the crossing.
+7. Calculate the inward normal of the alpha shape at each crossing.
+8. Measure the signed distance from each crossing to the resampled contour,
+   along the normal.
+9. Divide each distance by the ear radius. The result is the depth.
+10. Smooth the depths along the angles.
+"""
 
 from dataclasses import dataclass
 from typing import Protocol
@@ -18,25 +39,35 @@ from elephant_id.preparation import EarSide, PreparedEar, ear_side_path
 
 @dataclass(frozen=True, slots=True, eq=False)
 class TearProfile:
-    """Read-only depths of one ear at one alpha scale.
+    """The read-only depths of one ear at one alpha scale.
 
-    Each depth is a fraction of the ear radius. A positive depth shows a tear:
-    the contour is inside the alpha shape. The depths are at uniform angles
-    from 0° to 180°, including both ends.
+    The depths are at uniform angles from 0° to 180°, both ends included.
+    Each depth is a fraction of the ear radius. A positive depth shows a tear
+    whose ear contour is inside the alpha shape.
+
+    AlphaTear measures the depths in the measured interval, from
+    `start_degrees` to `end_degrees`, both ends excluded. The depths outside
+    the measured interval are zero.
 
     Raises:
-        ValueError: If depths are empty, non-finite, or not one-dimensional.
+        ValueError: If the depths are empty, not finite, or not
+            one-dimensional. Also if the measured interval is not a nonempty
+            part of 0° to 180°.
     """
 
     depths: NDArray[np.float64]
+    start_degrees: float
+    end_degrees: float
 
     def __post_init__(self) -> None:
-        """Copy and validate the one-dimensional normalized depths."""
+        """Validate the depths and the measured interval, and store a read-only copy of the depths."""
         depths = np.array(self.depths, dtype=np.float64, copy=True)
         if depths.ndim != 1 or len(depths) == 0:
             raise ValueError("Tear-profile depths must be a non-empty 1-D array")
         if not np.isfinite(depths).all():
             raise ValueError("Tear-profile depths must be finite")
+        if not 0.0 <= self.start_degrees < self.end_degrees <= 180.0:
+            raise ValueError("The tear-profile measured interval must be a nonempty part of 0° to 180°")
         depths.setflags(write=False)
         object.__setattr__(self, "depths", depths)
 
@@ -82,6 +113,8 @@ class TearProfileExtractor(Protocol):
 class AlphaTearConfig:
     """Settings for AlphaTear geometry and sampling.
 
+    The measured interval is from `trim_degrees` to `180 - trim_degrees`.
+
     Raises:
         ValueError: If sampling counts are at most one, trim is outside
             [0, 90), no alpha scale is given, an alpha scale is nonpositive,
@@ -121,8 +154,84 @@ DEFAULT_VERSION = AlphaTearVersion(
 )
 
 
+class AlphaTearExtractor:
+    """Extract normalized tear profiles with AlphaTear."""
+
+    def __init__(
+        self,
+        configuration: AlphaTearConfig | AlphaTearVersion,
+    ) -> None:
+        """Configure settled or experimental extraction."""
+        if isinstance(configuration, AlphaTearVersion):
+            self._config = configuration.config
+            self._producer_slug: str | None = configuration.slug
+        else:
+            self._config = configuration
+            self._producer_slug = None
+
+    @property
+    def producer_slug(self) -> str | None:
+        """Return the settled slug, or none for an experimental configuration."""
+        return self._producer_slug
+
+    @property
+    def alpha_scales(self) -> tuple[float, ...]:
+        """Return the configured alpha scales, as fractions of the ear radius."""
+        return self._config.alpha_scales
+
+    def extract(self, ear: PreparedEar) -> tuple[TearProfile, ...]:
+        """Return one tear profile for each alpha scale.
+
+        The method makes the shared geometry (module steps 1 to 4) one time.
+        For each alpha scale, the method builds the alpha shape (step 5) and
+        measures the depths (steps 6 to 10). The method puts the depths on
+        the grid from 0° to 180°. The depths outside the measured interval
+        are zero.
+
+        Args:
+            ear: The prepared ear to extract tear profiles from.
+
+        Returns:
+            One tear profile for each configured alpha scale, in the same order.
+        """
+        config = self._config
+        contour = _resample(ear.contour, config.contour_points)
+        ear_radius = float(np.sqrt(2.0 * ear.cleaned_area / np.pi))
+        opened_contour = _opened_contour(contour, config.morph_opening_fraction * ear_radius)
+
+        angles = np.linspace(0.0, 180.0, config.profile_bins)
+        start_degrees = config.trim_degrees
+        end_degrees = 180.0 - config.trim_degrees
+        measured_bins = (angles > start_degrees) & (angles < end_degrees)
+        ray_origin, ray_directions = _polar_directions(
+            np.asarray(ear.original_landmarks[0], dtype=float),
+            np.asarray(ear.original_landmarks[1], dtype=float),
+            ear.inferred_side,
+            angles[measured_bins],
+        )
+
+        profiles = []
+        for alpha_scale in config.alpha_scales:
+            alpha_shape = _alpha_shape(opened_contour, alpha_scale * ear_radius)
+            depths = np.zeros(config.profile_bins)
+            depths[measured_bins] = _measure_depths(
+                alpha_shape,
+                contour,
+                ear_radius,
+                ray_origin,
+                ray_directions,
+                config.smoothing_sigma,
+            )
+            profiles.append(TearProfile(depths, start_degrees, end_degrees))
+        return tuple(profiles)
+
+
 def _resample(points: np.ndarray, count: int) -> np.ndarray:
-    """Resample a two-dimensional polyline uniformly by arc length."""
+    """Resample a polyline to `count` points at equal arc-length spacing (step 1).
+
+    Raises:
+        ValueError: If the polyline has zero length.
+    """
     distances = np.sqrt(np.sum(np.diff(points, axis=0) ** 2, axis=1))
     arc_lengths = np.concatenate([[0], np.cumsum(distances)])
     if arc_lengths[-1] == 0:
@@ -133,20 +242,23 @@ def _resample(points: np.ndarray, count: int) -> np.ndarray:
     return np.column_stack([x, y])
 
 
-def _densify(path: np.ndarray, max_spacing: float = 2.0) -> np.ndarray:
-    """Resample a polyline so consecutive points do not exceed a spacing."""
-    segment_lengths = np.linalg.norm(np.diff(path, axis=0), axis=1)
-    pieces = []
-    for index in range(len(path) - 1):
-        count = int(segment_lengths[index] // max_spacing) + 1
-        fractions = np.linspace(0, 1, count, endpoint=False)[:, None]
-        pieces.append(path[index] + (path[index + 1] - path[index]) * fractions)
-    pieces.append(path[-1:])
-    return np.vstack(pieces)
-
-
 def _opened_contour(contour: np.ndarray, radius: float) -> np.ndarray:
-    """Morphologically open a contour and restore its original anchors."""
+    """Return the morphologically opened contour (step 3).
+
+    The function does these steps:
+
+    1. Morphologically open the contour by `radius`, removing narrow parts.
+    2. If the result has more than one part, use the largest part.
+    3. Cut the boundary to its ear-flap path between the two contour ends.
+    4. Add points until adjacent points are 2 px apart or less (ie, the path is densified).
+    5. Set the two ends of the path to the two contour ends.
+
+    If step 1 removes the full polygon, the function returns `contour`.
+
+    Args:
+        contour: The resampled contour.
+        radius: The opening radius, in pixels.
+    """
     polygon = shapely.Polygon(contour)
     if not polygon.is_valid:
         polygon = polygon.buffer(0)
@@ -158,14 +270,82 @@ def _opened_contour(contour: np.ndarray, radius: float) -> np.ndarray:
     if opened.geom_type == "MultiPolygon":
         opened = max(opened.geoms, key=lambda geometry: geometry.area)
     exterior = np.asarray(opened.exterior.coords)[:-1]
-    path = _densify(ear_side_path(exterior, contour[0], contour[-1]))
+    path = _densify(ear_side_path(exterior, contour[0], contour[-1]), max_spacing=2.0)
     path[0] = contour[0]
     path[-1] = contour[-1]
     return path
 
 
+def _densify(path: np.ndarray, max_spacing: float = 2.0) -> np.ndarray:
+    """Add points to a polyline until adjacent points are at most `max_spacing` apart.
+
+    The output contains all the input points, in the same order.
+    """
+    segment_lengths = np.linalg.norm(np.diff(path, axis=0), axis=1)
+    pieces = []
+    for index in range(len(path) - 1):
+        count = int(segment_lengths[index] // max_spacing) + 1
+        fractions = np.linspace(0, 1, count, endpoint=False)[:, None]
+        pieces.append(path[index] + (path[index + 1] - path[index]) * fractions)
+    pieces.append(path[-1:])
+    return np.vstack(pieces)
+
+
+def _polar_directions(
+    upper: np.ndarray,
+    lower: np.ndarray,
+    side: EarSide,
+    angles_degrees: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return the origin and the unit directions of the polar rays (step 4).
+
+    The origin is the midpoint of the two detector landmarks. The ray angles
+    are:
+
+    - 0°: toward `upper`.
+    - 90°: perpendicular to the landmark chord, toward the ear flap.
+    - 180°: toward `lower`.
+
+    The 90° direction changes with `side` so that one angle has the same
+    anatomical position on a left ear and on a right ear.
+
+    Raises:
+        ValueError: If `upper` and `lower` are the same point.
+    """
+    midpoint = (upper + lower) / 2.0
+    upper_direction = upper - midpoint
+    distance = float(np.linalg.norm(upper_direction))
+    if distance == 0:
+        raise ValueError("Ear landmarks must be distinct")
+    upper_direction /= distance
+    right_of_chord = np.array((-upper_direction[1], upper_direction[0]))
+    margin_direction = right_of_chord if side == "left" else -right_of_chord
+    radians = np.deg2rad(angles_degrees)[:, None]
+    directions = (
+        np.cos(radians) * upper_direction + np.sin(radians) * margin_direction
+    )
+    return midpoint, directions
+
+
 def _alpha_shape(contour: np.ndarray, radius: float) -> shapely.Polygon:
-    """Return the rolling-disk alpha shape of an open ear contour."""
+    """Return the alpha shape of an open ear contour for a disk of `radius` (step 5).
+
+    The function does these steps:
+
+    1. Make the vertices. The vertices are the contour points, points on the
+       chord between the contour ends, and grid points inside the contour.
+    2. Calculate the Delaunay triangulation of the vertices.
+    3. Select the triangles whose circumradius is less than `radius`.
+    4. Merge the selected triangles. If the result has more than one part,
+       use the largest part.
+
+    If no triangle is selected, the function returns the convex hull of the
+    contour.
+
+    Args:
+        contour: The opened contour.
+        radius: The disk radius, in pixels: the alpha scale times the ear radius.
+    """
     median_spacing = float(
         np.median(np.linalg.norm(np.diff(contour, axis=0), axis=1))
     )
@@ -208,37 +388,134 @@ def _alpha_shape(contour: np.ndarray, radius: float) -> shapely.Polygon:
     return hull
 
 
-def _nearest_crossing(
-    origins: np.ndarray,
+def _measure_depths(
+    alpha_shape: shapely.Polygon,
+    contour: np.ndarray,
+    ear_radius: float,
+    ray_origin: np.ndarray,
+    ray_directions: np.ndarray,
+    smoothing_sigma: float,
+) -> np.ndarray:
+    """Return the smoothed depth of each polar ray at one alpha scale (steps 6 to 10).
+
+    If a ray does not cross the alpha shape, its depth is zero. The function
+    sets this depth to zero again after the smoothing.
+
+    Args:
+        alpha_shape: The alpha shape at this alpha scale.
+        contour: The resampled contour. The function cuts the alpha-shape
+            boundary to its ear-flap path between the two contour ends and then
+            measures the depths to this contour.
+        ear_radius: The ear radius, in pixels.
+        ray_origin: The origin of the polar rays.
+        ray_directions: The unit direction of each polar ray.
+        smoothing_sigma: The standard deviation of the Gaussian smoothing, in
+            bins.
+    """
+    alpha_shape_boundary = np.asarray(alpha_shape.exterior.coords)[:-1]
+    alpha_shape_path = _densify(ear_side_path(alpha_shape_boundary, contour[0], contour[-1]))
+    crossings = _alpha_shape_crossings(ray_origin, ray_directions, alpha_shape_boundary)
+    crossed = np.isfinite(crossings).all(axis=1)
+    depths = np.zeros(len(crossings))
+    if crossed.any():
+        normals = _inward_normals(alpha_shape_path, alpha_shape, crossings[crossed])
+        depths[crossed] = _contour_distances(crossings[crossed], normals, contour) / ear_radius
+    smoothed = gaussian_filter1d(depths, sigma=smoothing_sigma)
+    smoothed[~crossed] = 0.0
+    return smoothed
+
+
+def _alpha_shape_crossings(
+    ray_origin: np.ndarray,
+    ray_directions: np.ndarray,
+    alpha_shape_boundary: np.ndarray,
+) -> np.ndarray:
+    """Return the point where each polar ray last leaves the alpha shape (step 6).
+
+    Each ray starts at `ray_origin` and goes forward. The crossing of a ray is
+    its intersection with the alpha-shape boundary that is farthest from
+    `ray_origin`.
+
+    Returns:
+        The xy crossing of each ray, in ray order. The row is NaN if the ray
+        does not cross the alpha shape.
+    """
+    distances, positions = _ray_segment_intersections(
+        ray_origin[None, :],
+        ray_directions,
+        alpha_shape_boundary,
+        np.roll(alpha_shape_boundary, -1, axis=0) - alpha_shape_boundary,
+    )
+    tolerance = 1e-9
+    forward = (
+        np.isfinite(distances)
+        & np.isfinite(positions)
+        & (distances >= 0)
+        & (positions >= -tolerance)
+        & (positions <= 1 + tolerance)
+    )
+    furthest = np.where(forward, distances, -np.inf).max(axis=1)
+    crossings = np.full(ray_directions.shape, np.nan, dtype=float)
+    crossed = np.isfinite(furthest)
+    crossings[crossed] = ray_origin + furthest[crossed, None] * ray_directions[crossed]
+    return crossings
+
+
+def _inward_normals(
+    alpha_shape_path: np.ndarray,
+    alpha_shape: shapely.Polygon,
+    crossings: np.ndarray,
+) -> np.ndarray:
+    """Return the inward unit normal of the alpha shape at each crossing (step 7).
+
+    For each crossing, the function does these steps:
+
+    1. Find the point of `alpha_shape_path` that is nearest to the crossing.
+    2. Calculate the tangent at that point from the adjacent path points.
+    3. Turn the tangent by 90° to make the normal.
+    4. If the point 3 px along the normal is outside `alpha_shape`, reverse
+       the normal.
+
+    Args:
+        alpha_shape_path: The ear-flap path of the alpha-shape boundary, with
+            points at most 2 px apart.
+        alpha_shape: The alpha shape.
+        crossings: The ray crossings from step 6.
+    """
+    tangents = np.gradient(alpha_shape_path, axis=0)
+    tangents /= np.linalg.norm(tangents, axis=1, keepdims=True) + 1e-12
+    nearest_indices = np.argmin(
+        np.sum((crossings[:, None, :] - alpha_shape_path[None, :, :]) ** 2, axis=2),
+        axis=1,
+    )
+    normals = np.c_[tangents[nearest_indices, 1], -tangents[nearest_indices, 0]]
+    normals /= np.linalg.norm(normals, axis=1, keepdims=True) + 1e-12
+    probe_points = crossings + 3.0 * normals
+    normals[
+        ~shapely.contains_xy(alpha_shape, probe_points[:, 0], probe_points[:, 1])
+    ] *= -1
+    return normals
+
+
+def _contour_distances(
+    crossings: np.ndarray,
     normals: np.ndarray,
     contour: np.ndarray,
 ) -> np.ndarray:
-    """Return the nearest signed distance along each unit normal, in pixels.
+    """Return the signed distance from each crossing to the contour along its normal, in pixels (step 8).
 
-    Return zero for origins with no contour crossing.
+    The function searches the line through the crossing in the two directions.
+    It uses the intersection with the contour that is nearest to the crossing.
+
+    A positive distance is in the direction of the inward normal. Thus, the
+    contour is inside the alpha shape, and the distance shows a tear. If the
+    line does not cross the contour, the distance is zero.
     """
-    starts = contour[:-1]
-    vectors = contour[1:] - contour[:-1]
-    relative_starts = starts[None, :, :] - origins[:, None, :]
-    denominator = (
-        normals[:, 0:1] * vectors[None, :, 1]
-        - normals[:, 1:2] * vectors[None, :, 0]
+    distances, positions = _ray_segment_intersections(
+        crossings, normals, contour[:-1], contour[1:] - contour[:-1]
     )
-    with np.errstate(divide="ignore", invalid="ignore"):
-        ray_distances = (
-            relative_starts[:, :, 0] * vectors[None, :, 1]
-            - relative_starts[:, :, 1] * vectors[None, :, 0]
-        ) / denominator
-        segment_positions = (
-            relative_starts[:, :, 0] * normals[:, 1:2]
-            - relative_starts[:, :, 1] * normals[:, 0:1]
-        ) / denominator
-    valid = (
-        (segment_positions >= 0)
-        & (segment_positions <= 1)
-        & np.isfinite(ray_distances)
-    )
-    candidates = np.where(valid, ray_distances, np.inf)
+    on_contour = (positions >= 0) & (positions <= 1) & np.isfinite(distances)
+    candidates = np.where(on_contour, distances, np.inf)
     nearest = candidates[
         np.arange(len(candidates)),
         np.argmin(np.abs(candidates), axis=1),
@@ -247,151 +524,45 @@ def _nearest_crossing(
     return nearest
 
 
-def _furthest_ray_crossings(
-    origin: np.ndarray,
+def _ray_segment_intersections(
+    origins: np.ndarray,
     directions: np.ndarray,
-    exterior: np.ndarray,
-) -> np.ndarray:
-    """Return the furthest forward boundary crossing for each polar ray.
+    starts: np.ndarray,
+    vectors: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return the intersection of each line with each segment.
 
-    Return xy coordinates in ray order, or NaN where no crossing exists.
+    A line is `o + t d`. A segment is `s + u v`. The function calculates:
+
+    - `t = cross(s - o, v) / cross(d, v)`, the signed distance along the line.
+    - `u = cross(s - o, d) / cross(d, v)`, the position along the segment.
+
+    In these equations, `cross(a, b) = a_x b_y - a_y b_x`. The callers select
+    the valid intersections.
+
+    Args:
+        origins: The `(lines, 2)` line origins, or one `(1, 2)` origin for all lines.
+        directions: The `(lines, 2)` unit line directions.
+        starts: The `(segments, 2)` segment start points.
+        vectors: The `(segments, 2)` vectors from each segment start to its end.
+
+    Returns:
+        Two `(lines, segments)` arrays, `t` and `u`. The value of `u` is 0 at
+        the segment start and 1 at the segment end. If a line and a segment
+        are parallel, their `t` and `u` are not finite.
     """
-    vectors = np.roll(exterior, -1, axis=0) - exterior
-    relative_starts = exterior[None, :, :] - origin
+    relative_starts = starts[None, :, :] - origins[:, None, :]
     denominator = (
         directions[:, 0:1] * vectors[None, :, 1]
         - directions[:, 1:2] * vectors[None, :, 0]
     )
     with np.errstate(divide="ignore", invalid="ignore"):
-        ray_distances = (
+        distances = (
             relative_starts[:, :, 0] * vectors[None, :, 1]
             - relative_starts[:, :, 1] * vectors[None, :, 0]
         ) / denominator
-        segment_positions = (
+        positions = (
             relative_starts[:, :, 0] * directions[:, 1:2]
             - relative_starts[:, :, 1] * directions[:, 0:1]
         ) / denominator
-    tolerance = 1e-9
-    valid = (
-        np.isfinite(ray_distances)
-        & np.isfinite(segment_positions)
-        & (ray_distances >= 0)
-        & (segment_positions >= -tolerance)
-        & (segment_positions <= 1 + tolerance)
-    )
-    furthest = np.where(valid, ray_distances, -np.inf).max(axis=1)
-    crossings = np.full(directions.shape, np.nan, dtype=float)
-    valid_rays = np.isfinite(furthest)
-    crossings[valid_rays] = origin + furthest[valid_rays, None] * directions[valid_rays]
-    return crossings
-
-
-def _inward_normals(
-    reference_path: np.ndarray,
-    shape: shapely.Polygon,
-    origins: np.ndarray,
-) -> np.ndarray:
-    """Return inward unit normals in origin order."""
-    tangents = np.gradient(reference_path, axis=0)
-    tangents /= np.linalg.norm(tangents, axis=1, keepdims=True) + 1e-12
-    nearest_indices = np.argmin(
-        np.sum((origins[:, None, :] - reference_path[None, :, :]) ** 2, axis=2),
-        axis=1,
-    )
-    normals = np.c_[tangents[nearest_indices, 1], -tangents[nearest_indices, 0]]
-    normals /= np.linalg.norm(normals, axis=1, keepdims=True) + 1e-12
-    probe_points = origins + 3.0 * normals
-    normals[
-        ~shapely.contains_xy(shape, probe_points[:, 0], probe_points[:, 1])
-    ] *= -1
-    return normals
-
-
-def _polar_directions(
-    upper: np.ndarray,
-    lower: np.ndarray,
-    side: EarSide,
-    angles_degrees: np.ndarray,
-) -> tuple[np.ndarray, np.ndarray]:
-    """Return the anchor midpoint and side-aware unit ray directions."""
-    midpoint = (upper + lower) / 2.0
-    upper_direction = upper - midpoint
-    distance = float(np.linalg.norm(upper_direction))
-    if distance == 0:
-        raise ValueError("Ear landmarks must be distinct")
-    upper_direction /= distance
-    right_of_chord = np.array((-upper_direction[1], upper_direction[0]))
-    margin_direction = right_of_chord if side == "left" else -right_of_chord
-    radians = np.deg2rad(angles_degrees)[:, None]
-    directions = (
-        np.cos(radians) * upper_direction + np.sin(radians) * margin_direction
-    )
-    return midpoint, directions
-
-
-class AlphaTearExtractor:
-    """Extract normalized tear profiles with AlphaTear."""
-
-    def __init__(
-        self,
-        configuration: AlphaTearConfig | AlphaTearVersion,
-    ) -> None:
-        """Configure settled or experimental extraction."""
-        if isinstance(configuration, AlphaTearVersion):
-            self._config = configuration.config
-            self._producer_slug: str | None = configuration.slug
-        else:
-            self._config = configuration
-            self._producer_slug = None
-
-    @property
-    def producer_slug(self) -> str | None:
-        """Return the settled slug, or none for an experimental configuration."""
-        return self._producer_slug
-
-    @property
-    def alpha_scales(self) -> tuple[float, ...]:
-        """Return the configured alpha scales, as fractions of the ear radius."""
-        return self._config.alpha_scales
-
-    def extract(self, ear: PreparedEar) -> tuple[TearProfile, ...]:
-        """Return signed, normalized tear profiles for each alpha scale.
-
-        Args:
-            ear: The prepared ear to extract tear profiles from.
-
-        Returns:
-            One tear profile for each configured alpha scale.
-        """
-        return tuple(
-            self._extract_tear_profile(ear, alpha_scale)
-            for alpha_scale in self._config.alpha_scales
-        )
-
-    def _extract_tear_profile(self, ear: PreparedEar, alpha_scale: float) -> TearProfile:
-        """Return the tear profile for one alpha scale, as a fraction of the ear radius."""
-        measured_contour = _resample(ear.contour, self._config.contour_points)
-        radius = float(np.sqrt(2.0 * ear.cleaned_area / np.pi))
-        shape_building_contour = _opened_contour(measured_contour, self._config.morph_opening_fraction * radius)
-        reference_shape = _alpha_shape(shape_building_contour, alpha_scale * radius)
-        reference_boundary = np.asarray(reference_shape.exterior.coords)[:-1]
-        reference_path = _densify(ear_side_path(reference_boundary, shape_building_contour[0], shape_building_contour[-1]))
-
-        angles = np.linspace(0.0, 180.0, self._config.profile_bins)
-        sampled_bins = (angles > self._config.trim_degrees) & (angles < 180.0 - self._config.trim_degrees)
-        upper = np.asarray(ear.original_landmarks[0], dtype=float)
-        lower = np.asarray(ear.original_landmarks[1], dtype=float)
-        polar_origin, polar_directions = _polar_directions(upper, lower, ear.inferred_side, angles[sampled_bins])
-        origins = _furthest_ray_crossings(polar_origin, polar_directions, reference_boundary)
-        valid_origins = np.isfinite(origins).all(axis=1)
-        sampled_depths = np.zeros(len(origins))
-        if valid_origins.any():
-            valid_origins_xy = origins[valid_origins]
-            normals = _inward_normals(reference_path, reference_shape, valid_origins_xy)
-            sampled_depths[valid_origins] = _nearest_crossing(valid_origins_xy, normals, measured_contour) / radius
-
-        depths = np.zeros(self._config.profile_bins)
-        smoothed = gaussian_filter1d(sampled_depths, sigma=self._config.smoothing_sigma)
-        smoothed[~valid_origins] = 0.0
-        depths[sampled_bins] = smoothed
-        return TearProfile(depths)
+    return distances, positions
