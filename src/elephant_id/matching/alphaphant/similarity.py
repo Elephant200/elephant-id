@@ -1,22 +1,24 @@
-"""Compute ear similarities between a query ear and reference ears."""
+"""Compute ear similarities and side scores between a query ear and reference ears."""
 
 from collections.abc import Sequence
 from dataclasses import dataclass
 
 import numpy as np
 from scipy.spatial import distance as scipy_distance
+from scipy.special import logsumexp
 
 from elephant_id.matching.alphaphant.extraction import AnalyzedEar, TearProfile
 
 
 @dataclass(frozen=True, slots=True)
 class EarComparatorConfig:
-    """Settings for the comparison grid, the alignments, the shift penalty, the channel weights, and the angle weight.
+    """Settings for the comparison grid, the alignments, the shift penalty, the weights, and the side score.
 
     The gradient channel has the weight `gradient_weight`. The depth channel
     has the weight `1 - gradient_weight`. The angle weight is a Gaussian of
     the grid angle, with its center and its width (standard deviation) in
-    degrees.
+    degrees. The side score is the log-mean-exp of the ear similarities, with
+    the temperature `temperature`.
     """
 
     resampled_bins: int = 240
@@ -29,6 +31,7 @@ class EarComparatorConfig:
     stretches: tuple[float, ...] = tuple(
         round(0.8 + index * 0.025, 3) for index in range(17)
     )
+    temperature: float = 0.05
 
 
 @dataclass(frozen=True, slots=True)
@@ -45,7 +48,7 @@ class EarSimilarity:
 
 
 class EarComparator:
-    """Compute the ear similarity of a query ear with each reference ear."""
+    """Compute the ear similarity of a query ear with each reference ear, and the side score over them."""
 
     def __init__(self, config: EarComparatorConfig | None = None) -> None:
         """Set the comparison settings; use the defaults if no config is supplied."""
@@ -108,6 +111,25 @@ class EarComparator:
             query_depth_rows, query_gradient_rows, reference_depth_rows, reference_gradient_rows
         )
         return tuple(self._select_best_alignment(reference_scores) for reference_scores in scores)
+
+    def score_side(self, query_ear: AnalyzedEar, reference_ears: Sequence[AnalyzedEar]) -> float:
+        """Return the left score or right score of one candidate.
+
+        The side score is the log-mean-exp of the ear similarities of the
+        query ear with the candidate's reference ears on the same side.
+
+        Args:
+            query_ear: The query ear on one side.
+            reference_ears: At least one reference ear of the candidate, on the
+                same side as the query ear.
+
+        Raises:
+            ValueError: If an ear does not have one tear profile for each alpha
+                scale of the query, or if the tear profiles have different lengths.
+        """
+        ear_similarities = self.compare_ears(query_ear, reference_ears)
+        scores = np.array([similarity.score for similarity in ear_similarities])
+        return log_mean_exp(scores, self._config.temperature)
 
     def _build_depth_rows(self, profiles: Sequence[TearProfile]) -> np.ndarray:
         """Return one depth row for each tear profile.
@@ -293,3 +315,12 @@ def weighted_real_valued_jaccard(
     numerator = norm_sum - distance
     denominator = norm_sum + distance
     return np.divide(numerator, denominator, out=np.zeros_like(denominator), where=denominator > 0)
+
+
+def log_mean_exp(values: np.ndarray, temperature: float) -> float:
+    """Return the log-mean-exp of at least one value: `temperature * (logsumexp(values / temperature) - log(n))`.
+
+    The log-mean-exp is a smooth maximum. It lies between the mean and the
+    maximum of the values.
+    """
+    return float(temperature * (logsumexp(values / temperature) - np.log(len(values))))

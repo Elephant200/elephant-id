@@ -151,8 +151,11 @@ The match quality of a query ear at one alignment against one reference ear: the
 The highest alignment score of a query ear against one reference ear of the same side, from 0 to 1. The comparator moves only the query, so the similarity is asymmetric. 
 _Avoid_: Similarity score, ear comparison, profile similarity
 
+**Log-mean-exp**:
+A smooth maximum of `n` values `s` with temperature `τ`: `τ * (logsumexp(s / τ) - log n)`. It lies between the mean and the maximum. Equal values give that value. A rise in any one value raises the result.
+
 **Left score**, **right score**:
-The score of one candidate on one side. The matcher calculates it from the ear similarities of the candidate's reference ears on that side.
+The score of one candidate on one side: the log-mean-exp of the ear similarities of the candidate's reference ears on that side.
 _Avoid_: Side winner
 
 **Candidate score**:

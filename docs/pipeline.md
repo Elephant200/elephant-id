@@ -83,11 +83,13 @@ The matcher compares the query with known elephants. The catalog groups tear pro
 
 The matcher first analyzes the query and the references. Then, for each known elephant, the matcher:
 
-1. calculates the ear similarity of the query left ear and each left reference ear of the candidate. The left score is the highest of these ear similarities;
-2. calculates the right score in the same way;
+1. gets the left score from the comparator. The comparator calculates the ear similarity of the query left ear and each left reference ear of the candidate. The left score is the log-mean-exp of these `n` ear similarities `s`: `τ * (logsumexp(s / τ) - log n)`, with the temperature `τ = 0.05`;
+2. gets the right score in the same way;
 3. calculates the candidate score as the mean of the left score and the right score.
 
-The left score and the right score can come from different catalog sightings.
+The log-mean-exp is a smooth maximum. When `k` of the `n` references match about equally well and the others score far lower, the left score is about the best ear similarity minus `τ * log(n / k)`. Thus, a candidate scores its best match, minus a small cost when its other sightings do not agree.
+
+The left score and the right score each use all the candidate's reference sightings on that side. The two sides can draw on different catalog sightings. [ADR 0011](adr/0011-score-each-side-by-log-mean-exp.md) gives the reasons for the log-mean-exp.
 
 Each sighting must have both ears. If the matcher cannot analyze a reference sighting, `match` raises `MatchingError`.
 

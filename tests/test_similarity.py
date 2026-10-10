@@ -1,4 +1,4 @@
-"""Tests for ear similarity."""
+"""Tests for ear similarity and side scores."""
 
 from uuid import UUID
 
@@ -12,6 +12,7 @@ from elephant_id.matching.alphaphant.similarity import (
     EarComparator,
     EarComparatorConfig,
     EarSimilarity,
+    log_mean_exp,
     weighted_real_valued_jaccard,
 )
 
@@ -483,6 +484,53 @@ def test_a_disagreement_near_120_degrees_costs_more_than_at_a_low_weight_angle()
     near_30 = _compare_one(_ear(extra_near_30), _ear(shared), config)
 
     assert near_120.score < near_30.score - 0.05
+
+
+@pytest.mark.parametrize("count", [1, 2, 7])
+def test_log_mean_exp_of_equal_values_is_their_value(count: int) -> None:
+    """Equal values give their shared value, for any number of values."""
+    assert log_mean_exp(np.full(count, 0.6), temperature=0.05) == pytest.approx(0.6)
+
+
+@pytest.mark.parametrize("raised_index", [0, 1, 2])
+def test_log_mean_exp_rises_when_any_value_rises(raised_index: int) -> None:
+    """A rise in any one value raises the log-mean-exp."""
+    values = np.array([0.2, 0.5, 0.8])
+    raised = values.copy()
+    raised[raised_index] += 0.05
+
+    assert log_mean_exp(raised, temperature=0.05) > log_mean_exp(values, temperature=0.05)
+
+
+def test_log_mean_exp_is_the_temperature_times_the_log_of_the_mean_exponential() -> None:
+    """The log-mean-exp is `τ * log(mean(exp(s / τ)))`."""
+    values = np.array([0.2, 0.5, 0.8])
+
+    assert log_mean_exp(values, temperature=0.05) == pytest.approx(
+        0.05 * np.log(np.mean(np.exp(values / 0.05)))
+    )
+
+
+def test_log_mean_exp_lies_between_the_mean_and_the_maximum() -> None:
+    """For unequal values, the log-mean-exp is above the mean and below the maximum."""
+    values = np.array([0.2, 0.5, 0.8, 0.75])
+
+    assert np.mean(values) < log_mean_exp(values, temperature=0.05) < np.max(values)
+
+
+def test_side_score_is_the_log_mean_exp_of_the_ear_similarities() -> None:
+    """The side score uses the configured temperature over the candidate's same-side reference ears."""
+    config = EarComparatorConfig(temperature=0.2)
+    comparator = EarComparator(config)
+    query = _ear(_make_profile([(300, 0.05), (500, 0.02)]))
+    references = [
+        _ear(_make_profile([(300, 0.05), (500, 0.02)])),
+        _ear(_make_profile([(310, 0.04)])),
+        _ear(np.zeros(720)),
+    ]
+    ear_similarities = np.array([similarity.score for similarity in comparator.compare_ears(query, references)])
+
+    assert comparator.score_side(query, references) == pytest.approx(log_mean_exp(ear_similarities, temperature=0.2))
 
 
 def test_positive_alignment_ties_preserve_configured_search_order() -> None:

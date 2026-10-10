@@ -1,6 +1,6 @@
 """AlphaPhant analysis and same-side catalog matching."""
 
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Mapping
 from functools import cache
 
 from elephant_id.domain import SightingEarPair
@@ -9,7 +9,7 @@ from elephant_id.matching.alphaphant.extraction import (
     AnalyzedSightingEarPair,
     TearProfileExtractor,
 )
-from elephant_id.matching.alphaphant.similarity import EarComparator, EarSimilarity
+from elephant_id.matching.alphaphant.similarity import EarComparator
 from elephant_id.matching.protocol import CandidateKey, CandidateScores, MatchingError
 from elephant_id.preparation import EarSide, PreparedEar
 
@@ -30,7 +30,7 @@ class AlphaPhant:
             prepare_ears: Returns the left and right prepared ears of a sighting
                 ear pair. Raises `MatchingError` when preparation fails.
             profile_extractor: Extracts one tear profile for each alpha scale.
-            ear_comparator: Computes ear similarities.
+            ear_comparator: Computes the left score and the right score of each candidate.
         """
         self._prepare_ears = prepare_ears
         self._profile_extractor = profile_extractor
@@ -74,7 +74,7 @@ class AlphaPhant:
         query: SightingEarPair,
         catalog: Mapping[CandidateKey, tuple[SightingEarPair, ...]],
     ) -> CandidateScores:
-        """Return the candidate score of each candidate by aggregating the ear similarities for each side.
+        """Return the candidate score of each candidate: the mean of its left score and right score.
 
         Returns:
             One finite candidate score per supplied candidate; larger is stronger.
@@ -85,15 +85,12 @@ class AlphaPhant:
         """
         query_analysis = self.analyze(query)
         reference_analyses = self._analyze_catalog(catalog)
-        left_similarities = self._compare_side(query_analysis.left, reference_analyses)
-        right_similarities = self._compare_side(query_analysis.right, reference_analyses)
-
-        scores: dict[CandidateKey, float] = {}
-        for candidate_key in catalog:
-            left_score = _aggregate_ear_similarities(left_similarities[candidate_key])
-            right_score = _aggregate_ear_similarities(right_similarities[candidate_key])
-            scores[candidate_key] = (left_score + right_score) / 2.0
-        return scores
+        left_scores = self._score_side(query_analysis.left, reference_analyses)
+        right_scores = self._score_side(query_analysis.right, reference_analyses)
+        return {
+            candidate_key: (left_scores[candidate_key] + right_scores[candidate_key]) / 2.0
+            for candidate_key in catalog
+        }
 
     def _analyze_catalog(
         self,
@@ -111,24 +108,16 @@ class AlphaPhant:
             analyses[candidate_key] = tuple(self.analyze(pair) for pair in reference_pairs)
         return analyses
 
-    def _compare_side(
+    def _score_side(
         self,
         query_ear: AnalyzedEar,
         catalog: Mapping[CandidateKey, tuple[AnalyzedSightingEarPair, ...]],
-    ) -> dict[CandidateKey, tuple[EarSimilarity, ...]]:
-        """Return the ear similarities of the query ear with each candidate's same-side ears.
-
-        The ear similarities of each candidate are in the order of its reference sightings.
-        """
+    ) -> dict[CandidateKey, float]:
+        """Return the side score of the query ear against each candidate's same-side ears."""
         return {
-            candidate_key: self._ear_comparator.compare_ears(
+            candidate_key: self._ear_comparator.score_side(
                 query_ear,
                 [analysis.left if query_ear.side == "left" else analysis.right for analysis in references],
             )
             for candidate_key, references in catalog.items()
         }
-
-
-def _aggregate_ear_similarities(ear_similarities: Iterable[EarSimilarity]) -> float:
-    """Return the left score or right score: the highest of a candidate's ear similarities on that side."""
-    return max(similarity.score for similarity in ear_similarities)

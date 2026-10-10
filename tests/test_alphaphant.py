@@ -173,7 +173,7 @@ def test_alphaphant_analyzes_neutral_catalog_and_returns_candidate_scores() -> N
 
     assert isinstance(scores, dict)
     assert scores.keys() == catalog.keys()
-    assert scores[strong_key] == pytest.approx(1.0)
+    assert scores[strong_key] == pytest.approx(1.0 - 0.05 * math.log(2))
     assert scores[weak_key] == pytest.approx(0.0)
     assert scores[strong_key] > scores[weak_key]
     assert all(math.isfinite(score) for score in scores.values())
@@ -269,8 +269,12 @@ def test_alphaphant_rejects_empty_candidate_evidence() -> None:
         alphaphant.match(query, {candidate_key: ()})
 
 
-def test_alphaphant_selects_side_winners_independently() -> None:
-    """The strongest left and right evidence may come from different pairs."""
+def test_alphaphant_scores_each_side_independently() -> None:
+    """The left score and the right score may draw on different pairs.
+
+    Each side has one matching reference and one reference with ear
+    similarity 0, so each side scores `1 - 0.05 * log 2`.
+    """
     query = _pair(10)
     right_match = _pair(20)
     left_match = _pair(30)
@@ -285,7 +289,7 @@ def test_alphaphant_selects_side_winners_independently() -> None:
 
     scores = alphaphant.match(query, {candidate_key: (right_match, left_match)})
 
-    assert scores[candidate_key] == pytest.approx(1.0)
+    assert scores[candidate_key] == pytest.approx(1.0 - 0.05 * math.log(2))
 
 
 def test_alphaphant_compares_only_corresponding_sides() -> None:
