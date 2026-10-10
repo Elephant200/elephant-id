@@ -38,7 +38,7 @@ composition.py       Construct preparation and AlphaPhant
 
 `PreparedEar` contains the source Photo, raster box, full-image contour, original detector landmarks, snapped contour anchors, inferred side, and cleaned area. Its contour is finite and read-only. Its area is positive. Original landmarks define the extraction frame; snapped anchors delimit the contour.
 
-`AlphaPhant.analyze` returns an immutable `AnalyzedSightingEarPair`. It retains the input sighting ID and two `AnalyzedEar` values. Each ear contains its Photo, side, raster box, and one signed `TearProfile`. Profile depths are finite, one-dimensional, and read-only.
+`AlphaPhant.analyze` returns an immutable `AnalyzedSightingEarPair`. It retains the input sighting ID and two `AnalyzedEar` values. Each ear contains its Photo, side, raster box, and one signed `TearProfile` for each alpha scale. Profile depths are finite, one-dimensional, and read-only.
 
 `AlphaPhant.match` analyzes the query and references before comparison. It preserves candidate membership and reference order through batching. It compares corresponding sides, selects each candidate's strongest reference for each side, and averages the two scores. Each comparison retains its reference source and query alignment. See [pipeline.md](pipeline.md) for more.
 

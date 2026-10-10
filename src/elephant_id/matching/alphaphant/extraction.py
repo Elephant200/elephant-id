@@ -18,7 +18,9 @@ from elephant_id.preparation import EarSide, PreparedEar, ear_side_path
 
 @dataclass(frozen=True, slots=True, eq=False)
 class TearProfile:
-    """Read-only signed depths at uniform ear-profile angles.
+    """Read-only signed depths at one alpha scale.
+
+    Depths are sampled at uniform angles from 0° to 180°, both ends included.
 
     Raises:
         ValueError: If depths are empty, non-finite, or not one-dimensional.
@@ -39,12 +41,12 @@ class TearProfile:
 
 @dataclass(frozen=True, slots=True)
 class AnalyzedEar:
-    """One ear's tear profile and the source metadata needed to identify it."""
+    """One ear's tear profiles for each alpha scale, along with its source."""
 
     source_photo: Photo
     side: EarSide
     source_box: BoundingBox
-    tear_profile: TearProfile
+    tear_profiles: tuple[TearProfile, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,15 +59,20 @@ class AnalyzedSightingEarPair:
 
 
 class TearProfileExtractor(Protocol):
-    """Extract a tear profile from one prepared ear."""
+    """Extract one tear profile for each alpha scale from one prepared ear."""
 
     @property
     def producer_slug(self) -> str | None:
         """Return the settled producer identity, or None for an experiment."""
         ...
 
-    def extract(self, ear: PreparedEar) -> TearProfile:
-        """Compute signed, normalized tear depths from prepared ear geometry."""
+    @property
+    def alpha_fractions(self) -> tuple[float, ...]:
+        """Return the alpha scale of each extracted tear profile."""
+        ...
+
+    def extract(self, ear: PreparedEar) -> tuple[TearProfile, ...]:
+        """Return signed, normalized tear profiles for each alpha scale."""
         ...
 
 
@@ -75,13 +82,14 @@ class AlphaTearConfig:
 
     Raises:
         ValueError: If sampling counts are at most one, trim is outside
-            [0, 90), alpha is nonpositive, or opening or smoothing is negative.
+            [0, 90), no alpha scale is given, an alpha scale is nonpositive,
+            or opening or smoothing is negative.
     """
 
     contour_points: int = 1024
     profile_bins: int = 720
     trim_degrees: float = 5.0
-    alpha_fraction: float = 0.35
+    alpha_fractions: tuple[float, ...] = (0.35,)
     morph_opening_fraction: float = 0.020
     smoothing_sigma: float = 2.0
 
@@ -91,8 +99,8 @@ class AlphaTearConfig:
             raise ValueError("AlphaTear sampling counts must be greater than one")
         if not 0 <= self.trim_degrees < 90:
             raise ValueError("trim_degrees must be in [0, 90)")
-        if self.alpha_fraction <= 0:
-            raise ValueError("alpha_fraction must be positive")
+        if not self.alpha_fractions or min(self.alpha_fractions) <= 0:
+            raise ValueError("alpha_fractions must contain at least one alpha scale, and each must be positive")
         if self.morph_opening_fraction < 0 or self.smoothing_sigma < 0:
             raise ValueError("AlphaTear smoothing parameters must be non-negative")
 
@@ -339,20 +347,31 @@ class AlphaTearExtractor:
         """Return the settled slug, or none for an experimental configuration."""
         return self._producer_slug
 
-    def extract(self, ear: PreparedEar) -> TearProfile:
-        """
-        Return a signed, normalized tear profile for the prepared ear.
+    @property
+    def alpha_fractions(self) -> tuple[float, ...]:
+        """Return the configured alpha scales, as fractions of the ear radius."""
+        return self._config.alpha_fractions
+
+    def extract(self, ear: PreparedEar) -> tuple[TearProfile, ...]:
+        """Return signed, normalized tear profiles for each alpha scale.
 
         Args:
-            ear: The prepared ear to extract a tear profile from.
+            ear: The prepared ear to extract tear profiles from.
 
         Returns:
-            A signed, normalized tear profile for the prepared ear.
+            One tear profile for each configured alpha scale.
         """
+        return tuple(
+            self._extract_at_scale(ear, alpha_fraction)
+            for alpha_fraction in self._config.alpha_fractions
+        )
+
+    def _extract_at_scale(self, ear: PreparedEar, alpha_fraction: float) -> TearProfile:
+        """Return the tear profile for one alpha scale, as a fraction of the ear radius."""
         measured_contour = _resample(ear.contour, self._config.contour_points)
         radius = float(np.sqrt(2.0 * ear.cleaned_area / np.pi))
         shape_building_contour = _opened_contour(measured_contour, self._config.morph_opening_fraction * radius)
-        reference_shape = _alpha_shape(shape_building_contour, self._config.alpha_fraction * radius)
+        reference_shape = _alpha_shape(shape_building_contour, alpha_fraction * radius)
         reference_boundary = np.asarray(reference_shape.exterior.coords)[:-1]
         reference_path = _densify(ear_side_path(reference_boundary, shape_building_contour[0], shape_building_contour[-1]))
 

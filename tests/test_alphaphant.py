@@ -49,7 +49,7 @@ def _ear(value: int, side: EarSide, depths: list[float]) -> AnalyzedEar:
         ),
         side=side,
         source_box=BoundingBox(0, 0, 4, 4),
-        tear_profile=TearProfile(np.asarray(depths)),
+        tear_profiles=(TearProfile(np.asarray(depths)),),
     )
 
 
@@ -66,6 +66,7 @@ class RecordingPreparation:
     """Supply prepared ears and controlled extraction through the real analysis path."""
 
     producer_slug = None
+    alpha_fractions = (0.35,)
 
     def __init__(
         self, analyses: Mapping[SightingEarPair, AnalyzedSightingEarPair]
@@ -73,7 +74,7 @@ class RecordingPreparation:
         """Associate each source pair with its controlled profiles."""
         self._analyses = analyses
         self.calls: list[SightingEarPair] = []
-        self._profiles: dict[tuple[Photo, EarSide], TearProfile] = {}
+        self._profiles: dict[tuple[Photo, EarSide], tuple[TearProfile, ...]] = {}
 
     def prepare(self, pair: SightingEarPair) -> tuple[PreparedEar, PreparedEar]:
         """Record preparation and return valid geometry for both declared ears."""
@@ -84,7 +85,7 @@ class RecordingPreparation:
             (pair.left_photo, analysis.left, "left"),
             (pair.right_photo, analysis.right, "right"),
         ):
-            self._profiles[photo, side] = analyzed.tear_profile
+            self._profiles[photo, side] = analyzed.tear_profiles
             ears.append(
                 PreparedEar(
                     source_photo=photo,
@@ -98,8 +99,8 @@ class RecordingPreparation:
             )
         return ears[0], ears[1]
 
-    def extract(self, ear: PreparedEar) -> TearProfile:
-        """Return the controlled profile for a prepared source and side."""
+    def extract(self, ear: PreparedEar) -> tuple[TearProfile, ...]:
+        """Return the controlled profiles for a prepared source and side."""
         return self._profiles[ear.source_photo, ear.inferred_side]
 
 
@@ -329,24 +330,24 @@ def test_alphaphant_batches_all_candidates_by_side(
     first_analysis = _analysis(200, [0, 0.1, 0], [0, 0, 0])
     second_analysis = _analysis(300, [0, 0, 0], [0, 0.2, 0])
     alphaphant, _ = _alphaphant({query: query_analysis, first: first_analysis, second: second_analysis})
-    calls: list[tuple[np.ndarray, tuple[np.ndarray, ...]]] = []
+    calls: list[tuple[tuple[np.ndarray, ...], tuple[tuple[np.ndarray, ...], ...]]] = []
     original = EarProfileSimilarity.compare_many
 
     def record(
         self: EarProfileSimilarity,
-        profile: np.ndarray,
-        candidates: tuple[np.ndarray, ...],
+        profiles: tuple[np.ndarray, ...],
+        candidates: tuple[tuple[np.ndarray, ...], ...],
     ) -> tuple[EarComparison, ...]:
         """Record each bulk call while executing the real matcher."""
-        calls.append((profile, candidates))
-        return original(self, profile, candidates)
+        calls.append((profiles, candidates))
+        return original(self, profiles, candidates)
 
     monkeypatch.setattr(EarProfileSimilarity, "compare_many", record)
     first_key, second_key = CandidateKey(_uuid(500)), CandidateKey(_uuid(501))
     scores = alphaphant.match(query, {first_key: (first,), second_key: (second,)})
     assert len(calls) == 2
-    assert calls[0][0] is query_analysis.left.tear_profile.depths
-    assert calls[1][0] is query_analysis.right.tear_profile.depths
+    assert calls[0][0][0] is query_analysis.left.tear_profiles[0].depths
+    assert calls[1][0][0] is query_analysis.right.tear_profiles[0].depths
     assert all(len(candidates) == 2 for _, candidates in calls)
     assert scores == pytest.approx({first_key: 0.5, second_key: 0.5})
     assert (alphaphant.match(query, {second_key: (second,), first_key: (first,)}) == scores)

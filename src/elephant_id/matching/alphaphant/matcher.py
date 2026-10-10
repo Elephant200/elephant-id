@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from functools import cache
 from itertools import islice
 
+import numpy as np
+
 from elephant_id.domain import SightingEarPair
 from elephant_id.matching.alphaphant.extraction import (
     AnalyzedEar,
@@ -30,6 +32,11 @@ class _ReferenceComparison:
     def score(self) -> float:
         """Return the comparison's similarity score."""
         return self.comparison.score
+
+
+def _profile_depths(ear: AnalyzedEar) -> tuple[np.ndarray, ...]:
+    """Return an analyzed ear's tear-profile depths for each alpha scale."""
+    return tuple(profile.depths for profile in ear.tear_profiles)
 
 
 class AlphaPhant:
@@ -68,7 +75,7 @@ class AlphaPhant:
     def _extract_ear(self, ear: PreparedEar, side: EarSide) -> AnalyzedEar:
         """Return an analyzed ear with its source photo, box, and declared side."""
         try:
-            profile = self._profile_extractor.extract(ear)
+            profiles = self._profile_extractor.extract(ear)
         except Exception as error:
             raise MatchingError(
                 photo=ear.source_photo,
@@ -76,7 +83,7 @@ class AlphaPhant:
                 stage="tear-profile extraction",
                 message=str(error),
             ) from error
-        return AnalyzedEar(ear.source_photo, side, ear.source_box, profile)
+        return AnalyzedEar(ear.source_photo, side, ear.source_box, profiles)
 
     def match(
         self,
@@ -137,8 +144,8 @@ class AlphaPhant:
             for analysis in references
         )
         comparisons = self._ear_similarity.compare_many(
-            query_ear.tear_profile.depths,
-            tuple(ear.tear_profile.depths for ear in reference_ears),
+            _profile_depths(query_ear),
+            tuple(_profile_depths(ear) for ear in reference_ears),
         )
         labelled = (
             _ReferenceComparison(ear, comparison)

@@ -8,7 +8,7 @@ The input is a sighting ear pair: one left-ear photo and one right-ear photo fro
 
 `AlphaPhant.match` returns one finite similarity score for each candidate. Each side comparison keeps its reference ear and its query alignment. For each side, the matcher selects the strongest reference. It then calculates the mean of the two side scores.
 
-`AlphaPhant.analyze` returns the data that matching uses: an immutable `AnalyzedSightingEarPair`. It contains the sighting ID and the left and right `AnalyzedEar` values. Each `AnalyzedEar` contains one signed `TearProfile`, its source photo, its anatomical side, and its raster box.
+`AlphaPhant.analyze` returns the data that matching uses: an immutable `AnalyzedSightingEarPair`. It contains the sighting ID and the left and right `AnalyzedEar` values. Each `AnalyzedEar` contains one signed `TearProfile` for each alpha scale, its source photo, its anatomical side, and its raster box.
 
 A candidate ranking is the scores in descending order. AlphaPhant does not make an identity decision. It does not add evidence to the catalog.
 
@@ -21,7 +21,7 @@ Query ears and reference ears go through the same steps:
 3. **Ear landmark detection:** Find the two anatomical endpoints of the relevant contour.
 4. **Ear-contour preparation:** Extract the contour from the mask. Snap the landmarks to the contour. The snapped landmarks divide the contour into two paths. Keep the ear-flap path: the path that encloses the larger area with the chord between the snapped landmarks. Then calculate the contour geometry.
 5. **Declared-side resolution:** Select the prepared ear for each declared side. Resolve both sides before extraction starts.
-6. **Tear-profile extraction:** Run AlphaTear. AlphaTear builds an alpha shape and makes the one-dimensional tear profile. AlphaPhant then attaches the source data and the original sighting ID.
+6. **Tear-profile extraction:** Run AlphaTear. For each alpha scale, AlphaTear builds an alpha shape and makes one one-dimensional tear profile. AlphaPhant then attaches the source data and the original sighting ID.
 
 The pipeline treats the declared side as correct. If the pipeline cannot make a valid ear for that side, analysis fails with an error. Research uses the selected ear pair.
 
@@ -43,15 +43,19 @@ For each kept profile angle:
 2. The local inward normal at the origin gives the direction to measure.
 3. AlphaTear measures the signed distance from the origin to the nearest crossing of the measured contour.
 
-AlphaTear divides each distance by the radius, smooths the distances, and puts them on the full angular grid. Trimmed bins and bins with no origin stay zero.
+AlphaTear divides each distance by the radius, smooths the distances, and puts them on the full angular grid. The grid has uniform angles from 0° to 180°, both ends included. Trimmed bins and bins with no origin stay zero.
+
+AlphaTear makes one tear profile for each configured alpha scale. Each alpha scale is a fraction of the radius. The default configuration has one alpha scale, 0.35.
 
 ## Tear-Profile Matching
 
 AlphaPhant compares only ears of the same side. It moves only the query profile. Each reference profile stays fixed.
 
+Every compared ear has one tear profile for each alpha scale. All compared tear profiles must have the same length.
+
 The comparator sets negative depths to zero, compresses the depths, and resamples each profile to a common grid. It then applies each configured stretch and shift to the query.
 
-For each alignment, `q` is the query depths and `r` is the reference depths. The overlap score is `sum(min(q, r)) / sum(max(q, r))`. The code uses this equivalent L1 formula:
+For each alignment and alpha scale, `q` is the query depths and `r` is the reference depths. The overlap score is `sum(min(q, r)) / sum(max(q, r))`. The code uses this equivalent L1 formula:
 
 ```text
 total        = sum(q) + sum(r)
@@ -61,11 +65,11 @@ union        = total - intersection
 overlap      = intersection / union
 ```
 
-If `union` is zero, the overlap score is zero. The comparator multiplies each overlap score by its shift penalty. It returns the highest score and its alignment. If the highest score is zero, it returns stretch 1 and shift 0. Candidate scoring uses this score without change.
+If `union` is zero, the overlap score is zero. At each alignment, the comparator calculates the mean overlap score across the alpha scales. It multiplies this mean by the shift penalty of the alignment. All alpha scales thus share one stretch and one shift. The comparator returns the highest score and its alignment. If the highest score is zero, it returns stretch 1 and shift 0. Candidate scoring uses this score without change.
 
 SciPy calculates the L1 distances without a large temporary array of per-bin minimums. This uses less memory and time. Subtraction can lose precision when `total` and `distance` are almost equal. In that case, the comparator calculates `sum(min(q, r))` directly. Thus, zero overlap stays zero, and small positive overlaps stay correct.
 
-AlphaPhant compares all left profiles in one call and all right profiles in a second call. The comparator builds the query alignments once for each side. It processes references in batches to limit memory use. A comparison with one reference uses the same code.
+AlphaPhant compares all left profiles in one call and all right profiles in a second call. The comparator builds the query alignments once for each side and compares all references in one pass. A comparison with one reference uses the same code.
 
 ## Catalog Matching
 
@@ -83,7 +87,7 @@ Each sighting must have both ears. The matcher scores a candidate only if it can
 
 ## Caching
 
-The cache stores expensive model calls and the final tear profile of each ear. These steps have no persistent cache of their own: ear selection, sighting orchestration, contour preparation, catalog grouping, candidate scoring, and candidate ranking. Each AlphaPhant instance reuses its completed analyses.
+The cache stores expensive model calls and the final tear profiles of each ear. These steps have no persistent cache of their own: ear selection, sighting orchestration, contour preparation, catalog grouping, candidate scoring, and candidate ranking. Each AlphaPhant instance reuses its completed analyses.
 
 The cache has one tear-profile record for each prepared ear. The record key contains:
 
@@ -92,6 +96,8 @@ The cache has one tear-profile record for each prepared ear. The record key cont
 - the inferred side;
 - the segmentation producer slug;
 - the landmark producer slug.
+
+The record stores the alpha scales next to the tear profiles. Loading a record fails when its alpha scales differ from the extractor's alpha scales in value or order.
 
 The bounding box keeps the key stable if the candidate order changes. [architecture.md](architecture.md) defines cache identity and producer versions.
 

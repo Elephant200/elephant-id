@@ -59,7 +59,7 @@ The processing of a sighting ear pair into left- and right-ear tear profiles for
 _Avoid_: Per-photo identification
 
 **Analyzed ear**:
-One ear's extracted tear profile set (per alpha scale) together with its anatomical side, source photo, and source box.
+One ear's extracted tear profiles, one for each alpha scale, together with its anatomical side, source photo, and source box.
 _Avoid_: Ear representation, ear profile
 
 **Analyzed sighting ear pair**:
@@ -91,7 +91,7 @@ A one-dimensional, alpha-shape-derived representation of an ear contour used for
 _Avoid_: Tear signature, embedding when referring to the current algorithm
 
 **Tear-profile extraction**:
-The transformation of a prepared ear contour into a tear profile using a single alpha scale. AlphaTear is the current extraction algorithm.
+The transformation of a prepared ear contour into one tear profile for each alpha scale. AlphaTear is the current extraction algorithm.
 _Avoid_: Tear-signature extraction
 
 **Similarity score**:

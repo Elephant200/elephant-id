@@ -34,11 +34,19 @@ class CachedTearProfileExtractor:
         """Return the wrapped extractor's settled slug."""
         return self._producer_slug
 
-    def extract(self, ear: PreparedEar) -> TearProfile:
-        """Return a cached profile, or extract and store a new profile.
+    @property
+    def alpha_fractions(self) -> tuple[float, ...]:
+        """Return the wrapped extractor's alpha scales."""
+        return self._inner.alpha_fractions
+
+    def extract(self, ear: PreparedEar) -> tuple[TearProfile, ...]:
+        """Return cached tear profiles, or extract and store new ones.
+
+        Each record stores its alpha scales next to its tear profiles.
 
         Raises:
-            ValueError: If a stored profile payload is invalid.
+            ValueError: If a stored record has other alpha scales, in value or
+                order, or does not hold one valid tear profile for each alpha scale.
         """
         crop = "_".join(map(str, ear.source_box.as_tuple()))
         key = (
@@ -47,15 +55,24 @@ class CachedTearProfileExtractor:
             f"__landmarks_{self._landmark_producer_slug}"
             f"__side_{ear.inferred_side}__crop_{crop}"
         )
+        alpha_fractions = list(self.alpha_fractions)
         record = self._cache.get_or_compute(
             self.producer_slug,
             key,
-            lambda: {"depths": self._inner.extract(ear).depths.tolist()},
+            lambda: {
+                "alpha_fractions": alpha_fractions,
+                "profiles": [profile.depths.tolist() for profile in self._inner.extract(ear)],
+            },
         )
-        depths = record.get("depths")
-        if not isinstance(depths, list):
-            raise ValueError("Tear-profile cache record must contain a depths list")
+        if record.get("alpha_fractions") != alpha_fractions:
+            raise ValueError(
+                f"Cached tear profiles use alpha scales {record.get('alpha_fractions')}; "
+                f"the extractor uses {alpha_fractions}"
+            )
+        profiles = record.get("profiles")
+        if not isinstance(profiles, list) or len(profiles) != len(alpha_fractions):
+            raise ValueError("Tear-profile cache record must hold one profile for each alpha scale")
         try:
-            return TearProfile(depths)
+            return tuple(TearProfile(depths) for depths in profiles)
         except (TypeError, ValueError) as error:
             raise ValueError("Cached tear-profile depths are invalid") from error

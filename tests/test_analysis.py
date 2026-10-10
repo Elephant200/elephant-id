@@ -73,18 +73,78 @@ def _prepared_ear(side: EarSide = "left") -> PreparedEar:
     )
 
 
+def _notched_ear() -> PreparedEar:
+    """Build a left ear flap with one narrow and one wide notch."""
+    theta = np.linspace(0, np.pi, 181)
+    radius = 80 - 12 * np.exp(-(((theta - 0.9) / 0.09) ** 2))
+    radius -= 15 * np.exp(-(((theta - 2.1) / 0.4) ** 2))
+    contour = np.column_stack((100 + radius * np.sin(theta), 100 - radius * np.cos(theta)))
+    contour[0], contour[-1] = (100.0, 20.0), (100.0, 180.0)
+    return PreparedEar(
+        source_photo=PHOTO,
+        source_box=BoundingBox(10, 10, 190, 190),
+        contour=contour,
+        original_landmarks=((100.0, 20.0), (100.0, 180.0)),
+        contour_anchors=((100.0, 20.0), (100.0, 180.0)),
+        inferred_side="left",
+        cleaned_area=10000.0,
+    )
+
+
+def test_alpha_tear_returns_one_profile_per_alpha_scale_in_order() -> None:
+    """Each tear profile equals the extraction that uses only its alpha scale."""
+    ear = _notched_ear()
+
+    small, large = AlphaTearExtractor(AlphaTearConfig(alpha_fractions=(0.35, 2.0))).extract(ear)
+
+    (small_only,) = AlphaTearExtractor(AlphaTearConfig(alpha_fractions=(0.35,))).extract(ear)
+    (large_only,) = AlphaTearExtractor(AlphaTearConfig(alpha_fractions=(2.0,))).extract(ear)
+    np.testing.assert_array_equal(small.depths, small_only.depths)
+    np.testing.assert_array_equal(large.depths, large_only.depths)
+    assert not np.array_equal(small.depths, large.depths)
+
+
+@pytest.mark.parametrize("alpha_fractions", [(), (0.35, 0.0), (-1.0,)])
+def test_alpha_tear_config_rejects_missing_or_nonpositive_alpha_scales(
+    alpha_fractions: tuple[float, ...],
+) -> None:
+    """Extraction needs at least one positive alpha scale."""
+    with pytest.raises(ValueError, match="alpha_fractions"):
+        AlphaTearConfig(alpha_fractions=alpha_fractions)
+
+
 @dataclass
 class _ProfileExtractor:
     """Record prepared-ear extraction."""
 
-    profile: TearProfile = field(default_factory=lambda: TearProfile(np.asarray([0.0, 0.1, 0.0])))
+    profiles: tuple[TearProfile, ...] = (
+        TearProfile(np.asarray([0.0, 0.1, 0.0])),
+        TearProfile(np.asarray([0.0, 0.3, -0.1])),
+    )
+    alpha_fractions: tuple[float, ...] = (0.35, 2.0)
     producer_slug: str | None = "alpha-tear-v1"
     calls: list[PreparedEar] = field(default_factory=list)
 
-    def extract(self, ear: PreparedEar) -> TearProfile:
-        """Record and return one configured profile."""
+    def extract(self, ear: PreparedEar) -> tuple[TearProfile, ...]:
+        """Record and return the configured profiles."""
         self.calls.append(ear)
-        return self.profile
+        return self.profiles
+
+
+def _cached(inner: _ProfileExtractor, cache: CacheManager) -> CachedTearProfileExtractor:
+    """Wrap an extractor with fixed inference producer slugs."""
+    return CachedTearProfileExtractor(
+        inner,
+        cache,
+        segmentation_producer_slug="sam3-features",
+        landmark_producer_slug="yolo26n-keypoints-v1",
+    )
+
+
+_CACHE_KEY = (
+    f"{PHOTO.photo_id}__seg_sam3-features__landmarks_"
+    "yolo26n-keypoints-v1__side_left__crop_2_3_13_16"
+)
 
 
 def test_cached_profile_uses_prepared_ear_lineage(tmp_path: Path) -> None:
@@ -92,25 +152,52 @@ def test_cached_profile_uses_prepared_ear_lineage(tmp_path: Path) -> None:
     ear = _prepared_ear()
     inner = _ProfileExtractor()
     cache = CacheManager(cache_root=tmp_path)
-    extractor = CachedTearProfileExtractor(
-        inner,
-        cache,
-        segmentation_producer_slug="sam3-features",
-        landmark_producer_slug="yolo26n-keypoints-v1",
-    )
+    extractor = _cached(inner, cache)
 
     first = extractor.extract(ear)
     second = extractor.extract(ear)
 
-    np.testing.assert_array_equal(first.depths, inner.profile.depths)
-    np.testing.assert_array_equal(second.depths, inner.profile.depths)
+    for profiles in (first, second):
+        assert len(profiles) == 2
+        np.testing.assert_array_equal(profiles[0].depths, [0.0, 0.1, 0.0])
+        np.testing.assert_array_equal(profiles[1].depths, [0.0, 0.3, -0.1])
     assert inner.calls == [ear]
     assert extractor.producer_slug == inner.producer_slug
-    key = (
-        f"{PHOTO.photo_id}__seg_sam3-features__landmarks_"
-        "yolo26n-keypoints-v1__side_left__crop_2_3_13_16"
-    )
-    assert cache.exists("alpha-tear-v1", key)
+    assert extractor.alpha_fractions == (0.35, 2.0)
+    assert cache.exists("alpha-tear-v1", _CACHE_KEY)
+
+
+@pytest.mark.parametrize("alpha_fractions", [(2.0, 0.35), (0.35,), (0.35, 2.0, 10.0)])
+def test_cached_profiles_reject_other_alpha_scales(
+    tmp_path: Path, alpha_fractions: tuple[float, ...]
+) -> None:
+    """A stored record must have the extractor's alpha scales in the same order."""
+    cache = CacheManager(cache_root=tmp_path)
+    _cached(_ProfileExtractor(), cache).extract(_prepared_ear())
+    reader = _ProfileExtractor(alpha_fractions=alpha_fractions)
+
+    with pytest.raises(ValueError, match="alpha scales"):
+        _cached(reader, cache).extract(_prepared_ear())
+    assert reader.calls == []
+
+
+@pytest.mark.parametrize(
+    "record",
+    [
+        {"depths": [0.0, 0.1, 0.0]},
+        {"alpha_fractions": [0.35, 2.0], "profiles": [[0.0, 0.1, 0.0]]},
+        {"alpha_fractions": [0.35, 2.0], "profiles": [[0.0, 0.1], "invalid"]},
+    ],
+)
+def test_cached_profiles_reject_invalid_records(
+    tmp_path: Path, record: dict[str, object]
+) -> None:
+    """A stored record needs one valid tear profile for each alpha scale."""
+    cache = CacheManager(cache_root=tmp_path)
+    cache.save("alpha-tear-v1", _CACHE_KEY, record)
+
+    with pytest.raises(ValueError, match=r"(?i)tear.profile"):
+        _cached(_ProfileExtractor(), cache).extract(_prepared_ear())
 
 
 def test_cached_profile_rejects_unversioned_extractor(tmp_path: Path) -> None:
@@ -131,7 +218,7 @@ def test_composition_caches_only_settled_profile_extraction(tmp_path: Path) -> N
     standard = build_standard_alphaphant(store, cache_root=tmp_path / "standard")
     tuning = build_profile_tuning_alphaphant(
         store,
-        AlphaTearConfig(alpha_fraction=0.4),
+        AlphaTearConfig(alpha_fractions=(0.4,)),
         cache_root=tmp_path / "tuning",
     )
 
@@ -340,12 +427,12 @@ def test_alphaphant_analysis_returns_two_source_labelled_profiles() -> None:
 
     assert result == AnalyzedSightingEarPair(
         sighting_id=pair.sighting_id,
-        left=AnalyzedEar(PHOTO, "left", left_box, result.left.tear_profile),
+        left=AnalyzedEar(PHOTO, "left", left_box, result.left.tear_profiles),
         right=AnalyzedEar(
             RIGHT_PHOTO,
             "right",
             right_box,
-            result.right.tear_profile,
+            result.right.tear_profiles,
         ),
     )
     assert [ear.inferred_side for ear in extractor.calls] == ["left", "right"]
@@ -516,8 +603,9 @@ def test_alphaphant_analysis_wraps_extraction_failure_with_its_cause() -> None:
         """Raise one representative extraction failure."""
 
         producer_slug = None
+        alpha_fractions = (0.35,)
 
-        def extract(self, ear: PreparedEar) -> TearProfile:
+        def extract(self, ear: PreparedEar) -> tuple[TearProfile, ...]:
             """Fail during profile extraction."""
             raise ArithmeticError("synthetic extraction failure")
 

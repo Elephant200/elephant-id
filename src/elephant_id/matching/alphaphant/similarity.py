@@ -1,12 +1,10 @@
 """Compare tear profiles and return query alignments."""
 
-from collections.abc import Iterator, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 import numpy as np
 from scipy.spatial.distance import cdist
-
-_OVERLAP_WORKSPACE_BYTES = 16 * 1024 * 1024
 
 
 @dataclass(frozen=True, slots=True)
@@ -27,7 +25,8 @@ class EarProfileSimilarityConfig:
 class EarComparison:
     """A similarity score and its query alignment.
 
-    Positive shifts move the query right. A zero score has stretch 1 and shift 0."""
+    Positive shifts move the query right. A zero score has stretch 1 and shift 0.
+    """
 
     score: float
     stretch: float
@@ -35,200 +34,162 @@ class EarComparison:
 
 
 class EarProfileSimilarity:
-    """Compare a query profile with reference profiles."""
+    """Compare a query ear's tear profiles with reference ears' tear profiles."""
 
     def __init__(self, config: EarProfileSimilarityConfig | None = None) -> None:
         """Set comparison parameters; use defaults if no config is supplied."""
         self._config = config or EarProfileSimilarityConfig()
-        self._precompute_search()
+        max_shift_bins = round(self._config.max_shift_fraction * self._config.resampled_bins)
+        self._alignments = [
+            (stretch, shift_bins)
+            for stretch in self._config.stretches
+            for shift_bins in range(-max_shift_bins, max_shift_bins + 1)
+        ]
+        self._penalties = np.array([self._penalty(shift_bins) for _, shift_bins in self._alignments])
 
     def compare(
-        self, query_profile: np.ndarray, reference_profile: np.ndarray
+        self,
+        query_profiles: Sequence[np.ndarray],
+        reference_profiles: Sequence[np.ndarray],
     ) -> EarComparison:
-        """Return the highest similarity score and its query alignment."""
-        return self.compare_many(query_profile, (reference_profile,))[0]
+        """Return the highest similarity score and its query alignment for one reference ear."""
+        return self.compare_many(query_profiles, (reference_profiles,))[0]
 
     def compare_many(
         self,
-        query_profile: np.ndarray,
-        reference_profiles: Sequence[np.ndarray],
+        query_profiles: Sequence[np.ndarray],
+        reference_profiles: Sequence[Sequence[np.ndarray]],
     ) -> tuple[EarComparison, ...]:
-        """Compare a query with each reference without changing the inputs.
+        """Compare a query ear with each reference ear.
+
+        At each query alignment, the score is the mean overlap across alpha
+        scales times the shift penalty. Each reference gets its best alignment.
 
         Args:
-            query_profile: A nonempty, finite 1-D depth array.
-            reference_profiles: Nonempty, finite 1-D depth arrays. Lengths may differ.
+            query_profiles: The query ear's tear-profile depths, as nonempty,
+                finite 1-D arrays for each alpha scale.
+            reference_profiles: Each reference ear's tear-profile depths, as
+                nonempty, finite 1-D arrays for each alpha scale.
 
         Returns:
-            Scores and query alignments in reference order. No references gives
-            an empty tuple."""
-        if len(reference_profiles) == 0:
+            Scores and query alignments for each reference.
+
+        Raises:
+            ValueError: If an ear does not have one tear profile for each alpha
+                scale of the query, or if the tear profiles have different lengths.
+        """
+        _validate_ears(query_profiles, reference_profiles)
+        if not reference_profiles:
             return ()
 
-        prepared_query = self._prepare_profiles((query_profile,))[0]
-        reference_batches = self._prepare_reference_batches(reference_profiles)
+        query_rows = self._comparison_rows(query_profiles)
+        reference_rows = np.array([self._comparison_rows(ear) for ear in reference_profiles])
+        scores = self._alignment_scores(query_rows, reference_rows)
+        return tuple(self._best_comparison(reference_scores) for reference_scores in scores)
 
-        query_variants = self._build_query_variants(prepared_query)
-
-        return self._score_reference_batches(query_variants, reference_batches)
-
-    def _build_query_variants(self, prepared_query: np.ndarray) -> np.ndarray:
-        """Return aligned query rows with shape `(variant_count, bin_count)`.
-
-        Rows follow stretch order, then shift order."""
-        stretched_profiles = self._stretch_query(prepared_query)
-        shifted_profiles = (
-            stretched_profiles[:, self._shift_source_bins] * self._shift_in_bounds
+    def _penalty(self, shift_bins: int) -> float:
+        """Return the score penalty for shifting the query by `shift_bins`."""
+        shift_fraction = abs(shift_bins) / self._config.resampled_bins
+        return float(
+            np.exp(-((shift_fraction / self._config.shift_penalty_scale) ** self._config.shift_penalty_power))
         )
 
-        return shifted_profiles.reshape(-1, self._config.resampled_bins)
+    def _comparison_rows(self, profiles: Sequence[np.ndarray]) -> np.ndarray:
+        """Clip, compress, and resample each tear profile onto the common grid.
 
-    def _score_reference_batches(
-        self,
-        query_variants: np.ndarray,
-        reference_batches: Iterator[np.ndarray],
-    ) -> tuple[EarComparison, ...]:
-        """Return the best comparison for each reference, in input order."""
-        variant_depth_sums = query_variants.sum(axis=1)
-        matches: list[EarComparison] = []
-
-        for reference_batch in reference_batches:
-            scores = self._match_profile_batch(
-                query_variants, variant_depth_sums, reference_batch
-            )
-            matches.extend(self._select_matches(scores))
-
-        return tuple(matches)
-
-    def _match_profile_batch(
-        self,
-        query_variants: np.ndarray,
-        variant_depth_sums: np.ndarray,
-        reference_batch: np.ndarray,
-    ) -> np.ndarray:
-        """Return scores after the shift penalty.
-
-        Each row is a reference. Each column is one query stretch and shift.
+        Returns:
+            One row for each alpha scale, with shape `(row_count, resampled_bins)`.
         """
-        distance = cdist(reference_batch, query_variants, metric="cityblock")
-        reference_depth_sums = reference_batch.sum(axis=1)
-        total = variant_depth_sums[None, :] + reference_depth_sums[:, None]
-        # For nonnegative depths: sum(min(q, r)) = (sum(q) + sum(r) - sum(abs(q - r))) / 2.
-        overlap = (total - distance) * 0.5
-        # Subtraction loses precision when total and distance are almost equal.
-        # Estimate the rounding error from the bin count and total depth.
-        # Recalculate small intersections directly, including exact zero overlaps.
-        cancellation_bound = 4 * np.finfo(np.float64).eps * query_variants.shape[1] * total
-        for index, reference in enumerate(reference_batch):
-            uncertain = overlap[index] <= cancellation_bound[index]
-            overlap[index, uncertain] = np.minimum(query_variants[uncertain], reference).sum(axis=1)
-        union = total - overlap
-        scores = np.divide(overlap, union, out=np.zeros_like(overlap), where=union > 0)
-        scores *= self._variant_penalties
+        rows = []
+        for depths in profiles:
+            clipped = np.maximum(np.asarray(depths, dtype=np.float64), 0.0)
+            compressed = clipped ** self._config.depth_exponent
+            grid_positions = np.linspace(0.0, len(compressed) - 1, self._config.resampled_bins)
+            rows.append(np.interp(grid_positions, np.arange(len(compressed)), compressed))
+        return np.array(rows)
 
-        return scores
+    def _alignment_scores(self, query_rows: np.ndarray, reference_rows: np.ndarray) -> np.ndarray:
+        """Return the mean row overlap at every query alignment, times its shift penalty.
 
-    def _select_matches(self, scores: np.ndarray) -> tuple[EarComparison, ...]:
-        """Return the highest score and its alignment for each reference row."""
-        best_indices = np.argmax(scores, axis=1)
-        best_scores = scores[np.arange(len(scores)), best_indices]
+        Args:
+            query_rows: Query comparison rows, with shape `(row_count, bins)`.
+            reference_rows: Reference comparison rows, with shape
+                `(reference_count, row_count, bins)`.
 
-        stretches = np.where(best_scores > 0.0, self._variant_stretches[best_indices], 1.0)
-        shifts = np.where(best_scores > 0.0, self._variant_shifts[best_indices], 0)
+        Returns:
+            Scores with shape `(reference_count, alignment_count)`.
+        """
+        overlaps_by_row = [
+            _overlaps(reference_rows[:, row_index], self._aligned_query_rows(query_row))
+            for row_index, query_row in enumerate(query_rows)
+        ]
+        return np.mean(overlaps_by_row, axis=0) * self._penalties
 
-        return tuple(
-            EarComparison(score=float(score), stretch=float(stretch), shift_bins=int(shift))
-            for score, stretch, shift in zip(
-                best_scores, stretches, shifts, strict=True
-            )
-        )
+    def _aligned_query_rows(self, row: np.ndarray) -> np.ndarray:
+        """Return the query row at every alignment, with shape `(alignment_count, bins)`."""
+        stretched = {stretch: _stretched(row, stretch) for stretch in self._config.stretches}
+        return np.array([_shifted(stretched[stretch], shift_bins) for stretch, shift_bins in self._alignments])
 
-    def _prepare_reference_batches(
-        self, reference_profiles: Sequence[np.ndarray]
-    ) -> Iterator[np.ndarray]:
-        """Yield prepared reference batches in input order."""
-        variant_count = len(self._variant_stretches)
-        bytes_per_profile = (
-            variant_count * self._config.resampled_bins * np.dtype(np.float64).itemsize
-        )
-        batch_size = max(1, _OVERLAP_WORKSPACE_BYTES // bytes_per_profile)
+    def _best_comparison(self, scores: np.ndarray) -> EarComparison:
+        """Return the highest score and its alignment, or a neutral alignment for zero."""
+        best = int(np.argmax(scores))
+        score = float(scores[best])
+        if score == 0.0:
+            return EarComparison(score=0.0, stretch=1.0, shift_bins=0)
+        stretch, shift_bins = self._alignments[best]
+        return EarComparison(score=score, stretch=float(stretch), shift_bins=shift_bins)
 
-        for start in range(0, len(reference_profiles), batch_size):
-            yield self._prepare_profiles(reference_profiles[start : start + batch_size])
 
-    def _prepare_profiles(self, source_profiles: Sequence[np.ndarray]) -> np.ndarray:
-        """Return nonnegative, compressed profiles on the common grid, in input order."""
-        indices_by_length: dict[int, list[int]] = {}
-        for profile_index, profile in enumerate(source_profiles):
-            indices_by_length.setdefault(len(profile), []).append(profile_index)
+def _validate_ears(
+    query_profiles: Sequence[np.ndarray],
+    reference_profiles: Sequence[Sequence[np.ndarray]],
+) -> None:
+    """Check that the ears have comparable tear profiles.
 
-        resampled_profiles = np.empty((len(source_profiles), self._config.resampled_bins))
+    Raises:
+        ValueError: If an ear does not have one tear profile for each alpha
+            scale of the query, or if the tear profiles have different lengths.
+    """
+    scale_count = len(query_profiles)
+    if scale_count == 0 or any(len(ear) != scale_count for ear in reference_profiles):
+        raise ValueError("Every ear needs one tear profile for each alpha scale")
+    lengths = {len(profile) for ear in (query_profiles, *reference_profiles) for profile in ear}
+    if len(lengths) != 1:
+        raise ValueError("Compared tear profiles must have the same length")
 
-        for profile_indices in indices_by_length.values():
-            source_depths = np.asarray(
-                np.stack([source_profiles[index] for index in profile_indices]),
-                dtype=np.float64,
-            )
-            compressed_depths = np.maximum(source_depths, 0.0) ** self._config.depth_exponent
-            resampled_profiles[profile_indices] = self._resample_rows(compressed_depths)
 
-        return resampled_profiles
+def _stretched(row: np.ndarray, stretch: float) -> np.ndarray:
+    """Return the row scaled about its center, with zero in bins from outside the row."""
+    output_fractions = np.linspace(0.0, 1.0, len(row))
+    source_positions = ((output_fractions - 0.5) / stretch + 0.5) * (len(row) - 1)
+    return np.interp(source_positions, np.arange(len(row)), row, left=0.0, right=0.0)
 
-    def _resample_rows(self, profiles: np.ndarray) -> np.ndarray:
-        """Return each profile row sampled on the common grid."""
-        last_bin = profiles.shape[1] - 1
-        source_bins = np.linspace(0.0, last_bin, self._config.resampled_bins)
-        lower_bins = np.floor(source_bins).astype(np.int32)
-        upper_bins = np.minimum(lower_bins + 1, last_bin)
-        upper_weights = source_bins - lower_bins
 
-        return profiles[:, lower_bins] * (1.0 - upper_weights) + profiles[:, upper_bins] * upper_weights
+def _shifted(row: np.ndarray, shift_bins: int) -> np.ndarray:
+    """Return the row moved right by `shift_bins`, with zero in the vacated bins."""
+    shifted = np.zeros_like(row)
+    if 0 <= shift_bins < len(row):
+        shifted[shift_bins:] = row[: len(row) - shift_bins]
+    elif -len(row) < shift_bins < 0:
+        shifted[:shift_bins] = row[-shift_bins:]
+    return shifted
 
-    def _stretch_query(self, query: np.ndarray) -> np.ndarray:
-        """Return query rows in configured stretch order, with zero outside the grid."""
-        stretched = (
-            query[self._stretch_lower_bins] * (1.0 - self._stretch_upper_weights)
-            + query[self._stretch_upper_bins] * self._stretch_upper_weights
-        )
-        stretched[~self._stretch_in_bounds] = 0.0
 
-        return stretched
+def _overlaps(reference_rows: np.ndarray, aligned_query_rows: np.ndarray) -> np.ndarray:
+    """Return the overlap `sum(min) / sum(max)` of every reference row and aligned query row.
 
-    def _precompute_search(self) -> None:
-        """Set query sampling indices and penalties for the configured alignments."""
-        bin_count = self._config.resampled_bins
-
-        max_shift_bins = round(self._config.max_shift_fraction * bin_count)
-        shift_offsets = np.arange(-max_shift_bins, max_shift_bins + 1, dtype=np.int32)
-        shift_fractions = shift_offsets / bin_count
-        shift_penalties = np.exp(
-            -(
-                (np.abs(shift_fractions) / self._config.shift_penalty_scale)
-                ** self._config.shift_penalty_power
-            )
-        )
-
-        shift_source_bins = np.arange(bin_count)[None, :] - shift_offsets[:, None]
-        self._shift_in_bounds = (shift_source_bins >= 0) & (shift_source_bins < bin_count)
-        self._shift_source_bins = np.clip(shift_source_bins, 0, bin_count - 1)
-
-        stretch_factors = np.asarray(self._config.stretches)
-        normalized_output_positions = np.linspace(0.0, 1.0, bin_count)
-        normalized_source_positions = (
-            normalized_output_positions - 0.5
-        ) / stretch_factors[:, None] + 0.5
-
-        self._stretch_source_bins = normalized_source_positions * (bin_count - 1)
-        self._stretch_in_bounds = (self._stretch_source_bins >= 0.0) & (
-            self._stretch_source_bins <= bin_count - 1
-        )
-
-        lower_bins = np.floor(self._stretch_source_bins).astype(np.int32)
-        self._stretch_upper_weights = self._stretch_source_bins - lower_bins
-        self._stretch_lower_bins = np.clip(lower_bins, 0, bin_count - 1)
-        self._stretch_upper_bins = np.minimum(self._stretch_lower_bins + 1, bin_count - 1)
-
-        stretch_grid, shift_grid = np.meshgrid(stretch_factors, shift_offsets, indexing="ij")
-        self._variant_stretches = stretch_grid.ravel()
-        self._variant_shifts = shift_grid.ravel()
-        self._variant_penalties = np.tile(shift_penalties, len(stretch_factors))
+    Each output row is a reference. Each column is one query alignment.
+    """
+    distance = cdist(reference_rows, aligned_query_rows, metric="cityblock")
+    total = aligned_query_rows.sum(axis=1)[None, :] + reference_rows.sum(axis=1)[:, None]
+    # For nonnegative depths: sum(min(q, r)) = (sum(q) + sum(r) - sum(abs(q - r))) / 2.
+    intersection = (total - distance) * 0.5
+    # Subtraction loses precision when total and distance are almost equal.
+    # Estimate the rounding error from the bin count and total depth.
+    # Recalculate small intersections directly, including exact zero overlaps.
+    cancellation_bound = 4 * np.finfo(np.float64).eps * aligned_query_rows.shape[1] * total
+    for index, reference in enumerate(reference_rows):
+        uncertain = intersection[index] <= cancellation_bound[index]
+        intersection[index, uncertain] = np.minimum(aligned_query_rows[uncertain], reference).sum(axis=1)
+    union = total - intersection
+    return np.divide(intersection, union, out=np.zeros_like(intersection), where=union > 0)
