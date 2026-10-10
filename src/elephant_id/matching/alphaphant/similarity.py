@@ -23,8 +23,8 @@ class EarComparatorConfig:
     gradient_weight: float = 0.5
     angle_weight_center_degrees: float = 120.0
     angle_weight_width_degrees: float = 35.0
-    max_shift_fraction: float = 0.15
-    shift_penalty_scale: float = 0.08
+    max_shift_fraction: float = 0.10
+    shift_penalty_scale: float = 0.16
     shift_penalty_power: float = 4.0
     stretches: tuple[float, ...] = tuple(
         round(0.8 + index * 0.025, 3) for index in range(17)

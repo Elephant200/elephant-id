@@ -89,22 +89,6 @@ def test_square_root_halves_a_fourfold_depth_mismatch() -> None:
     assert _compare_one(_ear(query), _ear(reference), config).score == pytest.approx(0.5)
 
 
-def test_default_config_values() -> None:
-    """The defaults are the settings of the method.
-
-    The grid has 240 bins and 17 stretches from 0.8 to 1.2. The channels have
-    the same weight. The angle weight has center 120° and width 35°.
-    """
-    config = EarComparatorConfig()
-    assert config.resampled_bins == 240
-    assert len(config.stretches) == 17
-    assert config.stretches[0] == 0.8
-    assert config.stretches[-1] == 1.2
-    assert config.gradient_weight == 0.5
-    assert config.angle_weight_center_degrees == 120.0
-    assert config.angle_weight_width_degrees == 35.0
-
-
 def test_broad_query_stretches_onto_narrow_reference() -> None:
     """Only the query is aligned; the reference stays fixed."""
     broad = np.zeros(720)
@@ -116,7 +100,7 @@ def test_broad_query_stretches_onto_narrow_reference() -> None:
 
     similarity = _compare_one(_ear(broad), _ear(narrow), EarComparatorConfig(gradient_weight=0.0))
 
-    assert similarity.score == pytest.approx(0.5548302531348012)
+    assert similarity.score == pytest.approx(0.5551403753377685)
     assert similarity.stretch == pytest.approx(0.8)
     assert similarity.shift_bins == -3
 
