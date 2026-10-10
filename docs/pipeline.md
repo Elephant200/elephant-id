@@ -19,7 +19,7 @@ Query ears and reference ears go through the same steps:
 1. **Photo retrieval and decoding:** Read the original encoded bytes from the photo store. Decode them to a BGR image.
 2. **Ear localization and ear segmentation:** Find the ears. Make a mask and a box for each ear.
 3. **Ear landmark detection:** Find the two anatomical endpoints of the relevant contour.
-4. **Ear-contour preparation:** Extract the contour from the mask. Snap the landmarks to the contour. The snapped landmarks divide the contour into two paths. Keep the ear-flap path: the path that encloses the larger area with the chord between the snapped landmarks. Then calculate the contour geometry.
+4. **Ear-contour preparation:** Extract the contour from the mask. Snap the landmarks to the contour. The snapped landmarks divide the contour into two paths. Select the ear-flap path: the path that encloses the larger area with the chord between the snapped landmarks. Then calculate the contour geometry.
 5. **Declared-side resolution:** Select the prepared ear for each declared side. Resolve both sides before extraction starts.
 6. **Tear-profile extraction:** Run AlphaTear. For each alpha scale, AlphaTear builds an alpha shape and makes one one-dimensional tear profile. AlphaPhant then attaches the source data and the original sighting ID.
 
@@ -45,7 +45,7 @@ The polar frame uses the detector landmarks. The snapped contour anchors only ma
 AlphaTear then does these steps for each alpha scale:
 
 5. Build the alpha shape of the opened contour.
-6. Find the point where each ray last leaves the alpha shape. This point is the crossing.
+6. Find the intersection of each ray with the alpha-shape boundary that is farthest from the ray origin. This point is the crossing.
 7. Turn the alpha-shape edge that each ray crosses by 90°, into the alpha shape. The result is the inward normal at the crossing.
 8. Measure the signed distance from each crossing to the resampled contour, along the normal. Use the contour intersection that is nearest to the crossing.
 9. Divide each distance by the ear radius. The result is the depth.
@@ -100,6 +100,6 @@ The cache has one tear-profile record for each prepared ear. The record key cont
 
 The record contains the alpha scales and the tear profiles. Each stored tear profile contains its measured interval and its depths. Loading a record fails when its alpha scales differ from the extractor's alpha scales in value or order.
 
-The bounding box keeps the key stable if the candidate order changes. [architecture.md](architecture.md) defines cache identity and producer versions.
+The bounding box gives the same key when the candidate order changes. [architecture.md](architecture.md) defines cache identity and producer versions.
 
-Composition selects which processors use the cache. Standard runs cache the full SAM3 multi-feature output (before its ear-only adapter), landmark detection, and AlphaTear extraction. Parameter-tuning runs use a raw, unversioned AlphaTear extractor, but keep the cached SAM3 features and landmark detection. Preparation and AlphaPhant have no cache-policy options.
+Composition selects which processors use the cache. Standard runs cache the full SAM3 multi-feature output (before its ear-only adapter), landmark detection, and AlphaTear extraction. Parameter-tuning runs use a raw, unversioned AlphaTear extractor, but use the cached SAM3 features and the cached landmark detection. Preparation and AlphaPhant have no cache-policy options.

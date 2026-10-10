@@ -12,8 +12,8 @@ AlphaTear makes the shared geometry one time for each ear:
 AlphaTear then does these steps for each alpha scale:
 
 5. Build the alpha shape of the opened contour.
-6. Find the point where each polar ray last leaves the alpha shape. This
-   point is the crossing.
+6. Find the intersection of each polar ray with the alpha-shape boundary
+   that is farthest from the ray origin. This point is the crossing.
 7. Turn the alpha-shape edge that each ray crosses by 90°, into the alpha
    shape. The result is the inward normal at the crossing.
 8. Measure the signed distance from each crossing to the resampled contour,

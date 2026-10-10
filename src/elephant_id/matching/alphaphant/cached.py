@@ -47,7 +47,7 @@ class CachedTearProfileExtractor:
 
         Raises:
             ValueError: If a stored record has other alpha scales, in value or
-                order, or does not hold one valid tear profile for each alpha scale.
+                order, or does not contain one valid tear profile for each alpha scale.
         """
         crop = "_".join(map(str, ear.source_box.as_tuple()))
         key = (
@@ -79,7 +79,7 @@ class CachedTearProfileExtractor:
             )
         profiles = record.get("profiles")
         if not isinstance(profiles, list) or len(profiles) != len(alpha_scales):
-            raise ValueError("Tear-profile cache record must hold one profile for each alpha scale")
+            raise ValueError("Tear-profile cache record must contain one profile for each alpha scale")
         try:
             return tuple(
                 TearProfile(profile["depths"], profile["start_degrees"], profile["end_degrees"])

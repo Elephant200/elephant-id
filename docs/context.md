@@ -67,7 +67,7 @@ One ear's extracted tear profiles, one for each alpha scale, together with its a
 _Avoid_: Ear representation, ear profile
 
 **Analyzed sighting ear pair**:
-The analyzed counterpart of a sighting ear pair, retaining its sighting ID and its left and right analyzed ears.
+The analyzed counterpart of a sighting ear pair. It contains the sighting ID and the left and right analyzed ears.
 _Avoid_: Sighting representations, identity decision
 
 **Ear Preparation**
