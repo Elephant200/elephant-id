@@ -7,6 +7,7 @@ from uuid import UUID
 import cv2
 import numpy as np
 import pytest
+import shapely
 from pycocotools import mask as coco_mask
 
 from elephant_id.cache import CacheManager
@@ -25,6 +26,7 @@ from elephant_id.matching.alphaphant.extraction import (
     AnalyzedEar,
     AnalyzedSightingEarPair,
     TearProfile,
+    _alpha_shape_crossings,
 )
 from elephant_id.matching.alphaphant.similarity import EarComparator
 from elephant_id.matching.protocol import MatchingError
@@ -127,6 +129,37 @@ def test_alpha_tear_profiles_state_their_measured_interval() -> None:
         assert len(profile.depths) == 720
         assert np.all(profile.depths[outside] == 0.0)
         assert np.any(profile.depths[~outside] != 0.0)
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+def test_alpha_shape_crossings_use_the_inward_normal_of_the_crossed_edge(reverse: bool) -> None:
+    """Each normal is perpendicular to the crossed edge and points inward, in both windings."""
+    boundary = np.asarray([(-2.0, -1.0), (2.0, -1.0), (2.0, 1.0), (-2.0, 1.0)])
+    alpha_shape = shapely.Polygon(boundary[::-1] if reverse else boundary)
+    directions = np.asarray([(1.0, 0.0), (2.0, 0.9), (0.0, 1.0), (-1.0, 0.0), (0.0, -1.0)])
+    directions /= np.linalg.norm(directions, axis=1, keepdims=True)
+
+    crossings, normals = _alpha_shape_crossings(np.zeros(2), directions, alpha_shape)
+
+    np.testing.assert_allclose(
+        crossings, [(2.0, 0.0), (2.0, 0.9), (0.0, 1.0), (-2.0, 0.0), (0.0, -1.0)], atol=1e-12
+    )
+    np.testing.assert_allclose(
+        normals, [(-1.0, 0.0), (-1.0, 0.0), (0.0, -1.0), (1.0, 0.0), (0.0, 1.0)], atol=1e-12
+    )
+
+
+def test_alpha_shape_crossings_are_nan_for_a_ray_that_does_not_cross() -> None:
+    """A ray that starts outside the alpha shape and points away has no crossing and no normal."""
+    alpha_shape = shapely.Polygon([(1.0, -1.0), (3.0, -1.0), (3.0, 1.0), (1.0, 1.0)])
+
+    crossings, normals = _alpha_shape_crossings(
+        np.zeros(2), np.asarray([(-1.0, 0.0), (1.0, 0.0)]), alpha_shape
+    )
+
+    assert np.isnan(crossings[0]).all() and np.isnan(normals[0]).all()
+    np.testing.assert_allclose(crossings[1], (3.0, 0.0), atol=1e-12)
+    np.testing.assert_allclose(normals[1], (-1.0, 0.0), atol=1e-12)
 
 
 @pytest.mark.parametrize("alpha_scales", [(), (0.35, 0.0), (-1.0,)])

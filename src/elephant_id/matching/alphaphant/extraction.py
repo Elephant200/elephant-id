@@ -14,7 +14,8 @@ AlphaTear then does these steps for each alpha scale:
 5. Build the alpha shape of the opened contour.
 6. Find the point where each polar ray last leaves the alpha shape. This
    point is the crossing.
-7. Calculate the inward normal of the alpha shape at each crossing.
+7. Turn the alpha-shape edge that each ray crosses by 90°, into the alpha
+   shape. The result is the inward normal at the crossing.
 8. Measure the signed distance from each crossing to the resampled contour,
    along the normal.
 9. Divide each distance by the ear radius. The result is the depth.
@@ -276,7 +277,7 @@ def _opened_contour(contour: np.ndarray, radius: float) -> np.ndarray:
     return path
 
 
-def _densify(path: np.ndarray, max_spacing: float = 2.0) -> np.ndarray:
+def _densify(path: np.ndarray, max_spacing: float) -> np.ndarray:
     """Add points to a polyline until adjacent points are at most `max_spacing` apart.
 
     The output contains all the input points, in the same order.
@@ -399,27 +400,25 @@ def _measure_depths(
     """Return the smoothed depth of each polar ray at one alpha scale (steps 6 to 10).
 
     If a ray does not cross the alpha shape, its depth is zero. The function
-    sets this depth to zero again after the smoothing.
+    sets the depth of these rays to zero after the smoothing.
 
     Args:
         alpha_shape: The alpha shape at this alpha scale.
-        contour: The resampled contour. The function cuts the alpha-shape
-            boundary to its ear-flap path between the two contour ends and then
-            measures the depths to this contour.
+        contour: The resampled contour. The function measures the depths to
+            this contour.
         ear_radius: The ear radius, in pixels.
         ray_origin: The origin of the polar rays.
         ray_directions: The unit direction of each polar ray.
         smoothing_sigma: The standard deviation of the Gaussian smoothing, in
             bins.
     """
-    alpha_shape_boundary = np.asarray(alpha_shape.exterior.coords)[:-1]
-    alpha_shape_path = _densify(ear_side_path(alpha_shape_boundary, contour[0], contour[-1]))
-    crossings = _alpha_shape_crossings(ray_origin, ray_directions, alpha_shape_boundary)
+    crossings, normals = _alpha_shape_crossings(ray_origin, ray_directions, alpha_shape)
     crossed = np.isfinite(crossings).all(axis=1)
     depths = np.zeros(len(crossings))
     if crossed.any():
-        normals = _inward_normals(alpha_shape_path, alpha_shape, crossings[crossed])
-        depths[crossed] = _contour_distances(crossings[crossed], normals, contour) / ear_radius
+        depths[crossed] = (
+            _contour_distances(crossings[crossed], normals[crossed], contour) / ear_radius
+        )
     smoothed = gaussian_filter1d(depths, sigma=smoothing_sigma)
     smoothed[~crossed] = 0.0
     return smoothed
@@ -428,23 +427,27 @@ def _measure_depths(
 def _alpha_shape_crossings(
     ray_origin: np.ndarray,
     ray_directions: np.ndarray,
-    alpha_shape_boundary: np.ndarray,
-) -> np.ndarray:
-    """Return the point where each polar ray last leaves the alpha shape (step 6).
+    alpha_shape: shapely.Polygon,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return the crossing of each polar ray and the inward normal there (steps 6 and 7).
 
-    Each ray starts at `ray_origin` and goes forward. The crossing of a ray is
-    its intersection with the alpha-shape boundary that is farthest from
-    `ray_origin`.
+    Each ray starts at `ray_origin` and points away from it. The function does
+    these steps:
+
+    1. Find the crossing: the intersection of the ray with the alpha-shape
+       boundary that is farthest from `ray_origin`.
+    2. Turn the crossed boundary edge by 90° to make the normal. The winding
+       order of the boundary sets the direction of the turn, so that the
+       normal points into the alpha shape.
 
     Returns:
-        The xy crossing of each ray, in ray order. The row is NaN if the ray
-        does not cross the alpha shape.
+        The xy crossings and the inward unit normals, in ray order. The rows
+        of a ray are NaN if the ray does not cross the alpha shape.
     """
+    boundary = np.asarray(alpha_shape.exterior.coords)[:-1]
+    edges = np.roll(boundary, -1, axis=0) - boundary
     distances, positions = _ray_segment_intersections(
-        ray_origin[None, :],
-        ray_directions,
-        alpha_shape_boundary,
-        np.roll(alpha_shape_boundary, -1, axis=0) - alpha_shape_boundary,
+        ray_origin[None, :], ray_directions, boundary, edges
     )
     tolerance = 1e-9
     forward = (
@@ -454,47 +457,20 @@ def _alpha_shape_crossings(
         & (positions >= -tolerance)
         & (positions <= 1 + tolerance)
     )
-    furthest = np.where(forward, distances, -np.inf).max(axis=1)
-    crossings = np.full(ray_directions.shape, np.nan, dtype=float)
+    distances = np.where(forward, distances, -np.inf)
+    crossed_edges = np.argmax(distances, axis=1)
+    furthest = distances[np.arange(len(ray_directions)), crossed_edges]
     crossed = np.isfinite(furthest)
+
+    crossings = np.full(ray_directions.shape, np.nan)
     crossings[crossed] = ray_origin + furthest[crossed, None] * ray_directions[crossed]
-    return crossings
-
-
-def _inward_normals(
-    alpha_shape_path: np.ndarray,
-    alpha_shape: shapely.Polygon,
-    crossings: np.ndarray,
-) -> np.ndarray:
-    """Return the inward unit normal of the alpha shape at each crossing (step 7).
-
-    For each crossing, the function does these steps:
-
-    1. Find the point of `alpha_shape_path` that is nearest to the crossing.
-    2. Calculate the tangent at that point from the adjacent path points.
-    3. Turn the tangent by 90° to make the normal.
-    4. If the point 3 px along the normal is outside `alpha_shape`, reverse
-       the normal.
-
-    Args:
-        alpha_shape_path: The ear-flap path of the alpha-shape boundary, with
-            points at most 2 px apart.
-        alpha_shape: The alpha shape.
-        crossings: The ray crossings from step 6.
-    """
-    tangents = np.gradient(alpha_shape_path, axis=0)
-    tangents /= np.linalg.norm(tangents, axis=1, keepdims=True) + 1e-12
-    nearest_indices = np.argmin(
-        np.sum((crossings[:, None, :] - alpha_shape_path[None, :, :]) ** 2, axis=2),
-        axis=1,
-    )
-    normals = np.c_[tangents[nearest_indices, 1], -tangents[nearest_indices, 0]]
-    normals /= np.linalg.norm(normals, axis=1, keepdims=True) + 1e-12
-    probe_points = crossings + 3.0 * normals
-    normals[
-        ~shapely.contains_xy(alpha_shape, probe_points[:, 0], probe_points[:, 1])
-    ] *= -1
-    return normals
+    crossed_edge_vectors = edges[crossed_edges[crossed]]
+    inward = np.c_[-crossed_edge_vectors[:, 1], crossed_edge_vectors[:, 0]]
+    if not alpha_shape.exterior.is_ccw:
+        inward = -inward
+    normals = np.full(ray_directions.shape, np.nan)
+    normals[crossed] = inward / np.linalg.norm(inward, axis=1, keepdims=True)
+    return crossings, normals
 
 
 def _contour_distances(

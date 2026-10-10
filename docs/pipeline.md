@@ -46,11 +46,7 @@ AlphaTear then does these steps for each alpha scale:
 
 5. Build the alpha shape of the opened contour.
 6. Find the point where each ray last leaves the alpha shape. This point is the crossing.
-7. Calculate the inward normal of the alpha shape at each crossing:
-   1. Cut the alpha-shape boundary with the ear-flap rule.
-   2. Find the boundary point that is nearest to the crossing.
-   3. Calculate the boundary tangent at that point.
-   4. Turn the tangent by 90° toward the inside of the alpha shape.
+7. Turn the alpha-shape edge that each ray crosses by 90°, into the alpha shape. The result is the inward normal at the crossing.
 8. Measure the signed distance from each crossing to the resampled contour, along the normal. Use the contour intersection that is nearest to the crossing.
 9. Divide each distance by the ear radius. The result is the depth.
 10. Smooth the depths along the angles.
