@@ -114,6 +114,15 @@ The uniform angles from 0° to 180° that the comparator uses. Each angle is one
 A tear profile that is ready for comparison after steps such as resampling and negative-depth clipping.
 _Avoid_: Comparison row
 
+**Gradient row**:
+The rate of change of a tear profile's clipped depth along the angles, ready for comparison. Each value is the square root of the magnitude, with the sign kept. It is positive where a tear begins and negative where a tear ends. It is zero outside the measured interval.
+
+**Channel**:
+One kind of row. The depth channel contains the depth rows of an ear, one for each alpha scale. The gradient channel contains the gradient rows.
+
+**Channel weight**:
+The part of the alignment score that one channel supplies. The two channel weights add to 1.
+
 **Alignment**:
 One stretch and one shift. The comparator applies the same alignment to all rows of the query ear. The comparator moves only the query ear.
 _Avoid_: Variant, transform
@@ -129,11 +138,11 @@ _Avoid_: Offset, rotation
 A factor from 0 to 1 that decreases as the shift increases. It makes the comparator prefer small shifts.
 
 **Real-valued Jaccard**:
-A similarity of two rows from 0 to 1: the sum of the bin-wise minimums divided by the sum of the bin-wise maximums. Equal rows give 1. Rows with no common nonzero bin give 0.
+A similarity of two rows from 0 to 1: the magnitude that the two rows share divided by their combined magnitude. In a bin where both values are positive, or both are negative, the rows share the smaller magnitude. In a bin with opposite signs, the rows share nothing. Equal rows give 1. Rows with no common nonzero bin of the same sign give 0.
 _Avoid_: Overlap, overlap score
 
 **Alignment score**:
-The match quality of a query ear at one alignment against one reference ear: the mean real-valued Jaccard of their rows, multiplied by the shift penalty.
+The match quality of a query ear at one alignment against one reference ear: the sum of the channel means, each multiplied by its channel weight, multiplied by the shift penalty. A channel mean is the mean of the real-valued Jaccard similarities of each of the channel's rows.
 
 **Ear similarity**:
 The highest alignment score of a query ear against one reference ear of the same side, from 0 to 1. The comparator moves only the query, so the similarity is asymmetric. 

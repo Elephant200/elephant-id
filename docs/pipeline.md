@@ -65,10 +65,11 @@ Every compared ear has one tear profile for each alpha scale. All compared tear 
 The comparator calculates the ear similarity in these steps:
 
 1. **Depth rows.** Set negative depths to zero, take the square root, and resample each tear profile to the comparison grid.
-2. **Alignment.** Apply each configured stretch and shift to the query's depth rows. All alpha scales share one stretch and one shift.
-3. **Real-valued Jaccard.** For each alpha scale, compare the aligned query row `q` with the reference row `r`. For nonnegative rows, the real-valued Jaccard is `sum(min(q, r)) / sum(max(q, r))`. The code uses the equivalent L1 form `(|q| + |r| - |q - r|) / (|q| + |r| + |q - r|)`. When the denominator is zero, the real-valued Jaccard is zero.
-4. **Alignment score.** Calculate the mean real-valued Jaccard across the alpha scales. Multiply the mean by the shift penalty of the alignment.
-5. **Best alignment.** Select the highest alignment score and its alignment. This score is the ear similarity.
+2. **Gradient rows.** Set negative depths to zero. Calculate the gradient per sample inside the measured interval, with one-sided differences at its ends. Take the square root of each magnitude and keep its sign. Resample to the comparison grid. The gradient row is zero outside the measured interval.
+3. **Alignment.** Apply each configured stretch and shift to all of the query's rows. All rows share one stretch and one shift. A stretch by `t` divides the gradient by `t`, and the square root turns this into a division by `t ** 0.5`. Thus, multiply each aligned query gradient row by `t ** -0.5`.
+4. **Real-valued Jaccard.** For each row, compare the aligned query row `q` with the reference row `r`. The code uses the L1 form `(|q| + |r| - |q - r|) / (|q| + |r| + |q - r|)`. For nonnegative rows, this equals `sum(min(q, r)) / sum(max(q, r))`. In a bin where `q` and `r` have opposite signs, the real-valued Jaccard is zero. When the denominator is zero, the real-valued Jaccard is zero.
+5. **Alignment score.** For each channel, calculate the mean real-valued Jaccard across the alpha scales. Add the two channel means, each multiplied by its channel weight. The default channel weights are 0.5 and 0.5. Multiply the sum by the shift penalty of the alignment.
+6. **Best alignment.** Select the highest alignment score and its alignment. This score is the ear similarity.
 
 When the highest alignment score is at or below 1e-12, the comparator sets the ear similarity to zero. A zero ear similarity has no useful alignment. Thus, the comparator reports stretch 1 and shift 0.
 

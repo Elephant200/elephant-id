@@ -38,7 +38,12 @@ def _pair(value: int) -> SightingEarPair:
 
 
 def _ear(value: int, side: EarSide, depths: list[float]) -> AnalyzedEar:
-    """Return one analyzed ear with deterministic neutral provenance."""
+    """Return one analyzed ear with deterministic neutral provenance.
+
+    The `depths` become a 720-sample tear profile: each depth fills an equal
+    part of the angles.
+    """
+    profile_depths = np.repeat(depths, 720 // len(depths))
     return AnalyzedEar(
         source_photo=Photo(
             photo_id=_uuid(value),
@@ -46,7 +51,7 @@ def _ear(value: int, side: EarSide, depths: list[float]) -> AnalyzedEar:
         ),
         side=side,
         source_box=BoundingBox(0, 0, 4, 4),
-        profiles_by_scale=(TearProfile(np.asarray(depths), start_degrees=5.0, end_degrees=175.0),),
+        profiles_by_scale=(TearProfile(profile_depths, start_degrees=5.0, end_degrees=175.0),),
     )
 
 

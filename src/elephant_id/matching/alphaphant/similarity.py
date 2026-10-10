@@ -11,9 +11,14 @@ from elephant_id.matching.alphaphant.extraction import AnalyzedEar, TearProfile
 
 @dataclass(frozen=True, slots=True)
 class EarComparatorConfig:
-    """Settings for the comparison grid, the alignments, and the shift penalty."""
+    """Settings for the comparison grid, the alignments, the shift penalty, and the channel weights.
+
+    The gradient channel has the weight `gradient_weight`. The depth channel
+    has the weight `1 - gradient_weight`.
+    """
 
     resampled_bins: int = 240
+    gradient_weight: float = 0.5
     max_shift_fraction: float = 0.15
     shift_penalty_scale: float = 0.08
     shift_penalty_power: float = 4.0
@@ -50,6 +55,8 @@ class EarComparator:
         self._shift_penalties = np.array(
             [self._compute_shift_penalty(shift_bins) for _, shift_bins in self._alignments]
         )
+        # A stretch by t divides the gradient by t, and the square root turns 1/t into t ** -0.5.
+        self._gradient_stretch_factors = np.array([stretch**-0.5 for stretch, _ in self._alignments])
 
     def compare_ears(
         self,
@@ -58,9 +65,14 @@ class EarComparator:
     ) -> tuple[EarSimilarity, ...]:
         """Return the ear similarity of the query ear with each reference ear.
 
-        For each alignment, the comparator calculates the mean real-valued
-        Jaccard of the depth rows and multiplies it by the shift penalty. The
-        ear similarity is the highest result.
+        For each alignment, the comparator does these steps:
+
+        1. Calculate the mean real-valued Jaccard of the depth rows, and the
+           mean real-valued Jaccard of the gradient rows.
+        2. Add the two means, each multiplied by its channel weight.
+        3. Multiply the sum by the shift penalty.
+
+        The ear similarity is the highest result.
 
         Returns:
             One ear similarity for each reference ear, in the same order.
@@ -76,9 +88,15 @@ class EarComparator:
         if not reference_ears:
             return ()
 
-        query_rows = self._build_depth_rows(query_ear.profiles_by_scale)
-        reference_rows = np.array([self._build_depth_rows(ear.profiles_by_scale) for ear in reference_ears])
-        scores = self._score_alignments(query_rows, reference_rows)
+        query_depth_rows = self._build_depth_rows(query_ear.profiles_by_scale)
+        query_gradient_rows = self._build_gradient_rows(query_ear.profiles_by_scale)
+        reference_depth_rows = np.array([self._build_depth_rows(ear.profiles_by_scale) for ear in reference_ears])
+        reference_gradient_rows = np.array(
+            [self._build_gradient_rows(ear.profiles_by_scale) for ear in reference_ears]
+        )
+        scores = self._score_alignments(
+            query_depth_rows, query_gradient_rows, reference_depth_rows, reference_gradient_rows
+        )
         return tuple(self._select_best_alignment(reference_scores) for reference_scores in scores)
 
     def _build_depth_rows(self, profiles: Sequence[TearProfile]) -> np.ndarray:
@@ -91,39 +109,94 @@ class EarComparator:
         Returns:
             Depth rows with shape `(scale_count, resampled_bins)`.
         """
+        return np.array([self._resample(np.sqrt(np.maximum(profile.depths, 0.0))) for profile in profiles])
+
+    def _build_gradient_rows(self, profiles: Sequence[TearProfile]) -> np.ndarray:
+        """Return one gradient row for each tear profile.
+
+        For each tear profile, this method does these steps:
+
+        1. Set negative depths to zero.
+        2. Calculate the gradient per sample, inside the measured interval
+           only. The gradient uses one-sided differences at the ends of the
+           measured interval. The gradient is zero outside the measured interval.
+        3. Calculate the square root of each magnitude, and keep its sign.
+        4. Resample the result to `resampled_bins`.
+
+        Returns:
+            Gradient rows with shape `(scale_count, resampled_bins)`.
+        """
         rows = []
         for profile in profiles:
-            compressed = np.sqrt(np.maximum(profile.depths, 0.0))
-            grid_positions = np.linspace(0.0, len(compressed) - 1, self._config.resampled_bins)
-            rows.append(np.interp(grid_positions, np.arange(len(compressed)), compressed))
+            angles = np.linspace(0.0, 180.0, len(profile.depths))
+            measured = (angles > profile.start_degrees) & (angles < profile.end_degrees)
+            gradient = np.zeros(len(profile.depths))
+            gradient[measured] = np.gradient(np.maximum(profile.depths[measured], 0.0))
+            rows.append(self._resample(np.sign(gradient) * np.sqrt(np.abs(gradient))))
         return np.array(rows)
+
+    def _resample(self, values: np.ndarray) -> np.ndarray:
+        """Return the values linearly interpolated to `resampled_bins` uniform angles from 0° to 180°."""
+        grid_positions = np.linspace(0.0, len(values) - 1, self._config.resampled_bins)
+        return np.interp(grid_positions, np.arange(len(values)), values)
 
     def _align_row(self, row: np.ndarray) -> np.ndarray:
         """Return the row at every alignment, with shape `(alignment_count, bins)`."""
         stretched = {stretch: _stretch(row, stretch) for stretch in self._config.stretches}
         return np.array([_shift(stretched[stretch], shift_bins) for stretch, shift_bins in self._alignments])
 
-    def _score_alignments(self, query_rows: np.ndarray, reference_rows: np.ndarray) -> np.ndarray:
+    def _score_alignments(
+        self,
+        query_depth_rows: np.ndarray,
+        query_gradient_rows: np.ndarray,
+        reference_depth_rows: np.ndarray,
+        reference_gradient_rows: np.ndarray,
+    ) -> np.ndarray:
         """Return the alignment score of every alignment against each reference ear.
 
-        For each alignment, this method calculates the real-valued Jaccard of
-        each depth row, calculates the mean over the alpha scales, and
-        multiplies the mean by the shift penalty. Column `j` contains the score of
-        alignment `self._alignments[j]`.
+        For each alignment, this method does these steps:
+
+        1. Multiply each aligned query gradient row by `stretch ** -0.5`.
+        2. Calculate the real-valued Jaccard of each row.
+        3. For each channel, calculate the mean over the alpha scales.
+        4. Add the two channel means, each multiplied by its channel weight.
+        5. Multiply the sum by the shift penalty.
+
+        Column `j` contains the score of alignment `self._alignments[j]`.
 
         Args:
-            query_rows: The query's depth rows, with shape `(scale_count, bins)`.
-            reference_rows: The reference ears' depth rows, with shape
+            query_depth_rows: The query's depth rows, with shape `(scale_count, bins)`.
+            query_gradient_rows: The query's gradient rows, with shape `(scale_count, bins)`.
+            reference_depth_rows: The reference ears' depth rows, with shape
                 `(reference_count, scale_count, bins)`.
+            reference_gradient_rows: The reference ears' gradient rows, with
+                shape `(reference_count, scale_count, bins)`.
 
         Returns:
             Scores with shape `(reference_count, alignment_count)`.
         """
-        jaccard_by_row = [
-            _real_valued_jaccard(reference_rows[:, scale_index], self._align_row(query_row))
-            for scale_index, query_row in enumerate(query_rows)
-        ]
-        return np.mean(jaccard_by_row, axis=0) * self._shift_penalties
+        depth_score = np.mean(
+            [
+                _real_valued_jaccard(
+                    reference_depth_rows[:, scale_index],
+                    self._align_row(query_row),
+                )
+                for scale_index, query_row in enumerate(query_depth_rows)
+            ],
+            axis=0,
+        )
+        gradient_score = np.mean(
+            [
+                _real_valued_jaccard(
+                    reference_gradient_rows[:, scale_index],
+                    self._align_row(query_row) * self._gradient_stretch_factors[:, None],
+                )
+                for scale_index, query_row in enumerate(query_gradient_rows)
+            ],
+            axis=0,
+        )
+        gradient_weight = self._config.gradient_weight
+        return ((1.0 - gradient_weight) * depth_score + gradient_weight * gradient_score) * self._shift_penalties
 
     def _compute_shift_penalty(self, shift_bins: int) -> float:
         """Return the shift penalty for a shift of `shift_bins`."""
@@ -182,14 +255,17 @@ def _shift(row: np.ndarray, shift_bins: int) -> np.ndarray:
 def _real_valued_jaccard(reference_rows: np.ndarray, aligned_query_rows: np.ndarray) -> np.ndarray:
     """Return the real-valued Jaccard of every reference row and aligned query row.
 
-    The value is zero when both rows contain only zeros.
+    Rows can contain negative values. The value is zero when both rows
+    contain only zeros.
 
     Returns:
         Values with shape `(reference_count, alignment_count)`.
     """
-    # With L1 norms, (|x| + |y| - |x - y|) / (|x| + |y| + |x - y|) equals
-    # sum(min) / sum(max) for nonnegative rows.
-    norm_sum = reference_rows.sum(axis=1)[:, None] + aligned_query_rows.sum(axis=1)[None, :]
+    # With L1 norms, (|x| + |y| - |x - y|) / (|x| + |y| + |x - y|) is the shared
+    # magnitude of the positive and negative parts divided by their combined
+    # magnitude. Values of opposite sign share nothing.
+    norm_sum = np.abs(reference_rows).sum(axis=1)[:, None] + np.abs(aligned_query_rows).sum(axis=1)[None, :]
     distance = scipy_distance.cdist(reference_rows, aligned_query_rows, metric="cityblock")
+    numerator = norm_sum - distance
     denominator = norm_sum + distance
-    return np.divide(norm_sum - distance, denominator, out=np.zeros_like(denominator), where=denominator > 0)
+    return np.divide(numerator, denominator, out=np.zeros_like(denominator), where=denominator > 0)
