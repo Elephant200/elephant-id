@@ -106,7 +106,7 @@ class TearProfileExtractor(Protocol):
         ...
 
     def extract(self, ear: PreparedEar) -> tuple[TearProfile, ...]:
-        """Return signed, normalized tear profiles for each alpha scale."""
+        """Return one tear profile of signed, normalized depths for each alpha scale."""
         ...
 
 
@@ -250,9 +250,9 @@ def _opened_contour(contour: np.ndarray, radius: float) -> np.ndarray:
 
     1. Morphologically open the contour by `radius`, removing narrow parts.
     2. If the result has more than one part, use the largest part.
-    3. Cut the boundary to its ear-flap path between the two contour ends.
-    4. Add points until adjacent points are 2 px apart or less (ie, the path is densified).
-    5. Set the two ends of the path to the two contour ends.
+    3. Cut the boundary to its ear-flap path between the two contour anchors.
+    4. Add points until adjacent points are 2 px apart or less.
+    5. Set the two ends of the path to the two contour anchors.
 
     If step 1 removes the full polygon, the function returns `contour`.
 
@@ -300,7 +300,7 @@ def _polar_directions(
 ) -> tuple[np.ndarray, np.ndarray]:
     """Return the origin and the unit directions of the polar rays (step 4).
 
-    The origin is the midpoint of the two detector landmarks. The ray angles
+    The origin is the midpoint of the two landmarks. The ray angles
     are:
 
     - 0°: toward `upper`.

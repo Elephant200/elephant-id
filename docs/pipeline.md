@@ -18,8 +18,8 @@ Query ears and reference ears go through the same steps:
 
 1. **Photo retrieval and decoding:** Read the original encoded bytes from the photo store. Decode them to a BGR image.
 2. **Ear localization and ear segmentation:** Find the ears. Make a mask and a box for each ear.
-3. **Ear landmark detection:** Find the two anatomical endpoints of the relevant contour.
-4. **Ear-contour preparation:** Extract the contour from the mask. Snap the landmarks to the contour. The snapped landmarks divide the contour into two paths. Select the ear-flap path: the path that encloses the larger area with the chord between the snapped landmarks. Then calculate the contour geometry.
+3. **Ear landmark detection:** Find the upper landmark and the lower landmark of each ear.
+4. **Ear-contour preparation:** Extract the boundary from the mask. Move each landmark to the nearest boundary vertex. The results are the contour anchors. The contour anchors divide the boundary into two paths. Select the ear-flap path: the path that encloses the larger area with the chord between the contour anchors. This path is the ear contour. Then calculate the contour geometry.
 5. **Declared-side resolution:** Select the prepared ear for each declared side. Resolve both sides before extraction starts.
 6. **Tear-profile extraction:** Run AlphaTear. For each alpha scale, AlphaTear builds an alpha shape and makes one one-dimensional tear profile. AlphaPhant then attaches the source data and the original sighting ID.
 
@@ -37,10 +37,10 @@ AlphaTear makes the shared geometry one time for each ear:
 
 1. Resample the prepared contour to equal arc-length spacing. AlphaTear measures the depths to this resampled contour.
 2. Calculate the ear radius from the cleaned ear area.
-3. Open the resampled contour morphologically. Cut the opened contour between the anchors with the ear-flap rule of preparation.
-4. Make one polar ray for each angle in the measured interval, 5° to 175°. Start each ray at the midpoint of the original detector landmarks.
+3. Open the resampled contour morphologically. Cut the opened contour between the contour anchors with the ear-flap rule of preparation.
+4. Make one polar ray for each angle in the measured interval, 5° to 175°. Start each ray at the midpoint of the landmarks. The ray at 0° points to the upper landmark, the ray at 90° points into the ear flap, and the ray at 180° points to the lower landmark.
 
-The polar frame uses the detector landmarks. The snapped contour anchors only mark the ends of the prepared contour.
+The polar frame uses the landmarks. The contour anchors only mark the ends of the ear contour.
 
 AlphaTear then does these steps for each alpha scale:
 

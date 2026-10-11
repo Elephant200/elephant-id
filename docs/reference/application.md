@@ -30,7 +30,7 @@ Given the ear pair, AlphaPhant is fully automated: sighting analysis, tear-profi
 4. Review the analysis package and correct evidence as needed.
 5. Approve a SightingEarPair: one usable left-ear reference Photo and one usable right-ear reference Photo. One Photo may serve both sides.
 6. Run AlphaPhant on the approved ear pair using the application's PhotoStore.
-7. Compare ranked matching candidates and inspect the independently selected left- and right-ear catalog evidence behind each candidate score.
+7. Compare ranked matching candidates and inspect the left and right reference ears behind each candidate score.
 8. Record an identity decision.
 
 Candidate ranking and identity decision are distinct. AlphaPhant scores known elephants; the application may present those scores as a descending ranking, but it does not decide whether the sighting belongs to an existing individual, should create a new known elephant, or remains unresolved.
@@ -68,9 +68,9 @@ After the reviewer changes a selected ear, crop, or segmentation, the applicatio
 
 ## Candidate Comparison
 
-After AlphaPhant returns candidate scores, the comparison view should present their descending ranking with the query left and right ears beside each candidate's strongest supporting left-ear and right-ear catalog evidence. Aligned tear profiles should be visible so the reviewer can judge whether the similarity is meaningful.
+After AlphaPhant returns candidate scores, the comparison view should present their descending ranking with the query left and right ears beside each candidate's reference ears on the same side. Every reference ear contributes to the left score or the right score, so the view should order each side's reference ears by ear similarity, best first. Aligned tear profiles should be visible so the reviewer can judge whether the similarity is meaningful.
 
-The winning left and right catalog evidence for a candidate may come from different historical sightings; the view should preserve that per-side Photo and sighting provenance.
+The best left reference ear and the best right reference ear of a candidate may come from different reference sightings; the view should show the Photo and the sighting of each reference ear.
 
 The reviewer asks: do these aligned signals support this identity?
 

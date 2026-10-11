@@ -7,7 +7,10 @@ The left score of a candidate is the log-mean-exp of the ear similarities of all
 The log-mean-exp is a smooth maximum. A candidate scores about its best ear similarity, minus `τ * log(n / k)` when only `k` of its `n` references agree. The alternatives have these problems:
 
 - The maximum uses one reference only. It ignores agreement from the other sightings of a known elephant, and it gives a candidate with many references more chances at one lucky high match.
+- The mean requires all references to agree. The references are different photos, so some of them can match badly.
 - The softmax-weighted mean ties with the log-mean-exp on the tuning set, but it is not monotone: a better match with a weak reference can lower the score. The log-mean-exp is monotone.
 - The top-k mean favours elephants with many sightings even more than the maximum does.
+
+The log-mean-exp averages over all references instead of picking the best ones. As an impostor's references increase, its side score settles at a fixed value and stops rising, so the rule favours elephants with many sightings only slightly.
 
 A fixed `τ` gives the candidate score the same meaning in every catalog, and each candidate score uses only the query and that candidate's references.

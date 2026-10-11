@@ -36,7 +36,7 @@ composition.py       Construct preparation and AlphaPhant
 
 `SightingPreparer.prepare` resolves both ears and returns them in left, right order. When both sides use one Photo, preparation processes it once. Left-side resolution precedes preparation of a distinct right Photo. Both sides must resolve before extraction starts.
 
-`PreparedEar` contains the source Photo, raster box, full-image contour, original detector landmarks, snapped contour anchors, inferred side, and cleaned area. Its contour is finite and read-only. Its area is positive. Original landmarks define the extraction frame; snapped anchors delimit the contour.
+`PreparedEar` contains the source Photo, raster box, full-image contour, landmarks, contour anchors, inferred side, and cleaned area. Its contour is finite and read-only. Its area is positive. The landmarks define the polar frame of extraction; the contour anchors are the ends of the contour.
 
 `AlphaPhant.analyze` returns an immutable `AnalyzedSightingEarPair`. It retains the input sighting ID and two `AnalyzedEar` values. Each ear contains its Photo, side, raster box, and one signed `TearProfile` for each alpha scale. Profile depths are finite, one-dimensional, and read-only.
 

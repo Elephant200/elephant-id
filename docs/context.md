@@ -44,8 +44,11 @@ _Avoid_: Gallery when naming the domain concept
 A sighting ear pair of a known elephant in the catalog. Matching compares the query with the reference sightings of each candidate.
 _Avoid_: Catalog evidence
 
+**Reference ear**:
+The left ear or the right ear of a reference sighting.
+
 **Candidate key**:
-An opaque identifier that stands in for one known elephant during one retrieval evaluation. It does not carry known-elephant identity.
+An opaque identifier that stands in for one known elephant in the catalog that a catalog matcher receives. It does not carry known-elephant identity.
 _Avoid_: Known-elephant name, photo ID, sighting ID
 
 **Matching candidate**:
@@ -70,13 +73,33 @@ _Avoid_: Ear representation, ear profile
 The analyzed counterpart of a sighting ear pair. It contains the sighting ID and the left and right analyzed ears.
 _Avoid_: Sighting representations, identity decision
 
-**Ear Preparation**
+**Ear preparation**:
 Combines ear localization, ear segmentation, and ear landmark detection to extract the ear contour from an ear image.
 _Avoid_: Ear analysis
 
+**Landmark**:
+One of the two anatomical points that ear landmark detection finds on an ear: the upper landmark and the lower landmark. The landmarks set the polar frame of the tear profiles.
+_Avoid_: Endpoint, keypoint
+
+**Contour anchor**:
+A landmark moved to the nearest vertex of the ear-mask boundary. The two contour anchors are the ends of the ear contour.
+_Avoid_: Endpoint, snapped landmark
+
+**Ear-flap path**:
+Of the two boundary paths between the contour anchors, the path that encloses the larger area with the chord between the contour anchors. Preparation keeps the ear-flap path as the ear contour.
+
 **Ear contour**:
-The ordered boundary of an ear mask used for tear-profile extraction.
+The ordered boundary of an ear mask used for tear-profile extraction: the ear-flap path, from the upper contour anchor to the lower contour anchor.
 _Avoid_: Ear margin when referring to the computational representation
+
+**Declared side**:
+The side, left or right, that a sighting ear pair gives to an ear photo. The pipeline treats the declared side as correct.
+
+**Inferred side**:
+The side of a prepared ear that preparation calculates from the position of its contour anchors in the bounding box of its ear contour. For each declared side, preparation selects the largest prepared ear with the same inferred side.
+
+**Alpha scale**:
+The radius of the disc that builds an alpha shape, as a fraction of the ear radius. The disc bridges each indentation that is narrower than its diameter, so the indentation shows as depth. A small alpha scale shows the tears only. A large alpha scale also shows the broad, shallow indentations of the ear margin.
 
 **Alpha shape**:
 The geometric reference constructed from an ear contour during tear-profile extraction using a given alpha scale as the scale parameter.
@@ -88,7 +111,10 @@ _Avoid_: AlphaPhant (when referring only to extraction)
 
 **AlphaPhant**:
 The project's complete catalog-matching algorithm, which extracts analyzed ears from a sighting ear pair, compares its tear profiles with those of the reference sightings, and returns candidate scores.
-_Avoid_: AlphaTear (when referring to matching), AlphaPhant matcher
+_Avoid_: AlphaTear (when referring to matching)
+
+**Producer slug**:
+The name of one producer of cached output, such as a model or an AlphaTear configuration, for example `alpha-tear-v1`. The slug identifies all settings that affect the output, so an output change requires a new slug.
 
 **Tear profile**:
 The depths of one ear at one alpha scale, at uniform angles from 0° to 180°. Each tear profile also contains its measured interval.
@@ -141,7 +167,7 @@ A factor from 0 to 1 that decreases as the shift increases. It makes the compara
 A factor from 0 to 1 that decreases as `|ln t|` increases, where `t` is the stretch. It is 1 at stretch 1, and it is the same for `t` and `1 / t`. It makes the comparator prefer stretches near 1.
 
 **Angle weight**:
-The importance of each bin of the comparison grid: a Gaussian of the angle with tuned center and width. It is largest on the lower part of the ear contour. The angle weight stays at the same angles when the comparator aligns the query.
+The importance of each bin of the comparison grid: a Gaussian of the angle with tuned center and width. It is largest on the lower part of the ear contour, because the upper half of an elephant ear is almost always folded back. The angle weight stays at the same angles when the comparator aligns the query.
 
 **Weighted real-valued Jaccard**:
 A similarity of two rows from 0 to 1: the magnitude that the two rows share divided by their combined magnitude, with each bin multiplied by its angle weight. In a bin where both values are positive, or both are negative, the rows share the smaller magnitude. In a bin with opposite signs, the rows share nothing, and both magnitudes count in the combined magnitude. Equal nonzero rows give 1. Rows with no common nonzero bin of the same sign give 0.
@@ -176,7 +202,7 @@ The fixed sample of real sighting ear pairs used to evaluate algorithm performan
 _Avoid_: Evaluation suite, test set
 
 **Parameter-tuning set**:
-The image set on which AlphaPhant's matching parameters, such as the profile stretch exponent, are tuned. It shares no elephant, sighting, or photo with the retrieval benchmark set. Shorten to tuning set in running writing.
+The image set on which AlphaPhant's settings, such as the alpha scales and the temperature, are tuned. It shares no elephant, sighting, or photo with the retrieval benchmark set. Shorten to tuning set in running writing.
 _Avoid_: Validation set, training set
 
 **AI-model training datasets**:
