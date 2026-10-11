@@ -12,13 +12,17 @@ from elephant_id.matching.alphaphant.extraction import AnalyzedEar, TearProfile
 
 @dataclass(frozen=True, slots=True)
 class EarComparatorConfig:
-    """Settings for the comparison grid, the alignments, the shift penalty, the weights, and the side score.
+    """Settings for the comparison grid, the alignments, the shift and stretch penalties, the weights, and the side score.
 
     The gradient channel has the weight `gradient_weight`. The depth channel
     has the weight `1 - gradient_weight`. The angle weight is a Gaussian of
     the grid angle, with its center and its width (standard deviation) in
-    degrees. The side score is the log-mean-exp of the ear similarities, with
-    the temperature `temperature`.
+    degrees. The shift penalty is
+    `exp(-(|shift_bins| / resampled_bins / shift_penalty_scale) ** shift_penalty_power)`.
+    The stretch penalty is
+    `exp(-(|ln stretch| / stretch_penalty_scale) ** stretch_penalty_power)`.
+    The side score is the log-mean-exp of the ear similarities, with
+    temperature `temperature`.
     """
 
     resampled_bins: int = 240
@@ -28,9 +32,9 @@ class EarComparatorConfig:
     max_shift_fraction: float = 0.10
     shift_penalty_scale: float = 0.16
     shift_penalty_power: float = 4.0
-    stretches: tuple[float, ...] = tuple(
-        round(0.8 + index * 0.025, 3) for index in range(17)
-    )
+    stretches: tuple[float, ...] = tuple(1.2 ** (index / 8) for index in range(-8, 9))
+    stretch_penalty_scale: float = 0.32
+    stretch_penalty_power: float = 4.0
     temperature: float = 0.05
 
 
@@ -59,8 +63,11 @@ class EarComparator:
             for stretch in self._config.stretches
             for shift_bins in range(-max_shift_bins, max_shift_bins + 1)
         ]
-        self._shift_penalties = np.array(
-            [self._compute_shift_penalty(shift_bins) for _, shift_bins in self._alignments]
+        self._alignment_penalties = np.array(
+            [
+                self._compute_shift_penalty(shift_bins) * self._compute_stretch_penalty(stretch)
+                for stretch, shift_bins in self._alignments
+            ]
         )
         # A stretch by t divides the gradient by t, and the square root turns 1/t into t ** -0.5.
         self._gradient_stretch_factors = np.array([stretch**-0.5 for stretch, _ in self._alignments])
@@ -83,7 +90,7 @@ class EarComparator:
         1. Calculate the mean weighted real-valued Jaccard of the depth rows,
            and the mean weighted real-valued Jaccard of the gradient rows.
         2. Add the two means, each multiplied by its channel weight.
-        3. Multiply the sum by the shift penalty.
+        3. Multiply the sum by the shift penalty and the stretch penalty.
 
         The ear similarity is the highest result.
 
@@ -193,7 +200,7 @@ class EarComparator:
            weight stays at the grid angles.
         3. For each channel, calculate the mean over the alpha scales.
         4. Add the two channel means, each multiplied by its channel weight.
-        5. Multiply the sum by the shift penalty.
+        5. Multiply the sum by the shift penalty and the stretch penalty.
 
         Column `j` contains the score of alignment `self._alignments[j]`.
 
@@ -231,13 +238,20 @@ class EarComparator:
             axis=0,
         )
         gradient_weight = self._config.gradient_weight
-        return ((1.0 - gradient_weight) * depth_score + gradient_weight * gradient_score) * self._shift_penalties
+        return ((1.0 - gradient_weight) * depth_score + gradient_weight * gradient_score) * self._alignment_penalties
 
     def _compute_shift_penalty(self, shift_bins: int) -> float:
         """Return the shift penalty for a shift of `shift_bins`."""
         shift_fraction = abs(shift_bins) / self._config.resampled_bins
         return float(
             np.exp(-((shift_fraction / self._config.shift_penalty_scale) ** self._config.shift_penalty_power))
+        )
+
+    def _compute_stretch_penalty(self, stretch: float) -> float:
+        """Return the stretch penalty for a stretch of `stretch`. It is the same for `stretch` and `1 / stretch`."""
+        log_stretch = abs(np.log(stretch))
+        return float(
+            np.exp(-((log_stretch / self._config.stretch_penalty_scale) ** self._config.stretch_penalty_power))
         )
 
     def _select_best_alignment(self, scores: np.ndarray) -> EarSimilarity:

@@ -1,5 +1,6 @@
 """Tests for ear similarity and side scores."""
 
+import math
 from uuid import UUID
 
 import numpy as np
@@ -99,7 +100,13 @@ def test_broad_query_stretches_onto_narrow_reference() -> None:
     narrow[310:331] = np.linspace(0.0, 0.08, 21)
     narrow[331:351] = np.linspace(0.08, 0.0, 20)
 
-    similarity = _compare_one(_ear(broad), _ear(narrow), EarComparatorConfig(gradient_weight=0.0))
+    config = EarComparatorConfig(
+        gradient_weight=0.0,
+        stretches=tuple(round(0.8 + index * 0.025, 3) for index in range(17)),
+        stretch_penalty_scale=math.inf,
+    )
+
+    similarity = _compare_one(_ear(broad), _ear(narrow), config)
 
     assert similarity.score == pytest.approx(0.5551403753377685)
     assert similarity.stretch == pytest.approx(0.8)
@@ -155,7 +162,9 @@ def test_aligned_gradient_row_is_the_gradient_of_the_stretched_profile() -> None
     query[360:420] = np.linspace(0.06, 0.0, 60)
     source = (np.arange(720) - 359.5) / stretch + 359.5
     reference = np.interp(source, np.arange(720), query)
-    config = EarComparatorConfig(gradient_weight=1.0, stretches=(stretch,), max_shift_fraction=0)
+    config = EarComparatorConfig(
+        gradient_weight=1.0, stretches=(stretch,), max_shift_fraction=0, stretch_penalty_scale=math.inf
+    )
 
     similarity = _compare_one(_ear(query), _ear(reference), config)
 
@@ -252,6 +261,8 @@ def _brute_force_similarity(
                     (abs(shift / config.resampled_bins) / config.shift_penalty_scale)
                     ** config.shift_penalty_power
                 )
+            ) * np.exp(
+                -((abs(np.log(stretch)) / config.stretch_penalty_scale) ** config.stretch_penalty_power)
             )
             channel_score = (1 - config.gradient_weight) * np.mean(
                 depth_jaccards
@@ -536,7 +547,11 @@ def test_side_score_is_the_log_mean_exp_of_the_ear_similarities() -> None:
 def test_positive_alignment_ties_preserve_configured_search_order() -> None:
     """Equivalent positive alignments keep the first configured stretch."""
     config = EarComparatorConfig(
-        resampled_bins=9, stretches=(1.2, 1.1), max_shift_fraction=0, gradient_weight=0.0
+        resampled_bins=9,
+        stretches=(1.2, 1.1),
+        max_shift_fraction=0,
+        gradient_weight=0.0,
+        stretch_penalty_scale=math.inf,
     )
     similarity = _compare_one(_ear(np.ones(9)), _ear(np.ones(9)), config)
     assert (similarity.score, similarity.stretch, similarity.shift_bins) == (1.0, 1.2, 0)

@@ -137,6 +137,9 @@ _Avoid_: Offset, rotation
 **Shift penalty**:
 A factor from 0 to 1 that decreases as the shift increases. It makes the comparator prefer small shifts.
 
+**Stretch penalty**:
+A factor from 0 to 1 that decreases as `|ln t|` increases, where `t` is the stretch. It is 1 at stretch 1, and it is the same for `t` and `1 / t`. It makes the comparator prefer stretches near 1.
+
 **Angle weight**:
 The importance of each bin of the comparison grid: a Gaussian of the angle with tuned center and width. It is largest on the lower part of the ear contour. The angle weight stays at the same angles when the comparator aligns the query.
 
@@ -145,7 +148,7 @@ A similarity of two rows from 0 to 1: the magnitude that the two rows share divi
 _Avoid_: Overlap, overlap score
 
 **Alignment score**:
-The match quality of a query ear at one alignment against one reference ear: the sum of the channel means, each multiplied by its channel weight, multiplied by the shift penalty. A channel mean is the mean of the weighted real-valued Jaccard similarities of each of the channel's rows.
+The match quality of a query ear at one alignment against one reference ear: the sum of the channel means, each multiplied by its channel weight, multiplied by the shift penalty and the stretch penalty. A channel mean is the mean of the weighted real-valued Jaccard similarities of each of the channel's rows.
 
 **Ear similarity**:
 The highest alignment score of a query ear against one reference ear of the same side, from 0 to 1. The comparator moves only the query, so the similarity is asymmetric. 
