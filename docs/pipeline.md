@@ -31,7 +31,7 @@ SAM3 does ear localization and segmentation. A YOLO keypoint model does ear land
 
 ## Tear-Profile Extraction
 
-AlphaTear makes one tear profile for each configured alpha scale. Each alpha scale is a fraction of the ear radius. The default configuration has three alpha scales: 0.35, 2.0, and 10.0.
+AlphaTear makes one tear profile for each configured alpha scale. Each alpha scale is a fraction of the ear radius. The default configuration has three alpha scales: 0.2, 1.0, and 5.0.
 
 AlphaTear makes the shared geometry one time for each ear:
 
