@@ -79,6 +79,7 @@ def _prepared_ear(side: EarSide = "left") -> PreparedEar:
     return PreparedEar(
         source_photo=PHOTO,
         source_box=BoundingBox(2, 3, 13, 16),
+        image_size=(64, 64),
         contour=contour,
         original_landmarks=((2.2, 3.1), (2.1, 15.2)),
         contour_anchors=((2.0, 3.0), (2.0, 15.0)),
@@ -97,6 +98,7 @@ def _notched_ear() -> PreparedEar:
     return PreparedEar(
         source_photo=PHOTO,
         source_box=BoundingBox(10, 10, 190, 190),
+        image_size=(256, 256),
         contour=contour,
         original_landmarks=((100.0, 20.0), (100.0, 180.0)),
         contour_anchors=((100.0, 20.0), (100.0, 180.0)),

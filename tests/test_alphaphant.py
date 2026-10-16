@@ -92,6 +92,7 @@ class RecordingPreparation:
                 PreparedEar(
                     source_photo=photo,
                     source_box=analyzed.source_box,
+                    image_size=(64, 64),
                     contour=np.asarray([[0.0, 0.0], [2.0, 2.0], [0.0, 4.0]]),
                     original_landmarks=((0.0, 0.0), (0.0, 4.0)),
                     contour_anchors=((0.0, 0.0), (0.0, 4.0)),

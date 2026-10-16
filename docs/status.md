@@ -1,16 +1,24 @@
 # Current Status
 
-AlphaPhant is currently mid-restructure. Sloppy experimental changes were made on `optimized`, and they are now being carefully and deliberately transferred over to `main`. There may be a few documentation mismatches during this period. Consult the user when uncertain.
+AlphaPhant is mid-rebuild. Sloppy experimental changes on `optimized` are being transferred to `main` ticket by ticket. Consult the user when documentation and code disagree.
 
-## Current Pipeline
+## Rebuild
 
-Shared preparation retrieves photos, runs ear segmentation and landmark detection, and resolves both ears. AlphaPhant extracts one signed tear profile per ear, compares corresponding sides, selects each candidate's strongest reference per side, and averages the two scores.
+- Tickets live in `.scratch/alphaphant-rebuild/`; the table in its `README.md` is the source of truth.
+- Done: tickets 01–14. Next: 15 (performance for deployment).
+- Tuning data is `dataset/elephants-alive/benchmark/tuning_final.csv`. It shares no elephant with `benchmark_final.csv`.
+- The method is frozen. Its one benchmark result is `13-frozen-benchmark`: top-1 84.3% (macro 81.8%), MRR 0.881.
+- Ticket 14 ablated the frozen method on the benchmark. The paper tables are in `.scratch/alphaphant-paper-figures/ablations.md`.
+- The current tuning-set checkpoint is `13-retuned` (top-1 87.9%). The comparison point is `optimized-96f6514-tuning-final` (top-1 88.6%). Compare new checkpoints on `tuning_final.csv` only.
+- The AlphaTear producer slug is `alpha-tear-v1`.
 
-SAM3 supplies segmentation. YOLO supplies landmarks. AlphaTear supplies profiles. Standard composition caches inference outputs and extracted profiles. Experimental extraction retains the inference caches.
+## Pipeline
 
-## Code and Documentation
+Shared preparation retrieves photos, runs ear segmentation and landmark detection, and resolves both ears. AlphaPhant extracts one signed tear profile per alpha scale for each ear, computes ear similarities for corresponding sides, takes the log-mean-exp per side as the left score and right score, and averages them into the candidate score.
 
-The core packages are `domain`, `dataset`, `preparation`, `inference`, `matching`, `evaluation`, and `image`.
+SAM3 supplies segmentation. YOLO supplies landmarks. AlphaTear supplies tear profiles.
+
+## Documentation
 
 - [Architecture](architecture.md): ownership, dependencies, and caches.
 - [Pipeline](pipeline.md): extraction and scoring.

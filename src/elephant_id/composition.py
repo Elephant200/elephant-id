@@ -1,4 +1,4 @@
-"""Construct shared preparation and standard or experimental AlphaPhant."""
+"""Construct shared preparation, standard or experimental AlphaPhant, and CurvRank."""
 
 from pathlib import Path
 
@@ -13,6 +13,7 @@ from elephant_id.matching.alphaphant.extraction import (
     AlphaTearExtractor,
 )
 from elephant_id.matching.alphaphant.similarity import EarComparator
+from elephant_id.matching.curvrank import CurvRank
 from elephant_id.preparation import SightingPreparer
 
 
@@ -78,3 +79,15 @@ def build_profile_tuning_alphaphant(
         profile_extractor=AlphaTearExtractor(profile_config),
         ear_comparator=EarComparator(),
     )
+
+
+def build_curvrank(
+    photo_store: PhotoStore,
+    cache_root: Path = Path(DEFAULT_CACHE_ROOT),
+    *,
+    roboflow_api_key: str | None = None,
+) -> CurvRank:
+    """Construct the CurvRank v2 baseline over shared preparation with cached inference."""
+    cache_store = CacheManager(cache_root=cache_root)
+    preparer = build_preparer(photo_store, cache_store, roboflow_api_key=roboflow_api_key)
+    return CurvRank(prepare_ears=preparer.prepare)

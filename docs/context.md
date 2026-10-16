@@ -56,7 +56,7 @@ A known elephant for which a catalog matcher returns a candidate score.
 _Avoid_: Identity decision, automatic identification
 
 **Catalog matcher**:
-A complete retrieval algorithm that compares one sighting ear pair with a candidate catalog and returns one comparable candidate score for every matching candidate. AlphaPhant, CurvRank, and MiewID are catalog matchers.
+A complete retrieval algorithm that compares one sighting ear pair with a candidate catalog and returns one comparable candidate score for every matching candidate. AlphaPhant and the CurvRank v2 baseline are catalog matchers.
 _Avoid_: Candidate scorer
 
 ## AlphaPhant Algorithm

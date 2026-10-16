@@ -85,6 +85,7 @@ class PreparedEar:
 
     source_photo: Photo
     source_box: BoundingBox
+    image_size: tuple[int, int]
     contour: NDArray[np.float64]
     original_landmarks: LandmarkPair
     contour_anchors: LandmarkPair
@@ -145,6 +146,7 @@ def prepare_ear(
     return PreparedEar(
         source_photo=source_photo,
         source_box=source_box,
+        image_size=(width, height),
         contour=contour,
         original_landmarks=original_landmarks,
         contour_anchors=contour_anchors,

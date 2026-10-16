@@ -11,7 +11,7 @@ AlphaPhant accepts a sighting ear pair and a candidate catalog. It returns one f
 | `image` | Encoded-byte decoding to BGR images and shared image geometry |
 | `inference` | Ear segmentation, ear localization, ear landmark detection models |
 | `preparation` | Left/right ear determination and prepared geometry -> contour |
-| `matching` | Shared catalog contract; AlphaPhant analysis, extraction, comparison, and scoring; CurvRank and MiewID implementations |
+| `matching` | Shared catalog contract; AlphaPhant analysis, extraction, comparison, and scoring; the CurvRank v2 baseline |
 | `evaluation` | Benchmark validation, splits, ground truth, failure records, ranks, and metrics |
 
 AlphaPhant receives the preparation callable, neutral sighting pairs, and a candidate catalog. It does not receive the identity-aware Dataset.
@@ -29,14 +29,15 @@ matching/
     similarity.py    EarComparator and EarSimilarity
     cached.py        Profile persistence
     matcher.py       AlphaPhant.analyze and AlphaPhant.match
-composition.py       Construct preparation and AlphaPhant
+  curvrank.py        CurvRank v2 baseline
+composition.py       Construct preparation, AlphaPhant, and CurvRank
 ```
 
 ## Extraction and Scoring
 
 `SightingPreparer.prepare` resolves both ears and returns them in left, right order. When both sides use one Photo, preparation processes it once. Left-side resolution precedes preparation of a distinct right Photo. Both sides must resolve before extraction starts.
 
-`PreparedEar` contains the source Photo, raster box, full-image contour, landmarks, contour anchors, inferred side, and cleaned area. Its contour is finite and read-only. Its area is positive. The landmarks define the polar frame of extraction; the contour anchors are the ends of the contour.
+`PreparedEar` contains the source Photo, raster box, source image size, full-image contour, landmarks, contour anchors, inferred side, and cleaned area. Its contour is finite and read-only. Its area is positive. The landmarks define the polar frame of extraction; the contour anchors are the ends of the contour.
 
 `AlphaPhant.analyze` returns an immutable `AnalyzedSightingEarPair`. It retains the input sighting ID and two `AnalyzedEar` values. Each ear contains its Photo, side, raster box, and one signed `TearProfile` for each alpha scale. Profile depths are finite, one-dimensional, and read-only.
 
