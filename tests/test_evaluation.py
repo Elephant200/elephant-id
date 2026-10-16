@@ -22,12 +22,11 @@ def _uuid(value: int) -> UUID:
     return UUID(f"00000000-0000-4000-8000-{value:012x}")
 
 
-def _dataset(tmp_path: Path) -> Dataset:
-    """Build a small identity-aware Dataset."""
+def _dataset(tmp_path: Path, names: tuple[str, ...] = ("Ada", "Ada", "Bea", "Bea", "Cia")) -> Dataset:
+    """Build a small identity-aware Dataset with one sighting per name, numbered from 101."""
     root = tmp_path / "coded"
     root.mkdir()
     metadata = tmp_path / "images.csv"
-    names = ("Ada", "Ada", "Bea", "Bea", "Cia")
     with metadata.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.writer(handle)
         writer.writerow(("photo_id", "sighting_id", "date", "name", "image_path"))
@@ -58,11 +57,15 @@ def _valid_rows() -> tuple[tuple[object, ...], ...]:
     )
 
 
-def _benchmark(tmp_path: Path, rows: tuple[tuple[object, ...], ...] = _valid_rows()) -> Benchmark:
+def _benchmark(
+    tmp_path: Path,
+    rows: tuple[tuple[object, ...], ...] = _valid_rows(),
+    names: tuple[str, ...] = ("Ada", "Ada", "Bea", "Bea", "Cia"),
+) -> Benchmark:
     """Write and load a benchmark against the small Dataset."""
     path = tmp_path / "benchmark.csv"
     _write_benchmark(path, rows)
-    return load_benchmark(path, _dataset(tmp_path))
+    return load_benchmark(path, _dataset(tmp_path, names))
 
 
 def test_load_benchmark_groups_resolved_pairs_by_elephant(tmp_path: Path) -> None:
@@ -168,8 +171,8 @@ class RankedMatcher:
         return scores
 
 
-def test_result_has_query_weighted_metrics_and_elephant_bootstrap_intervals(tmp_path: Path) -> None:
-    """Point metrics weight queries; bootstrap resampling keeps all queries of each elephant."""
+def test_result_has_micro_and_macro_metrics_and_elephant_bootstrap_intervals(tmp_path: Path) -> None:
+    """Each elephant has two queries, so micro and macro metrics agree; resampling keeps all queries of each elephant."""
     result = evaluate(_benchmark(tmp_path), RankedMatcher)
 
     assert result.metrics == {
@@ -180,21 +183,44 @@ def test_result_has_query_weighted_metrics_and_elephant_bootstrap_intervals(tmp_
         "top_10": pytest.approx(1.0),
         "top_15": pytest.approx(1.0),
         "mrr": pytest.approx(7 / 12),
-        "median_rank": pytest.approx(2.0),
+        "macro_top_1": pytest.approx(0.25),
+        "macro_top_3": pytest.approx(1.0),
+        "macro_top_5": pytest.approx(1.0),
+        "macro_top_10": pytest.approx(1.0),
+        "macro_top_15": pytest.approx(1.0),
+        "macro_mrr": pytest.approx(7 / 12),
     }
     assert result.intervals["top_1"] == pytest.approx((0.0, 0.5))
     assert result.intervals["mrr"] == pytest.approx((0.5, 2 / 3))
-    assert result.intervals["median_rank"] == pytest.approx((2.0, 2.0))
 
 
-def test_median_rank_averages_the_two_middle_ranks(tmp_path: Path) -> None:
-    """An even query count takes the mean of the two middle ranks."""
+def test_macro_metrics_give_each_elephant_equal_weight(tmp_path: Path) -> None:
+    """Macro metrics average each elephant's queries first, so an elephant with more queries does not dominate."""
+    names = ("Ada", "Ada", "Ada", "Bea", "Bea")
+    rows = tuple((name, _uuid(101 + index), _uuid(2 * index + 1), _uuid(2 * index + 2)) for index, name in enumerate(names))
+
+    ada_sightings = {_uuid(101), _uuid(102), _uuid(103)}
 
     @dataclass(frozen=True)
-    class SplitMatcher(RankedMatcher):
-        ranks: ClassVar = {_uuid(101): 1, _uuid(102): 1, _uuid(103): 2, _uuid(104): 3}
+    class AdaFirstMatcher:
+        """Rank Ada's queries first and Bea's queries second."""
 
-    assert evaluate(_benchmark(tmp_path), SplitMatcher).metrics["median_rank"] == pytest.approx(1.5)
+        def match(
+            self,
+            query: SightingEarPair,
+            catalog: Mapping[CandidateKey, tuple[SightingEarPair, ...]],
+        ) -> CandidateScores:
+            """Score the Ada candidate above the Bea candidate."""
+            ada = next(key for key, evidence in catalog.items() if evidence[0].sighting_id in ada_sightings)
+            return {key: 1.0 if key == ada else 0.0 for key in catalog}
+
+    result = evaluate(_benchmark(tmp_path, rows, names), AdaFirstMatcher)
+
+    assert result.metrics["top_1"] == pytest.approx(3 / 5)
+    assert result.metrics["macro_top_1"] == pytest.approx(1 / 2)
+    assert result.metrics["mrr"] == pytest.approx(4 / 5)
+    assert result.metrics["macro_mrr"] == pytest.approx(3 / 4)
+    assert result.intervals["macro_top_1"] == pytest.approx((0.0, 1.0))
 
 
 @dataclass(frozen=True)

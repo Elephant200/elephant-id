@@ -60,12 +60,14 @@ Metrics:
 
 - top-1, top-3, top-5, top-10, and top-15 retrieval rate;
 - mean reciprocal rank;
-- median rank;
 - eligible query count.
 
-All eligible queries have equal weight in the point estimates.
+The retrieval rates and the mean reciprocal rank each have two averages:
 
-The intervals are two-sided 95% percentile bootstrap intervals. The bootstrap uses 100,000 resamples and seed `42`. Each resample selects eligible elephants with replacement and keeps all eligible queries of each selected elephant. To compare two systems, use the same resamples for both.
+- The micro average gives each eligible query equal weight.
+- The macro average, with the prefix `macro_`, calculates the metric over the queries of each eligible elephant, then gives each elephant equal weight. Thus, frequently sighted elephants do not dominate it.
+
+The intervals are two-sided 95% percentile bootstrap intervals. The bootstrap uses 100,000 resamples and seed `42`. Each resample selects eligible elephants with replacement and keeps all eligible queries of each selected elephant. A macro average counts an elephant once for each time the resample selects it. To compare two systems, use the same resamples for both.
 
 ## Evaluation Result
 
