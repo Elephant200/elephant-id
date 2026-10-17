@@ -1,4 +1,4 @@
-"""AlphaPhant analysis and same-side catalog matching."""
+"""Alphaphant analysis and same-side catalog matching."""
 
 from collections.abc import Callable, Mapping
 from functools import cache
@@ -14,7 +14,7 @@ from elephant_id.matching.protocol import CandidateKey, CandidateScores, Matchin
 from elephant_id.preparation import EarSide, PreparedEar
 
 
-class AlphaPhant:
+class Alphaphant:
     """Analyze sighting ear pairs and calculate a candidate score for each candidate."""
 
     def __init__(

@@ -1,4 +1,4 @@
-"""Behavior tests for sighting analysis and AlphaTear values."""
+"""Behavior tests for sighting analysis and tear-profile extraction."""
 
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -18,11 +18,11 @@ from elephant_id.composition import (
 from elephant_id.domain import Photo, SightingEarPair
 from elephant_id.image.boxes import BoundingBox
 from elephant_id.inference import Detection
-from elephant_id.matching.alphaphant import AlphaPhant
+from elephant_id.matching.alphaphant import Alphaphant
 from elephant_id.matching.alphaphant.cached import CachedTearProfileExtractor
 from elephant_id.matching.alphaphant.extraction import (
-    AlphaTearConfig,
-    AlphaTearExtractor,
+    AlphaShapeExtractor,
+    AlphaShapeExtractorConfig,
     AnalyzedEar,
     AnalyzedSightingEarPair,
     TearProfile,
@@ -111,10 +111,10 @@ def test_alpha_tear_returns_one_profile_per_alpha_scale_in_order() -> None:
     """Each tear profile equals the extraction that uses only its alpha scale."""
     ear = _notched_ear()
 
-    small, large = AlphaTearExtractor(AlphaTearConfig(alpha_scales=(0.35, 2.0))).extract(ear)
+    small, large = AlphaShapeExtractor(AlphaShapeExtractorConfig(alpha_scales=(0.35, 2.0))).extract(ear)
 
-    (small_only,) = AlphaTearExtractor(AlphaTearConfig(alpha_scales=(0.35,))).extract(ear)
-    (large_only,) = AlphaTearExtractor(AlphaTearConfig(alpha_scales=(2.0,))).extract(ear)
+    (small_only,) = AlphaShapeExtractor(AlphaShapeExtractorConfig(alpha_scales=(0.35,))).extract(ear)
+    (large_only,) = AlphaShapeExtractor(AlphaShapeExtractorConfig(alpha_scales=(2.0,))).extract(ear)
     np.testing.assert_array_equal(small.depths, small_only.depths)
     np.testing.assert_array_equal(large.depths, large_only.depths)
     assert not np.array_equal(small.depths, large.depths)
@@ -122,7 +122,7 @@ def test_alpha_tear_returns_one_profile_per_alpha_scale_in_order() -> None:
 
 def test_alpha_tear_profiles_state_their_measured_interval() -> None:
     """Each tear profile is measured inside 5° to 175° and is zero outside."""
-    profiles = AlphaTearExtractor(AlphaTearConfig(alpha_scales=(0.35, 2.0))).extract(_notched_ear())
+    profiles = AlphaShapeExtractor(AlphaShapeExtractorConfig(alpha_scales=(0.35, 2.0))).extract(_notched_ear())
 
     for profile in profiles:
         angles = np.linspace(0.0, 180.0, len(profile.depths))
@@ -170,7 +170,7 @@ def test_alpha_tear_config_rejects_missing_or_nonpositive_alpha_scales(
 ) -> None:
     """Extraction needs at least one positive alpha scale."""
     with pytest.raises(ValueError, match="alpha_scales"):
-        AlphaTearConfig(alpha_scales=alpha_scales)
+        AlphaShapeExtractorConfig(alpha_scales=alpha_scales)
 
 
 @dataclass
@@ -297,12 +297,12 @@ def test_composition_caches_only_settled_profile_extraction(tmp_path: Path) -> N
     standard = build_standard_alphaphant(store, cache_root=tmp_path / "standard")
     tuning = build_profile_tuning_alphaphant(
         store,
-        AlphaTearConfig(alpha_scales=(0.4,)),
+        AlphaShapeExtractorConfig(alpha_scales=(0.4,)),
         cache_root=tmp_path / "tuning",
     )
 
     assert isinstance(standard._profile_extractor, CachedTearProfileExtractor)
-    assert isinstance(tuning._profile_extractor, AlphaTearExtractor)
+    assert isinstance(tuning._profile_extractor, AlphaShapeExtractor)
     assert tuning._profile_extractor.producer_slug is None
 
 
@@ -344,7 +344,7 @@ def _landmarks(
 
 
 def test_ear_preparation_preserves_detected_and_snapped_landmarks() -> None:
-    """AlphaTear keeps detector geometry distinct from contour endpoints."""
+    """Extraction keeps detector geometry distinct from contour endpoints."""
     detection = _segmented_rectangle(2, 3, 12, 20)
     original = ((2.4, 3.3), (2.7, 19.2))
 
@@ -493,7 +493,7 @@ def test_alphaphant_analysis_returns_two_source_labelled_profiles() -> None:
         }
     )
     extractor = _ProfileExtractor()
-    analyzer = AlphaPhant(
+    analyzer = Alphaphant(
         prepare_ears=SightingPreparer(
             photo_store=store, ear_segmenter=segmenter, landmark_detector=detector
         ).prepare,
@@ -531,7 +531,7 @@ def test_alphaphant_analysis_prepares_one_photo_once_for_both_sides() -> None:
             right_box: _landmarks((26.0, 3.0), (26.0, 19.0)),
         }
     )
-    analyzer = AlphaPhant(
+    analyzer = Alphaphant(
         prepare_ears=SightingPreparer(
             photo_store=store, ear_segmenter=segmenter, landmark_detector=detector
         ).prepare,
@@ -631,7 +631,7 @@ def test_alphaphant_analysis_preserves_input_order_for_equal_matching_ears() -> 
     first_box = BoundingBox(2, 3, 10, 20)
     second_box = BoundingBox(12, 3, 20, 20)
     right_box = BoundingBox(20, 3, 28, 20)
-    analyzer = AlphaPhant(
+    analyzer = Alphaphant(
         prepare_ears=SightingPreparer(
             photo_store=_PhotoStore(_encoded_image()),
             ear_segmenter=_Segmenter({PHOTO: (first, second), RIGHT_PHOTO: (right,)}),
@@ -654,7 +654,7 @@ def test_alphaphant_analysis_preserves_input_order_for_equal_matching_ears() -> 
 
 def test_alphaphant_analysis_reports_declared_side_and_domain_stage() -> None:
     """A missing declared ear raises an inspectable domain-level failure."""
-    analyzer = AlphaPhant(
+    analyzer = Alphaphant(
         prepare_ears=SightingPreparer(
             photo_store=_PhotoStore(_encoded_image()),
             ear_segmenter=_Segmenter({PHOTO: ()}),
@@ -688,7 +688,7 @@ def test_alphaphant_analysis_wraps_extraction_failure_with_its_cause() -> None:
             """Fail during profile extraction."""
             raise ArithmeticError("synthetic extraction failure")
 
-    analyzer = AlphaPhant(
+    analyzer = Alphaphant(
         prepare_ears=SightingPreparer(
             photo_store=_PhotoStore(_encoded_image()),
             ear_segmenter=_Segmenter({PHOTO: (left,), RIGHT_PHOTO: (right,)}),

@@ -1,6 +1,6 @@
 # Future Application
 
-This document describes how a future application may surround AlphaPhant. **It is not the current implementation target; do not optimize for this yet.** The current research algorithm is defined in [../pipeline.md](../pipeline.md).
+This document describes how a future application may surround Alphaphant. **It is not the current implementation target; do not optimize for this yet.** The current research algorithm is defined in [../pipeline.md](../pipeline.md).
 
 The future application is an evidence-review and identity-decision tool to aid elephant re-ID efforts for conservationists in the field. It uses the shared domain and storage boundaries in [../architecture.md](../architecture.md) without necessarily adopting the research dataset's physical layout.
 
@@ -11,16 +11,16 @@ Research and application differ only before the sighting ear pair exists:
 ```
 research Dataset + PhotoStore
   -> preselected high-quality SightingEarPair
-  -> AlphaPhant
+  -> Alphaphant
 
 future application + its PhotoStore
   -> all Photos from one Sighting
   -> ear selection
   -> SightingEarPair
-  -> AlphaPhant
+  -> Alphaphant
 ```
 
-Given the ear pair, AlphaPhant is fully automated: sighting analysis, tear-profile matching, and candidate scoring. The application derives a descending candidate ranking from those scores. Application-specific import, duplicate handling, heuristics, reviewer correction, and photo-sufficiency decisions remain upstream.
+Given the ear pair, Alphaphant is fully automated: sighting analysis, tear-profile matching, and candidate scoring. The application derives a descending candidate ranking from those scores. Application-specific import, duplicate handling, heuristics, reviewer correction, and photo-sufficiency decisions remain upstream.
 
 ## Core User Journey
 
@@ -29,11 +29,11 @@ Given the ear pair, AlphaPhant is fully automated: sighting analysis, tear-profi
 3. Run ear localization and segmentation across its Photos to produce ear candidates.
 4. Review the analysis package and correct evidence as needed.
 5. Approve a SightingEarPair: one usable left-ear reference Photo and one usable right-ear reference Photo. One Photo may serve both sides.
-6. Run AlphaPhant on the approved ear pair using the application's PhotoStore.
+6. Run Alphaphant on the approved ear pair using the application's PhotoStore.
 7. Compare ranked matching candidates and inspect the left and right reference ears behind each candidate score.
 8. Record an identity decision.
 
-Candidate ranking and identity decision are distinct. AlphaPhant scores known elephants; the application may present those scores as a descending ranking, but it does not decide whether the sighting belongs to an existing individual, should create a new known elephant, or remains unresolved.
+Candidate ranking and identity decision are distinct. Alphaphant scores known elephants; the application may present those scores as a descending ranking, but it does not decide whether the sighting belongs to an existing individual, should create a new known elephant, or remains unresolved.
 
 ## Analysis Package
 
@@ -51,7 +51,7 @@ The analysis package should support:
 - previewing the resulting tear profile beside the crop and overlay;
 - recording whether evidence was manually corrected.
 
-Preview tear profiles during review help the reviewer judge ear selection. After approval, AlphaPhant produces the final tear profiles used for candidate scoring.
+Preview tear profiles during review help the reviewer judge ear selection. After approval, Alphaphant produces the final tear profiles used for candidate scoring.
 
 ## Evidence Review Gate
 
@@ -64,11 +64,11 @@ For the initial application scope, the reviewer must approve both sides:
 
 The same Photo may supply both declared sides. If either side cannot be approved, the Sighting is saved as unresolved. One-sided matching is future work; see [../future.md](../future.md).
 
-After the reviewer changes a selected ear, crop, or segmentation, the application regenerates preview tear profiles from the corrected evidence. AlphaPhant runs only after the SightingEarPair is approved.
+After the reviewer changes a selected ear, crop, or segmentation, the application regenerates preview tear profiles from the corrected evidence. Alphaphant runs only after the SightingEarPair is approved.
 
 ## Candidate Comparison
 
-After AlphaPhant returns candidate scores, the comparison view should present their descending ranking with the query left and right ears beside each candidate's reference ears on the same side. Every reference ear contributes to the left score or the right score, so the view should order each side's reference ears by ear similarity, best first. Aligned tear profiles should be visible so the reviewer can judge whether the similarity is meaningful.
+After Alphaphant returns candidate scores, the comparison view should present their descending ranking with the query left and right ears beside each candidate's reference ears on the same side. Every reference ear contributes to the left score or the right score, so the view should order each side's reference ears by ear similarity, best first. Aligned tear profiles should be visible so the reviewer can judge whether the similarity is meaningful.
 
 The best left reference ear and the best right reference ear of a candidate may come from different reference sightings; the view should show the Photo and the sighting of each reference ear.
 
@@ -117,7 +117,7 @@ The research restructuring does not choose:
 - backup, synchronization, or collaboration;
 - one-sided matching behavior.
 
-These choices should be made from application requirements when that work resumes. They may implement the settled PhotoStore capability differently, but they must enter the shared pipeline through SightingEarPair rather than forking AlphaPhant.
+These choices should be made from application requirements when that work resumes. They may implement the settled PhotoStore capability differently, but they must enter the shared pipeline through SightingEarPair rather than forking Alphaphant.
 
 ## Desktop Surface
 

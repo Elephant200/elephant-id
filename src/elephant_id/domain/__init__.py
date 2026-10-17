@@ -1,4 +1,4 @@
-"""Neutral immutable domain values shared across AlphaPhant."""
+"""Neutral immutable domain values shared across Alphaphant."""
 
 from .photo import Photo
 from .sighting import Sighting, SightingEarPair

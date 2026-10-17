@@ -1,15 +1,15 @@
-"""AlphaTear tear-profile extraction.
+"""Tear-profile extraction with alpha shapes.
 
-AlphaTear makes one tear profile for each alpha scale.
+`AlphaShapeExtractor` makes one tear profile for each alpha scale.
 
-AlphaTear makes the shared geometry one time for each ear:
+The extractor makes the shared geometry one time for each ear:
 
 1. Resample the ear contour to equal arc-length spacing.
 2. Calculate the ear radius from the cleaned ear area.
 3. Open the resampled contour morphologically.
 4. Make one polar ray for each angle in the measured interval.
 
-AlphaTear then does these steps for each alpha scale:
+The extractor then does these steps for each alpha scale:
 
 5. Build the alpha shape of the opened contour.
 6. Find the intersection of each polar ray with the alpha-shape boundary
@@ -46,7 +46,7 @@ class TearProfile:
     Each depth is a fraction of the ear radius. A positive depth shows a tear
     whose ear contour is inside the alpha shape.
 
-    AlphaTear measures the depths in the measured interval, from
+    Extraction measures the depths in the measured interval, from
     `start_degrees` to `end_degrees`, both ends excluded. The depths outside
     the measured interval are zero.
 
@@ -85,7 +85,7 @@ class AnalyzedEar:
 
 @dataclass(frozen=True, slots=True)
 class AnalyzedSightingEarPair:
-    """The AlphaPhant-analyzed counterpart of a SightingEarPair."""
+    """The Alphaphant-analyzed counterpart of a SightingEarPair."""
 
     sighting_id: UUID
     left: AnalyzedEar
@@ -111,8 +111,8 @@ class TearProfileExtractor(Protocol):
 
 
 @dataclass(frozen=True, slots=True)
-class AlphaTearConfig:
-    """Settings for AlphaTear geometry and sampling.
+class AlphaShapeExtractorConfig:
+    """Settings for alpha-shape extraction geometry and sampling.
 
     The measured interval is from `trim_degrees` to `180 - trim_degrees`.
 
@@ -132,38 +132,38 @@ class AlphaTearConfig:
     def __post_init__(self) -> None:
         """Validate the public research parameters."""
         if self.contour_points <= 1 or self.profile_bins <= 1:
-            raise ValueError("AlphaTear sampling counts must be greater than one")
+            raise ValueError("Extraction sampling counts must be greater than one")
         if not 0 <= self.trim_degrees < 90:
             raise ValueError("trim_degrees must be in [0, 90)")
         if not self.alpha_scales or min(self.alpha_scales) <= 0:
             raise ValueError("alpha_scales must contain at least one alpha scale, and each must be positive")
         if self.morph_opening_fraction < 0 or self.smoothing_sigma < 0:
-            raise ValueError("AlphaTear smoothing parameters must be non-negative")
+            raise ValueError("Extraction smoothing parameters must be non-negative")
 
 
 @dataclass(frozen=True, slots=True)
-class AlphaTearVersion:
-    """One settled AlphaTear configuration and its stable producer slug."""
+class AlphaShapeExtractorVersion:
+    """One settled extractor configuration and its stable producer slug."""
 
     slug: str
-    config: AlphaTearConfig
+    config: AlphaShapeExtractorConfig
 
 
-DEFAULT_VERSION = AlphaTearVersion(
+DEFAULT_VERSION = AlphaShapeExtractorVersion(
     slug="alpha-tear-v1",
-    config=AlphaTearConfig(),
+    config=AlphaShapeExtractorConfig(),
 )
 
 
-class AlphaTearExtractor:
-    """Extract normalized tear profiles with AlphaTear."""
+class AlphaShapeExtractor:
+    """Extract normalized tear profiles with alpha shapes."""
 
     def __init__(
         self,
-        configuration: AlphaTearConfig | AlphaTearVersion,
+        configuration: AlphaShapeExtractorConfig | AlphaShapeExtractorVersion,
     ) -> None:
         """Configure settled or experimental extraction."""
-        if isinstance(configuration, AlphaTearVersion):
+        if isinstance(configuration, AlphaShapeExtractorVersion):
             self._config = configuration.config
             self._producer_slug: str | None = configuration.slug
         else:

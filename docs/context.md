@@ -1,4 +1,4 @@
-# AlphaPhant Context
+# Alphaphant Context
 
 This glossary is the primary source for domain and technical language.
 
@@ -56,10 +56,10 @@ A known elephant for which a catalog matcher returns a candidate score.
 _Avoid_: Identity decision, automatic identification
 
 **Catalog matcher**:
-A complete retrieval algorithm that compares one sighting ear pair with a candidate catalog and returns one comparable candidate score for every matching candidate. AlphaPhant and the CurvRank v2 baseline are catalog matchers.
+A complete retrieval algorithm that compares one sighting ear pair with a candidate catalog and returns one comparable candidate score for every matching candidate. Alphaphant and the CurvRank v2 baseline are catalog matchers.
 _Avoid_: Candidate scorer
 
-## AlphaPhant Algorithm
+## Alphaphant Algorithm
 
 **Sighting analysis**:
 The processing of a sighting ear pair into left- and right-ear tear profiles for catalog matching.
@@ -105,59 +105,56 @@ The radius of the disc that builds an alpha shape, as a fraction of the ear radi
 The geometric reference constructed from an ear contour during tear-profile extraction using a given alpha scale as the scale parameter.
 _Avoid_: Alpha hull
 
-**AlphaTear**:
-The current tear-profile extraction algorithm. It uses an alpha shape as a geometric reference to locate and measure tears along a prepared ear contour.
-_Avoid_: AlphaPhant (when referring only to extraction)
-
-**AlphaPhant**:
+**Alphaphant**:
 The project's complete catalog-matching algorithm, which extracts analyzed ears from a sighting ear pair, compares its tear profiles with those of the reference sightings, and returns candidate scores.
-_Avoid_: AlphaTear (when referring to matching)
 
 **Producer slug**:
-The name of one producer of cached output, such as a model or an AlphaTear configuration, for example `alpha-tear-v1`. The slug identifies all settings that affect the output, so an output change requires a new slug.
+The name of one producer of cached output, such as a model or a tear-profile extraction configuration, for example `alpha-tear-v1`. The slug identifies all settings that affect the output, so an output change requires a new slug.
 
 **Tear profile**:
 The depths of one ear at one alpha scale, at uniform angles from 0° to 180°. Each tear profile also contains its measured interval.
 _Avoid_: Tear signature, embedding when referring to the current algorithm
 
 **Measured interval**:
-The angles at which AlphaTear measures depths: 5° to 175°, both ends excluded. The measured interval excludes the angles near the landmarks to reduce noise. The depths outside the measured interval are zero.
+The angles at which tear-profile extraction measures depths: 5° to 175°, both ends excluded. The measured interval excludes the angles near the landmarks to reduce noise. The depths outside the measured interval are zero.
 
 **Depth**:
-The distance from the alpha-shape boundary to the ear contour, divided by the ear radius. AlphaTear measures the distance inward. A positive depth shows a tear: the contour is inside the alpha shape. A negative depth shows that the contour is outside the alpha shape.
+The distance from the alpha-shape boundary to the ear contour, divided by the ear radius. Tear-profile extraction measures the distance inward. A positive depth shows a tear: the contour is inside the alpha shape. A negative depth shows that the contour is outside the alpha shape.
 
 **Ear radius**:
 The radius of a half-disc that has the same area as the ear. Depths are fractions of the ear radius. Thus, ears of different image sizes have comparable depths.
 
 **Tear-profile extraction**:
-The transformation of a prepared ear contour into one tear profile for each alpha scale. AlphaTear is the current extraction algorithm.
+The transformation of a prepared ear contour into one tear profile for each alpha scale. It uses an alpha shape as a geometric reference to locate and measure tears along the contour.
 _Avoid_: Tear-signature extraction
 
 **Comparison grid**:
-The uniform angles from 0° to 180° that the comparator uses. Each angle is one bin. Each row has one value in each bin.
-
-**Depth row**:
-A tear profile that is ready for comparison after steps such as resampling and negative-depth clipping.
-_Avoid_: Comparison row
-
-**Gradient row**:
-The rate of change of a tear profile's clipped depth along the angles, ready for comparison. Each value is the square root of the magnitude, with the sign kept. It is positive where a tear begins and negative where a tear ends. It is zero outside the measured interval.
+The uniform angles from 0° to 180° that the comparator uses. Each angle is one bin. Each channel has one value in each bin.
 
 **Channel**:
-One kind of row. The depth channel contains the depth rows of an ear, one for each alpha scale. The gradient channel contains the gradient rows.
+One vector of values on the comparison grid, for one alpha scale. Each ear has six channels: one depth channel and one gradient channel for each alpha scale.
+_Avoid_: Row
+
+**Depth channel**:
+A tear profile that is ready for comparison after steps such as resampling and negative-depth clipping.
+_Avoid_: Depth row, comparison row
+
+**Gradient channel**:
+The rate of change of a tear profile's clipped depth along the angles, ready for comparison. Each value is the square root of the magnitude, with the sign kept. It is positive where a tear begins and negative where a tear ends. It is zero outside the measured interval.
+_Avoid_: Gradient row
 
 **Channel weight**:
-The part of the alignment score that one channel supplies. The two channel weights add to 1.
+The part of the alignment score that the depth channels or the gradient channels supply. The two channel weights add to 1.
 
 **Alignment**:
-One stretch and one shift. The comparator applies the same alignment to all rows of the query ear. The comparator moves only the query ear.
+One stretch and one shift. The comparator applies the same alignment to all channels of the query ear. The comparator moves only the query ear.
 _Avoid_: Variant, transform
 
 **Stretch**:
-A scale factor for a query row. The comparator stretches the row about the center of the comparison grid. A stretch above 1 makes the row wider. A stretch below 1 makes the row narrower.
+A scale factor for a query channel. The comparator stretches the channel about the center of the comparison grid. A stretch above 1 makes the channel wider. A stretch below 1 makes the channel narrower.
 
 **Shift**:
-A movement of a query row along the comparison grid, in whole bins. A positive shift moves the row to larger angles. A negative shift moves the row to smaller angles.
+A movement of a query channel along the comparison grid, in whole bins. A positive shift moves the channel to larger angles. A negative shift moves the channel to smaller angles.
 _Avoid_: Offset, rotation
 
 **Shift penalty**:
@@ -170,11 +167,11 @@ A factor from 0 to 1 that decreases as `|ln t|` increases, where `t` is the stre
 The importance of each bin of the comparison grid: a Gaussian of the angle with tuned center and width. It is largest on the lower part of the ear contour, because the upper half of an elephant ear is almost always folded back. The angle weight stays at the same angles when the comparator aligns the query.
 
 **Weighted real-valued Jaccard**:
-A similarity of two rows from 0 to 1: the magnitude that the two rows share divided by their combined magnitude, with each bin multiplied by its angle weight. In a bin where both values are positive, or both are negative, the rows share the smaller magnitude. In a bin with opposite signs, the rows share nothing, and both magnitudes count in the combined magnitude. Equal nonzero rows give 1. Rows with no common nonzero bin of the same sign give 0.
+A similarity of two channels from 0 to 1: the magnitude that the two channels share divided by their combined magnitude, with each bin multiplied by its angle weight. In a bin where both values are positive, or both are negative, the channels share the smaller magnitude. In a bin with opposite signs, the channels share nothing, and both magnitudes count in the combined magnitude. Equal nonzero channels give 1. Channels with no common nonzero bin of the same sign give 0.
 _Avoid_: Overlap, overlap score
 
 **Alignment score**:
-The match quality of a query ear at one alignment against one reference ear: the sum of the channel means, each multiplied by its channel weight, multiplied by the shift penalty and the stretch penalty. A channel mean is the mean of the weighted real-valued Jaccard similarities of each of the channel's rows.
+The match quality of a query ear at one alignment against one reference ear: the sum of the channel means, each multiplied by its channel weight, multiplied by the shift penalty and the stretch penalty. There are two channel means: the mean weighted real-valued Jaccard similarity of the depth channels, and the same mean for the gradient channels.
 
 **Ear similarity**:
 The highest alignment score of a query ear against one reference ear of the same side, from 0 to 1. The comparator moves only the query, so the similarity is asymmetric. 
@@ -202,11 +199,11 @@ The fixed sample of real sighting ear pairs used to evaluate algorithm performan
 _Avoid_: Evaluation suite, test set
 
 **Parameter-tuning set**:
-The image set on which AlphaPhant's settings, such as the alpha scales and the temperature, are tuned. It shares no elephant, sighting, or photo with the retrieval benchmark set. Shorten to tuning set in running writing.
+The image set on which Alphaphant's settings, such as the alpha scales and the temperature, are tuned. It shares no elephant, sighting, or photo with the retrieval benchmark set. Shorten to tuning set in running writing.
 _Avoid_: Validation set, training set
 
 **AI-model training datasets**:
-The ear-segmentation and landmark models use their own train, validation, and test splits. Elephants included here are disjoint from those used in the tuning and benchmark sets. Note that the AlphaPhant algorithm itself has no training phase and tunes its parameters on the parameter-tuning set.
+The ear-segmentation and landmark models use their own train, validation, and test splits. Elephants included here are disjoint from those used in the tuning and benchmark sets. Note that the Alphaphant algorithm itself has no training phase and tunes its parameters on the parameter-tuning set.
 
 **Retrieval evaluation**:
 End-to-end estimation of how a complete retrieval system ranks the correct known elephant for previously unseen elephants and sightings from the target deployment population. Measures statistics such as top-k accuracies and MRR.

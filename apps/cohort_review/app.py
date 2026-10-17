@@ -342,7 +342,7 @@ def main() -> None:
 
 _PAGE = r'''<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>AlphaPhant sighting pair review</title><style>
+<title>Alphaphant sighting pair review</title><style>
 :root{color-scheme:dark;--ink:#f4f0e7;--muted:#a7afa9;--line:#38423d;--accent:#d8a85e;--panel:#18201c}
 *{box-sizing:border-box}body{margin:0;background:#101512;color:var(--ink);font:16px/1.45 system-ui,sans-serif}
 header{position:sticky;top:0;z-index:4;display:flex;align-items:center;gap:16px;min-height:72px;padding:12px 22px;background:#101512ee;border-bottom:1px solid var(--line);backdrop-filter:blur(8px)}
@@ -354,7 +354,7 @@ main{max-width:2240px;margin:auto;padding:0 24px 90px;display:grid;grid-template
 @media(max-width:650px){header{flex-wrap:wrap}.meta{order:3;flex-basis:100%}main{padding-inline:10px;column-gap:24px}.choose img,.choose.unavailable{min-height:300px}}
 </style></head><body><header><button id="back">← Back</button><button id="forward">Forward →</button><div><h1 id="title">Loading review…</h1><div class="meta" id="meta"></div></div><div class="meta"></div><div class="progress" id="progress"></div><button id="reject">Reject sighting</button><a class="nav" href="/approved">Approved pairs</a><a class="nav" href="/audit">Audit</a><a class="nav review-only" id="export" href="/api/export" target="_blank" download>Backup</a><button class="review-only" id="restore">Restore</button><input id="restore-file" type="file" accept="application/json" hidden></header><div id="error"></div><main id="content"></main>
 <script>
-'use strict';const $=id=>document.getElementById(id),MODE='__MODE__',API=MODE==='replace'?'/replace/api':'/api';let busy=false,scrollTimer,current=null;if(MODE==='replace'){document.title='AlphaPhant flagged pair replacement';document.querySelectorAll('.review-only').forEach(x=>x.hidden=true)}
+'use strict';const $=id=>document.getElementById(id),MODE='__MODE__',API=MODE==='replace'?'/replace/api':'/api';let busy=false,scrollTimer,current=null;if(MODE==='replace'){document.title='Alphaphant flagged pair replacement';document.querySelectorAll('.review-only').forEach(x=>x.hidden=true)}
 async function call(path,body={}){if(busy)return;clearTimeout(scrollTimer);busy=true;document.querySelectorAll('button').forEach(x=>x.disabled=true);$('error').style.display='none';try{const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),data=await r.json();if(!r.ok)throw Error(data.error||'Save failed');render(data)}catch(e){$('error').textContent=`Not saved: ${e.message}`;$('error').style.display='block'}finally{busy=false;document.querySelectorAll('button:not(.choose),button.choose.loaded').forEach(x=>x.disabled=!!x.dataset.off)}}
 function render(s){current=s;$('forward').dataset.off=s.can_forward?'':'1';$('forward').disabled=!s.can_forward;const replacing=MODE==='replace';if(s.status==='complete'){$('title').textContent=replacing?'Replace queue complete':'Review queue complete';$('meta').textContent=replacing?'Every flagged sighting is re-picked or rejected.':'All active score 10, 9, and 8 sightings are decided.';$('progress').textContent=replacing?`Resolved ${s.progress.resolved} / ${s.progress.flagged}`:`Elephants ${s.progress.elephants_complete} / ${s.progress.elephants_total} · Sightings ${s.progress.sightings_processed} / ${s.progress.sightings_target}`;$('reject').hidden=true;$('content').innerHTML='<section class="empty"><h2>Queue complete</h2><p>Your accepted pairs are saved. Back remains available for revisions.</p></section>';return}$('reject').hidden=false;$('title').textContent=`${s.elephant} · ${s.sighting_date||"Date unavailable"} · ${s.side} ear`;const action=`${s.candidates.length} assessed candidates · click an image to ${s.side==='left'?'continue':'save pair'}`;const p=s.progress;if(replacing){$('meta').textContent=[s.reason&&`Flagged: ${s.reason}`,s.resolution&&`already ${s.resolution}`,action].filter(Boolean).join(' · ');$('progress').textContent=`Resolved ${p.resolved} / ${p.flagged}`}else{$('meta').textContent=`Proposed tier ${s.tier} · ${action}`;$('progress').textContent=`Elephant ${p.elephant_processed} / ${p.elephant_usable} · ${p.elephant_accepted} / 10 accepted · Elephants ${p.elephants_complete} / ${p.elephants_total} · Sightings ${p.sightings_processed} / ${p.sightings_target}`}
 current=s;let html='';for(const[i,c]of s.candidates.entries()){html+=`<article data-score="${c.score}" class="candidate ${c.crop_key===s.selected_crop_key?'selected':''}"><button class="choose ${c.available?'':'unavailable'}" data-key="${c.crop_key}" disabled><span class="number">${i+1}</span>${c.available?`<img src="${c.crop_path}" alt="${s.side} ear candidate, score ${c.score}" loading="lazy">`:'Image unavailable'}</button></article>`}$('content').innerHTML=html+'<svg class="score-dividers" aria-hidden="true"></svg>';drawDividers();document.querySelectorAll('.choose').forEach(x=>{const img=x.querySelector('img');if(img){img.onload=()=>{x.classList.add('loaded');if(!busy)x.disabled=false};img.onerror=()=>{x.classList.add('unavailable');x.textContent='Image unavailable'}}x.onclick=()=>call(API+'/select',{crop_key:x.dataset.key})});requestAnimationFrame(()=>scrollTo(0,s.scroll_y||0))}
@@ -365,7 +365,7 @@ $('back').onclick=()=>call(API+'/back');$('forward').onclick=()=>call(API+'/forw
 
 _APPROVED_PAGE = r'''<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>AlphaPhant approved pairs</title><style>
+<title>Alphaphant approved pairs</title><style>
 :root{color-scheme:dark;--ink:#f4f0e7;--muted:#a7afa9;--line:#38423d;--accent:#d8a85e;--panel:#18201c}
 *{box-sizing:border-box}body{margin:0;background:#101512;color:var(--ink);font:16px/1.45 system-ui,sans-serif}
 header{position:sticky;top:0;z-index:4;display:flex;align-items:center;gap:16px;min-height:72px;padding:12px 22px;background:#101512ee;border-bottom:1px solid var(--line);backdrop-filter:blur(8px)}
@@ -385,7 +385,7 @@ fetch('/api/approved').then(r=>r.json()).then(pairs=>{const groups=new Map;for(c
 
 _AUDIT_PAGE = r'''<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>AlphaPhant pair audit</title><style>
+<title>Alphaphant pair audit</title><style>
 :root{color-scheme:dark;--ink:#f4f0e7;--muted:#a7afa9;--line:#38423d;--accent:#d8a85e;--panel:#18201c;--flag:#e0604f}
 *{box-sizing:border-box}body{margin:0;background:#101512;color:var(--ink);font:16px/1.45 system-ui,sans-serif}
 header{position:sticky;top:0;z-index:4;display:flex;flex-wrap:wrap;align-items:center;gap:12px 16px;min-height:72px;padding:12px 22px;background:#101512ee;border-bottom:1px solid var(--line);backdrop-filter:blur(8px)}

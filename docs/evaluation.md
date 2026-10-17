@@ -78,6 +78,6 @@ The intervals are two-sided 95% percentile bootstrap intervals. The bootstrap us
 
 ## Entry Point
 
-`uv run eval [path] [--matcher {alphaphant,curvrank}] [--workers N]` builds standard AlphaPhant, or the CurvRank v2 baseline with `--matcher curvrank`, and evaluates `benchmark_final.csv` or the given file. By default, it uses one worker for each CPU core. It prints the metrics and intervals.
+`uv run eval [path] [--matcher {alphaphant,curvrank}] [--workers N]` builds standard Alphaphant, or the CurvRank v2 baseline with `--matcher curvrank`, and evaluates `benchmark_final.csv` or the given file. By default, it uses one worker for each CPU core. It prints the metrics and intervals.
 
 Related decisions: [ADR 0005](adr/0005-separate-retrieval-evaluation-from-implementation.md), [ADR 0007](adr/0007-pin-evaluation-by-git-commit.md), [ADR 0008](adr/0008-use-permanent-opaque-photo-identity.md), [ADR 0010](adr/0010-cache-reusable-processing-through-composition.md).

@@ -1,4 +1,4 @@
-"""Tests for the public AlphaPhant catalog-matching seam."""
+"""Tests for the public Alphaphant catalog-matching seam."""
 
 import math
 from collections.abc import Mapping
@@ -12,7 +12,7 @@ import elephant_id.matching as public_matching
 from elephant_id.domain import Photo, SightingEarPair
 from elephant_id.image.boxes import BoundingBox
 from elephant_id.matching import CandidateKey, CandidateScores, CatalogMatcher
-from elephant_id.matching.alphaphant import AlphaPhant
+from elephant_id.matching.alphaphant import Alphaphant
 from elephant_id.matching.alphaphant.extraction import (
     AnalyzedEar,
     AnalyzedSightingEarPair,
@@ -109,11 +109,11 @@ class RecordingPreparation:
 
 def _alphaphant(
     analyses: Mapping[SightingEarPair, AnalyzedSightingEarPair],
-) -> tuple[AlphaPhant, RecordingPreparation]:
-    """Compose actual AlphaPhant orchestration with controlled numerical inputs."""
+) -> tuple[Alphaphant, RecordingPreparation]:
+    """Compose actual Alphaphant orchestration with controlled numerical inputs."""
     preparation = RecordingPreparation(analyses)
     return (
-        AlphaPhant(
+        Alphaphant(
             prepare_ears=preparation.prepare,
             profile_extractor=preparation,
             ear_comparator=EarComparator(),
@@ -138,7 +138,7 @@ class ScriptedCatalogMatcher:
 
 
 def test_scripted_matcher_satisfies_public_catalog_matcher_seam() -> None:
-    """Evaluation-style consumers need no AlphaPhant implementation details."""
+    """Evaluation-style consumers need no Alphaphant implementation details."""
     query = _pair(10)
     candidate_key = CandidateKey(_uuid(100))
     catalog = {candidate_key: (_pair(20),)}
@@ -148,7 +148,7 @@ def test_scripted_matcher_satisfies_public_catalog_matcher_seam() -> None:
 
 
 def test_alphaphant_analyzes_neutral_catalog_and_returns_candidate_scores() -> None:
-    """AlphaPhant hides analysis and projects authoritative catalog scores."""
+    """Alphaphant hides analysis and projects authoritative catalog scores."""
     query = _pair(10)
     strong_evidence = _pair(20)
     alternate_evidence = _pair(30)

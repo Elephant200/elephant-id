@@ -1,4 +1,4 @@
-"""Neutral photo identity shared across AlphaPhant."""
+"""Neutral photo identity shared across Alphaphant."""
 
 from dataclasses import dataclass
 from uuid import UUID

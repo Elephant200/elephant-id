@@ -2,7 +2,7 @@
 
 ## Project
 
-AlphaPhant matches one sighting ear pair against a known-elephant catalog and returns one similarity score per known elephant.
+Alphaphant matches one sighting ear pair against a known-elephant catalog and returns one similarity score per known elephant.
 
 ## Start Here
 
@@ -31,7 +31,7 @@ Change files with your harness's file tools: Edit/Write in Claude Code, `apply_p
 
 ## Active Architecture
 
-Keep interfaces narrow and justified by current variation. Research supplies a sighting ear pair directly; future application ear selection remains upstream of the shared AlphaPhant pipeline.
+Keep interfaces narrow and justified by current variation. Research supplies a sighting ear pair directly; future application ear selection remains upstream of the shared Alphaphant pipeline.
 
 ## Python Style
 

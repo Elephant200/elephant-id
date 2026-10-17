@@ -1,4 +1,4 @@
-"""The canonical in-memory image type and decode boundary for AlphaPhant.
+"""The canonical in-memory image type and decode boundary for Alphaphant.
 
 A `BgrImage` is an OpenCV-native image array: HWC layout, 3 channels
 in BGR order, and uint8 dtype. The alias is unchecked; arrays enter the

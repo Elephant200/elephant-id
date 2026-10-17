@@ -1,1 +1,1 @@
-"""AlphaPhant candidate ranking for elephant re-identification."""
+"""Alphaphant candidate ranking for elephant re-identification."""

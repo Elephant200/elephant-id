@@ -29,7 +29,7 @@ def _ear(*depths: np.ndarray) -> AnalyzedEar:
         _PHOTO,
         "left",
         BoundingBox(0, 0, 4, 4),
-        tuple(TearProfile(row, start_degrees=5.0, end_degrees=175.0) for row in depths),
+        tuple(TearProfile(depths_at_scale, start_degrees=5.0, end_degrees=175.0) for depths_at_scale in depths),
     )
 
 
@@ -122,38 +122,38 @@ def _measured_ramp(slope: float, bins: int = 720) -> np.ndarray:
     return depths
 
 
-def test_gradient_row_of_a_linear_profile_is_constant_inside_the_measured_interval() -> None:
-    """The gradient row has no step at 5° or 175°, and it is zero outside the measured interval."""
+def test_gradient_channel_of_a_linear_profile_is_constant_inside_the_measured_interval() -> None:
+    """The gradient channel has no step at 5° or 175°, and it is zero outside the measured interval."""
     profile = _measured_ramp(slope=0.0004)
     comparator = EarComparator(EarComparatorConfig(resampled_bins=720))
 
-    (row,) = comparator._build_gradient_rows((TearProfile(profile, 5.0, 175.0),))
+    (channel,) = comparator._build_gradient_channels((TearProfile(profile, 5.0, 175.0),))
 
     measured = profile != 0.0
-    np.testing.assert_allclose(row[measured], np.sqrt(0.0004), rtol=1e-12)
-    assert np.all(row[~measured] == 0.0)
+    np.testing.assert_allclose(channel[measured], np.sqrt(0.0004), rtol=1e-12)
+    assert np.all(channel[~measured] == 0.0)
 
 
-def test_gradient_row_ignores_negative_depths() -> None:
-    """The gradient row is the gradient of the clipped depth, so a dip below zero leaves no trace."""
+def test_gradient_channel_ignores_negative_depths() -> None:
+    """The gradient channel is the gradient of the clipped depth, so a dip below zero leaves no trace."""
     clipped = np.zeros(720)
     clipped[300:400] = 0.05
     signed = clipped.copy()
     signed[100:200] = -0.05
     comparator = EarComparator()
 
-    (from_signed,) = comparator._build_gradient_rows((TearProfile(signed, 5.0, 175.0),))
-    (from_clipped,) = comparator._build_gradient_rows((TearProfile(clipped, 5.0, 175.0),))
+    (from_signed,) = comparator._build_gradient_channels((TearProfile(signed, 5.0, 175.0),))
+    (from_clipped,) = comparator._build_gradient_channels((TearProfile(clipped, 5.0, 175.0),))
 
     np.testing.assert_array_equal(from_signed, from_clipped)
     assert np.any(from_signed > 0) and np.any(from_signed < 0)
 
 
-def test_aligned_gradient_row_is_the_gradient_of_the_stretched_profile() -> None:
-    """Under stretch `t`, the aligned query gradient row is scaled by `t ** -0.5`.
+def test_aligned_gradient_channel_is_the_gradient_of_the_stretched_profile() -> None:
+    """Under stretch `t`, the aligned query gradient channel is scaled by `t ** -0.5`.
 
     The reference is the query profile stretched by 1.25 about 90°, so its
-    gradient is 1/1.25 as steep. Without the factor, the gradient rows would
+    gradient is 1/1.25 as steep. Without the factor, the gradient channels would
     score about `1.25 ** -0.5`, which is 0.89.
     """
     stretch = 1.25
@@ -171,13 +171,13 @@ def test_aligned_gradient_row_is_the_gradient_of_the_stretched_profile() -> None
     assert similarity.score == pytest.approx(1.0, abs=0.02)
 
 
-def _depth_row(profile: np.ndarray, config: EarComparatorConfig) -> np.ndarray:
-    """Return the depth row of one profile."""
+def _depth_channel(profile: np.ndarray, config: EarComparatorConfig) -> np.ndarray:
+    """Return the depth channel of one profile."""
     depths = np.sqrt(np.maximum(np.asarray(profile, dtype=np.float64), 0.0))
     return _resample(depths, config)
 
 
-def _gradient_row(profile: np.ndarray, config: EarComparatorConfig) -> np.ndarray:
+def _gradient_channel(profile: np.ndarray, config: EarComparatorConfig) -> np.ndarray:
     """Return the compressed gradient of the clipped depth inside 5° to 175°, resampled to the grid."""
     angles = np.linspace(0.0, 180.0, len(profile))
     measured = (angles > 5.0) & (angles < 175.0)
@@ -193,11 +193,11 @@ def _resample(values: np.ndarray, config: EarComparatorConfig) -> np.ndarray:
     )
 
 
-def _aligned(row: np.ndarray, stretch: float, shift: int) -> np.ndarray:
-    """Return the row stretched about its center and shifted, with explicit zero padding."""
-    bins = len(row)
+def _aligned(channel: np.ndarray, stretch: float, shift: int) -> np.ndarray:
+    """Return the channel stretched about its center and shifted, with explicit zero padding."""
+    bins = len(channel)
     source = ((np.linspace(0, 1, bins) - 0.5) / stretch + 0.5) * (bins - 1)
-    stretched = np.interp(source, np.arange(bins), row, left=0, right=0)
+    stretched = np.interp(source, np.arange(bins), channel, left=0, right=0)
     shifted = np.zeros_like(stretched)
     if abs(shift) < len(shifted):
         if shift >= 0:
@@ -217,9 +217,9 @@ def _angle_weights(config: EarComparatorConfig) -> np.ndarray:
 
 
 def _jaccard(query: np.ndarray, reference: np.ndarray, weights: np.ndarray) -> float:
-    """Return the weighted real-valued Jaccard of two rows from their positive and negative parts.
+    """Return the weighted real-valued Jaccard of two channels from their positive and negative parts.
 
-    The value is zero for two empty rows.
+    The value is zero for two empty channels.
     """
     shared = np.minimum(np.maximum(query, 0), np.maximum(reference, 0)) + np.minimum(
         np.maximum(-query, 0), np.maximum(-reference, 0)
@@ -244,14 +244,14 @@ def _brute_force_similarity(
         for shift in range(-max_shift, max_shift + 1):
             depth_jaccards = [
                 _jaccard(
-                    _aligned(_depth_row(q, config), stretch, shift), _depth_row(r, config), weights
+                    _aligned(_depth_channel(q, config), stretch, shift), _depth_channel(r, config), weights
                 )
                 for q, r in zip(query, reference, strict=True)
             ]
             gradient_jaccards = [
                 _jaccard(
-                    stretch**-0.5 * _aligned(_gradient_row(q, config), stretch, shift),
-                    _gradient_row(r, config),
+                    stretch**-0.5 * _aligned(_gradient_channel(q, config), stretch, shift),
+                    _gradient_channel(r, config),
                     weights,
                 )
                 for q, r in zip(query, reference, strict=True)
@@ -323,7 +323,7 @@ def test_profiles_of_unequal_length_are_rejected(
 
 
 def _triangle(center: int, half_width: int, bins: int = 24) -> np.ndarray:
-    """Return a tear whose depth row is a unit-height triangle centered on one bin."""
+    """Return a tear whose depth channel is a unit-height triangle centered on one bin."""
     return np.maximum(0.0, 1.0 - np.abs(np.arange(bins) - center) / half_width) ** 2
 
 
@@ -361,7 +361,7 @@ def _random_tears(rng: np.random.Generator, bins: int = 240) -> np.ndarray:
     return profile
 
 
-def test_depth_and_gradient_rows_share_the_alignment_that_maximizes_their_sum() -> None:
+def test_depth_and_gradient_channels_share_the_alignment_that_maximizes_their_sum() -> None:
     """Channels that disagree on alignment get one shared stretch and shift."""
     rng = np.random.default_rng(50)
     query, reference = _ear(_random_tears(rng)), _ear(_random_tears(rng))
@@ -404,26 +404,26 @@ def test_ears_with_different_alpha_scale_counts_are_rejected(
 _UNEVEN_WEIGHTS = np.linspace(0.2, 1.0, 12)
 
 
-def test_weighted_jaccard_is_one_for_identical_rows_and_zero_for_rows_that_share_nothing() -> None:
-    """Identical nonzero rows give 1. Rows with no common nonzero bin of the same sign give 0."""
-    row = np.array([0.0, 0.3, -0.2, 0.5, 0.0, 0.0, 0.1, 0.0, 0.0, -0.4, 0.0, 0.0])
+def test_weighted_jaccard_is_one_for_identical_channels_and_zero_for_channels_that_share_nothing() -> None:
+    """Identical nonzero channels give 1. Channels with no common nonzero bin of the same sign give 0."""
+    channel = np.array([0.0, 0.3, -0.2, 0.5, 0.0, 0.0, 0.1, 0.0, 0.0, -0.4, 0.0, 0.0])
     disjoint = np.zeros(12)
     disjoint[[0, 4, 5]] = [0.2, 0.7, -0.1]
 
     values = weighted_real_valued_jaccard(
-        row[None, :], np.array([row, disjoint, -row]), _UNEVEN_WEIGHTS
+        channel[None, :], np.array([channel, disjoint, -channel]), _UNEVEN_WEIGHTS
     )
 
     np.testing.assert_allclose(values, [[1.0, 0.0, 0.0]], atol=1e-15)
 
 
-def test_weighted_jaccard_is_unchanged_when_both_rows_are_scaled_by_one_constant() -> None:
-    """The weighted real-valued Jaccard depends on the shape of the rows, not on their size."""
+def test_weighted_jaccard_is_unchanged_when_both_channels_are_scaled_by_one_constant() -> None:
+    """The weighted real-valued Jaccard depends on the shape of the channels, not on their size."""
     rng = np.random.default_rng(7)
-    row_a, row_b = rng.uniform(-0.1, 0.1, (2, 12))
+    channel_a, channel_b = rng.uniform(-0.1, 0.1, (2, 12))
 
-    original = weighted_real_valued_jaccard(row_a[None, :], row_b[None, :], _UNEVEN_WEIGHTS)
-    scaled = weighted_real_valued_jaccard(3.7 * row_a[None, :], 3.7 * row_b[None, :], _UNEVEN_WEIGHTS)
+    original = weighted_real_valued_jaccard(channel_a[None, :], channel_b[None, :], _UNEVEN_WEIGHTS)
+    scaled = weighted_real_valued_jaccard(3.7 * channel_a[None, :], 3.7 * channel_b[None, :], _UNEVEN_WEIGHTS)
 
     assert 0.0 < original[0, 0] < 1.0
     assert scaled[0, 0] == pytest.approx(original[0, 0], rel=1e-12)
@@ -462,23 +462,23 @@ def test_angle_weight_stays_at_fixed_angles_when_the_query_shifts() -> None:
     shift_bins = 15
     query = (TearProfile(_make_profile([(100, 0.05)], bins=240), 5.0, 175.0),)
     reference = (TearProfile(_make_profile([(100 + shift_bins, 0.05), (200, 0.05)], bins=240), 5.0, 175.0),)
-    query_depth_rows = comparator._build_depth_rows(query)
-    reference_depth_rows = comparator._build_depth_rows(reference)
+    query_depth_channels = comparator._build_depth_channels(query)
+    reference_depth_channels = comparator._build_depth_channels(reference)
 
     scores = comparator._score_alignments(
-        query_depth_rows,
-        comparator._build_gradient_rows(query),
-        reference_depth_rows[None],
-        comparator._build_gradient_rows(reference)[None],
+        query_depth_channels,
+        comparator._build_gradient_channels(query),
+        reference_depth_channels[None],
+        comparator._build_gradient_channels(reference)[None],
     )
 
     score = scores[0, comparator._alignments.index((1.0, shift_bins))]
-    aligned_query_row = _aligned(query_depth_rows[0], 1.0, shift_bins)
+    aligned_query_channel = _aligned(query_depth_channels[0], 1.0, shift_bins)
     penalty = comparator._compute_shift_penalty(shift_bins)
     weights = _angle_weights(config)
-    fixed = penalty * _jaccard(aligned_query_row, reference_depth_rows[0], weights)
+    fixed = penalty * _jaccard(aligned_query_channel, reference_depth_channels[0], weights)
     moved = penalty * _jaccard(
-        aligned_query_row, reference_depth_rows[0], _aligned(weights, 1.0, shift_bins)
+        aligned_query_channel, reference_depth_channels[0], _aligned(weights, 1.0, shift_bins)
     )
     assert score == pytest.approx(fixed, rel=1e-12)
     assert abs(fixed - moved) > 0.1
