@@ -16,22 +16,7 @@ Alphaphant accepts a sighting ear pair and a candidate catalog. It returns one f
 
 Alphaphant receives the preparation callable, neutral sighting pairs, and a candidate catalog. It does not receive the identity-aware Dataset.
 
-## Alphaphant Core Algorithm Module Boundaries
-
-```text
-preparation/
-  ear.py             PreparedEar and contour geometry
-  sighting.py        SightingPreparer
-matching/
-  protocol.py        CatalogMatcher and MatchingError
-  alphaphant/
-    extraction.py    TearProfile, analyzed values, protocol, and AlphaShapeExtractor
-    similarity.py    EarComparator and EarSimilarity
-    cached.py        Profile persistence
-    matcher.py       Alphaphant.analyze and Alphaphant.match
-  curvrank.py        CurvRank v2 baseline
-composition.py       Construct preparation, Alphaphant, and CurvRank
-```
+`composition.py` builds preparation, Alphaphant, and CurvRank, and selects which processors use the cache.
 
 ## Extraction and Scoring
 
@@ -39,9 +24,7 @@ composition.py       Construct preparation, Alphaphant, and CurvRank
 
 `PreparedEar` contains the source Photo, raster box, source image size, full-image contour, landmarks, contour anchors, inferred side, and cleaned area. Its contour is finite and read-only. Its area is positive. The landmarks define the polar frame of extraction; the contour anchors are the ends of the contour.
 
-`Alphaphant.analyze` returns an immutable `AnalyzedSightingEarPair`. It retains the input sighting ID and two `AnalyzedEar` values. Each ear contains its Photo, side, raster box, and one signed `TearProfile` for each alpha scale. Profile depths are finite, one-dimensional, and read-only.
-
-`Alphaphant.match` analyzes the query and references before comparison. For each candidate, it computes the ear similarities of corresponding sides, makes the left score and the right score, and averages them into the candidate score. See [pipeline.md](pipeline.md) for more.
+[pipeline.md](pipeline.md) defines `Alphaphant.analyze` and `Alphaphant.match`. Profile depths are finite, one-dimensional, and read-only.
 
 The catalog is a mapping from opaque `CandidateKey` values to tuples of `SightingEarPair` evidence. Each candidate requires at least one pair. `CandidateScores` has exactly the catalog's keys and finite values. Larger scores indicate stronger matches. Errors stop scoring; no partial result is returned.
 
@@ -59,7 +42,9 @@ Inference results and prepared geometry use full-image coordinates. Float boxes 
 
 A producer slug identifies all settings that affect output. An output change requires a new slug. A settled `AlphaShapeExtractorVersion` contains a slug and immutable `AlphaShapeExtractorConfig`. A raw experimental configuration has no persistent producer slug. The extractor resolves either input at construction.
 
-Inference keys use the Photo UUID and any dependent crop coordinates. SAM3 caches its complete multi-feature output before the ear-only adapter. Landmark records use full-image coordinates. Profile keys contain the Photo UUID, raster box, inferred side, segmentation slug, and landmark slug. Geometry changes that affect profiles require a new extraction slug.
+Inference keys use the Photo UUID and any dependent crop coordinates. SAM3 caches its complete multi-feature output before the ear-only adapter. Landmark records use full-image coordinates. Profile keys contain the Photo UUID, raster box, inferred side, segmentation slug, and landmark slug. The raster box keeps the key the same when the order of ears in a photo changes. Geometry changes that affect profiles require a new extraction slug.
+
+A profile record contains the alpha scales and one tear profile, with its measured interval and depths, for each alpha scale. Loading a record fails when its alpha scales differ from the extractor's alpha scales in value or order.
 
 Standard composition caches inference and settled profiles. Experimental extraction uses the inference caches but does not read or write profile records. Preparation and matching expose no cache-policy flags.
 

@@ -13,5 +13,3 @@ The skills speak in terms of five canonical triage roles. This file maps those r
 When a skill mentions a role (e.g. "apply the AFK-ready triage label"), use the corresponding label string from this table.
 
 Since this repo's tracker is local markdown (see `issue-tracker.md`), these are recorded as the value of the `Status:` line near the top of each issue file, not as tracker-native labels.
-
-Edit the right-hand column to match whatever vocabulary you actually use.

@@ -95,18 +95,4 @@ Each sighting must have both ears. If the matcher cannot analyze a reference sig
 
 ## Caching
 
-The cache stores expensive model calls and the final tear profiles of each ear. These steps have no persistent cache of their own: ear selection, sighting orchestration, contour preparation, catalog grouping, candidate scoring, and candidate ranking. Each Alphaphant instance reuses its completed analyses.
-
-The cache has one tear-profile record for each prepared ear. The record key contains:
-
-- the source photo UUID;
-- the integer raster bounding box;
-- the inferred side;
-- the segmentation producer slug;
-- the landmark producer slug.
-
-The record contains the alpha scales and the tear profiles. Each stored tear profile contains its measured interval and its depths. Loading a record fails when its alpha scales differ from the extractor's alpha scales in value or order.
-
-The bounding box gives the same key when the candidate order changes. [architecture.md](architecture.md) defines cache identity and producer versions.
-
-Composition selects which processors use the cache. Standard runs cache the full SAM3 multi-feature output (before its ear-only adapter), landmark detection, and tear-profile extraction. Parameter-tuning runs use a raw, unversioned extractor, but use the cached SAM3 features and the cached landmark detection. Preparation and Alphaphant have no cache-policy options.
+The cache stores model outputs and the final tear profiles of each ear. [architecture.md](architecture.md) defines cache keys, records, and producer slugs.

@@ -1,6 +1,6 @@
 # Reference
 
-Reference docs preserve technical detail that is not core product guidance. Each file states its own status at the top; most describe the pre-restructure implementation, while [application.md](application.md) is forward-looking.
+Reference docs hold detail outside the current research algorithm. Each file states its own status at the top.
 
 - [Application](application.md) — future application workflow and its desktop reviewer surface (forward-looking, not the current target).
 - [Papers](papers/) — SEEK and Curvrank source papers, valid external references.

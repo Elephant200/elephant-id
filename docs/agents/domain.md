@@ -12,22 +12,7 @@ This is a single-context repo. There is no root `CONTEXT.md` or `CONTEXT-MAP.md`
 
 If a concept you need isn't in the glossary yet, that's a signal — either you're inventing language the project doesn't use (reconsider) or there's a real gap (note it for `/domain-modeling`).
 
-## File structure
-
-```
-docs/
-├── context.md       ← glossary (this repo's CONTEXT.md)
-├── architecture.md
-├── pipeline.md
-├── evaluation.md
-├── status.md
-├── future.md
-├── adr/
-├── reference/       ← historical and forward-looking detail
-└── agents/
-```
-
-When a skill would create `CONTEXT.md`, write `docs/context.md`. When it would create an ADR, write `docs/adr/`.
+When a skill would create an ADR, write it in `docs/adr/`.
 
 ## Flag ADR conflicts
 
