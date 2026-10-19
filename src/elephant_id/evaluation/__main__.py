@@ -6,12 +6,15 @@ import os
 from functools import partial
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 from elephant_id.composition import build_curvrank, build_standard_alphaphant
 from elephant_id.dataset import Dataset
+from elephant_id.evaluation import evaluate, load_benchmark
 from elephant_id.log import configure_logging
 from elephant_id.matching import CatalogMatcher
 
-from . import evaluate, load_benchmark
+load_dotenv()
 
 _MANIFEST = Path("dataset/elephants-alive/benchmark/benchmark_final.csv")
 _DATASET_ROOT = Path("dataset/elephants-alive/coded")
