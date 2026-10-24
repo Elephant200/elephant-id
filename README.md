@@ -1,6 +1,6 @@
 # Alphaphant
 
-Alphaphant is a fully automated candidate-ranking algorithm for elephant re-identification. Given one high-quality image of each ear from the same sighting, it localizes and segments the ears, detects anatomical landmarks, extracts alpha-shape-derived tear profiles, computes candidate scores, and ranks the known-elephant catalog.
+Alphaphant is a fully automated algorithm for elephant re-identification. Given one high-quality image of each ear from the same sighting, it locates tears along the ear contour and compares them with the known elephant database to produce a ranked list of likely match candidates.
 
 ![African Elephant](https://africageographic.com/wp-content/uploads/2020/01/Guest-Dr.jpg)
 
